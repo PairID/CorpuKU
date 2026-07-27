@@ -1,0 +1,11 @@
+node_modules
+.next
+.git
+.github
+.vscode
+.agents
+*.log
+scratch
+debug.txt
+ts_errors.txt
+tsc_output.txt

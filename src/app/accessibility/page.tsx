@@ -1,0 +1,7 @@
+import Link from "next/link";
+
+export const metadata = { title: "Aksesibilitas | CorpuKU Academy" };
+
+export default function AccessibilityPage() {
+  return <main className="min-h-screen bg-oxford-50 px-5 py-14 dark:bg-oxford-950"><article className="mx-auto max-w-3xl rounded-3xl border border-oxford-200 bg-white p-8 shadow-sm dark:border-oxford-800 dark:bg-[#161B2A] md:p-12"><p className="text-sm font-bold uppercase tracking-widest text-gold-600">Komitmen inklusif</p><h1 className="mt-3 text-4xl font-bold text-oxford-950 dark:text-white">Kebijakan Aksesibilitas</h1><p className="mt-6 leading-7 text-oxford-600 dark:text-oxford-300">CorpuKU berupaya menyediakan pengalaman belajar yang dapat digunakan dengan keyboard, pembaca layar, perbesaran teks, mode kontras, serta struktur heading yang bermakna. Materi baru dianjurkan memiliki caption, transkrip, teks alternatif, dan dokumen yang dapat dibaca teknologi bantu.</p><h2 className="mt-9 text-xl font-bold">Bantuan akses</h2><p className="mt-3 leading-7 text-oxford-600 dark:text-oxford-300">Jika Anda menemukan hambatan, catat halaman, perangkat, browser, dan teknologi bantu yang digunakan, lalu sampaikan kepada administrator organisasi. Kami akan memprioritaskan masalah yang menghalangi akses ke materi, penilaian, atau sertifikat.</p><Link href="/" className="mt-9 inline-block font-bold text-blue-700 dark:text-blue-300">Kembali ke beranda</Link></article></main>;
+}

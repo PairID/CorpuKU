@@ -1,0 +1,27 @@
+name: Production Auto Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to Coolify Server via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          port: ${{ secrets.SSH_PORT || 5022 }}
+          username: ${{ secrets.SSH_USER || 'pairdev' }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          password: ${{ secrets.SSH_PASSWORD }}
+          script: |
+            cd /home/pairdev/corpuku-lms
+            git pull origin main
+            docker build -t corpuku-lms:latest .
+            docker stop corpuku-lms-app || true
+            docker rm corpuku-lms-app || true
+            docker run -d --name corpuku-lms-app --restart always --env-file .env.local -p 3002:3000 corpuku-lms:latest
+            curl -s http://localhost:3002/api/health

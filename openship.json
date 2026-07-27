@@ -1,0 +1,13 @@
+{
+  "$schema": "https://openship.io/openship.schema.json",
+  "name": "corpuku-lms",
+  "framework": "nextjs",
+  "packageManager": "npm",
+  "buildCommand": "npm run build",
+  "startCommand": "npm run start",
+  "port": 3000,
+  "env": {
+    "NODE_ENV": "production",
+    "PORT": "3000"
+  }
+}

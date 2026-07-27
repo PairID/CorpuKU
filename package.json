@@ -1,0 +1,73 @@
+{
+  "name": "corpuku-app",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint src scripts tests next.config.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "check:ci": "npm run lint && npm run typecheck && npm run test:run && npm run build",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
+    "db:seed": "tsx src/db/seed.ts",
+    "db:migrate:webinar-certificates": "node scripts/migrate-webinar-certificates.mjs",
+    "db:migrate:auth-security": "node scripts/migrate-auth-security.mjs",
+    "db:migrate:production-upgrade": "node scripts/migrate-production-upgrade.mjs",
+    "db:migrate:learning-paths": "node scripts/migrate-learning-paths.mjs",
+    "db:migrate:course-pacing": "node scripts/migrate-course-pacing.mjs",
+    "check:webinar-certificates": "node scripts/check-webinar-certificate-readiness.mjs",
+    "check:production-readiness": "node scripts/check-production-readiness.mjs"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^1.0.2",
+    "@types/uuid": "^10.0.0",
+    "cloudinary": "^2.9.0",
+    "clsx": "^2.1.1",
+    "dotenv": "^17.3.1",
+    "exceljs": "^4.4.0",
+    "framer-motion": "^12.35.1",
+    "lucide-react": "^0.577.0",
+    "next": "^16.2.11",
+    "next-themes": "^0.4.6",
+    "nodemailer": "^9.0.3",
+    "puppeteer": "^24.41.0",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "sanitize-html": "^2.17.6",
+    "sonner": "^2.0.7",
+    "tailwind-merge": "^3.5.0",
+    "uuid": "^14.0.1",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/nodemailer": "^7.0.11",
+    "@types/pg": "^8.18.0",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@types/sanitize-html": "^2.16.1",
+    "eslint": "^9",
+    "eslint-config-next": "16.1.6",
+    "tailwindcss": "^4",
+    "tsx": "^4.21.0",
+    "typescript": "^5",
+    "vitest": "^4.1.10"
+  },
+  "overrides": {
+    "exceljs": {
+      "uuid": "11.1.1"
+    },
+    "next": {
+      "postcss": "8.5.10",
+      "sharp": "0.35.0"
+    },
+    "tsx": {
+      "esbuild": "0.28.1"
+    }
+  }
+}
