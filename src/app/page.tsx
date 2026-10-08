@@ -1,8 +1,12 @@
 import { getAllCourses } from "./actions/courses";
+import { getFeaturedWebinar } from "./actions/webinars";
 import HomeClient from "./home-client";
 
 export default async function HomePage() {
-  const courses = await getAllCourses();
+  const [courses, featuredWebinar] = await Promise.all([
+    getAllCourses(),
+    getFeaturedWebinar(),
+  ]);
   
   // Pass strictly serialized data to the client safely
   const serializedCourses = courses.map(c => {
@@ -25,5 +29,5 @@ export default async function HomePage() {
     };
   });
   
-  return <HomeClient courses={serializedCourses} />;
+  return <HomeClient courses={serializedCourses} featuredWebinar={featuredWebinar} />;
 }

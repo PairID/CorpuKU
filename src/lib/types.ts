@@ -99,13 +99,24 @@ export interface Webinar {
     status: 'draft' | 'published' | 'completed';
     quizSettings?: WebinarQuizSettings;
     joinWindowMinutes: number;
+    isAttendanceOpen?: boolean;
+    youtubeUrl?: string | null;
     certificateEnabled: boolean;
     certificateAutoIssue: boolean;
     certificateTemplateType: 'sertifikat' | 'surat_keterangan' | 'sttp';
     certificateNumberPrefix: string;
     certificateJp: number;
+    attendanceCount?: number;
     createdAt: string;
     updatedAt: string;
+}
+
+export interface SkmAnswer {
+    questionId: number;
+    questionText: string;
+    optionKey: 'A' | 'B' | 'C' | 'D';
+    optionText: string;
+    score: number;
 }
 
 export interface WebinarQuizQuestion {

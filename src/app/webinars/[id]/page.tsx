@@ -1,5 +1,5 @@
 import { getWebinar } from "@/app/actions/webinars";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import WebinarDetailClient from "./client";
 import { getAuthSession } from "@/app/actions/auth";
 import { sql } from "@/lib/db";
@@ -12,9 +12,8 @@ export default async function WebinarDetailPage({ params }: { params: Promise<{ 
         notFound();
     }
 
-    // Get user from server side cookie
     let currentUser = null;
-    let isRegistered = false;
+    let registration = null;
     
     try {
         const session = await getAuthSession();
@@ -24,19 +23,22 @@ export default async function WebinarDetailPage({ params }: { params: Promise<{ 
                 currentUser = userRes[0];
                 
                 // Check registration
-                const regRes = await sql`SELECT 1 FROM webinar_registrations WHERE user_id = ${currentUser.id} AND webinar_id = ${webinar.id}`;
+                const regRes = await sql`
+                    SELECT attended, evaluation_completed, certificate_generated 
+                    FROM webinar_registrations 
+                    WHERE user_id = ${currentUser.id} AND webinar_id = ${webinar.id}
+                `;
                 if (regRes.length > 0) {
-                    isRegistered = true;
+                    registration = {
+                        attended: Boolean(regRes[0].attended),
+                        evaluationCompleted: Boolean(regRes[0].evaluation_completed),
+                        certificateGenerated: Boolean(regRes[0].certificate_generated)
+                    };
                 }
             }
         }
     } catch (e) {
         console.error("Session parse error", e);
-    }
-
-    // If already registered, redirect straight to dashboard to avoid confusion
-    if (isRegistered) {
-        redirect(`/dashboard/webinars/${webinar.id}`);
     }
 
     // Map snake_case to camelCase for client
@@ -53,7 +55,11 @@ export default async function WebinarDetailPage({ params }: { params: Promise<{ 
     return (
         <div className="min-h-screen bg-oxford-50 dark:bg-oxford-950">
             <div className="pt-20">
-                <WebinarDetailClient webinar={webinar} user={mappedUser} />
+                <WebinarDetailClient 
+                    webinar={webinar} 
+                    user={mappedUser} 
+                    userRegistration={registration}
+                />
             </div>
         </div>
     );

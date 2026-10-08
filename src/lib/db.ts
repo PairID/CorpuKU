@@ -12,4 +12,4 @@ if (isServer && !connectionString) {
   console.error("WARNING: DATABASE_URL tidak ditemukan. Pastikan Anda sudah setup Neon di Vercel dan melakukan 'vercel env pull'.");
 }
 
-export const sql = neon(connectionString);
+export const sql = neon(connectionString || 'postgresql://dummy:dummy@localhost:5432/dummy');

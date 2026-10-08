@@ -1,12 +1,12 @@
 "use server";
 
 import { sql } from '@/lib/db';
-import { Webinar, WebinarQuizQuestion, WebinarRegistration } from '@/lib/types';
+import { Webinar, WebinarQuizQuestion, WebinarRegistration, SkmAnswer, IssuedWebinarCertificate } from '@/lib/types';
 import { revalidatePath } from 'next/cache';
 import { v4 as uuidv4 } from 'uuid';
 import { createKnowledgeItem } from './knowledge';
 import { requireAdminSession, requireUserSession } from "./auth";
-import { issueEligibleWebinarCertificates, issueWebinarCertificate } from '@/lib/webinar-certificates';
+import { issueEligibleWebinarCertificates, issueWebinarCertificate, mapCertificate } from '@/lib/webinar-certificates';
 import { sanitizePlainText } from '@/lib/content-security';
 import { z } from 'zod';
 
@@ -19,6 +19,8 @@ const quizQuestionSchema = z.object({
 const webinarInputSchema = z.object({
   title: z.string().trim().min(5).max(200), description: z.string().max(5000),
   thumbnailUrl: optionalUrl, meetingLink: optionalUrl, materialUrl: optionalUrl, virtualBackgroundUrl: optionalUrl,
+  youtubeUrl: optionalUrl,
+  isAttendanceOpen: z.boolean().default(false).optional(),
   scheduledAt: z.string().refine(value => !Number.isNaN(Date.parse(value)), 'Jadwal tidak valid.'),
   attendanceCode: z.union([z.string().trim().min(4).max(50), z.literal(''), z.null()]).optional(),
   status: z.enum(['draft', 'published', 'completed']).default('draft'),
@@ -26,13 +28,14 @@ const webinarInputSchema = z.object({
   joinWindowMinutes: z.number().int().min(5).max(240).default(30),
   certificateEnabled: z.boolean().default(true), certificateAutoIssue: z.boolean().default(true),
   certificateTemplateType: z.enum(['sertifikat', 'surat_keterangan', 'sttp']).default('sertifikat'),
-  certificateNumberPrefix: z.string().trim().min(2).max(20).default('WEB'),
+  certificateNumberPrefix: z.string().trim().min(2).max(30).default('AKJ-26'),
   certificateJp: z.number().int().min(1).max(999).default(2),
 });
 
 type WebinarDbRow = {
   id: string; title: string; description: string; thumbnail_url: string | null;
   meeting_link?: string | null; material_url?: string | null; virtual_background_url?: string | null;
+  youtube_url?: string | null; is_attendance_open?: boolean; attendance_count?: number;
   scheduled_at: string | Date; attendance_code?: string | null; status: Webinar['status'];
   quiz_settings?: unknown; join_window_minutes?: number | null; created_at: string | Date; updated_at: string | Date;
   certificate_enabled?: boolean; certificate_auto_issue?: boolean;
@@ -51,7 +54,7 @@ function errorMessage(error: unknown, fallback: string) {
 }
 
 function certificateConfig(data: Partial<Webinar>) {
-  const prefix = String(data.certificateNumberPrefix || 'WEB').trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '-').slice(0, 20) || 'WEB';
+  const prefix = String(data.certificateNumberPrefix || 'AKJ-26').trim().toUpperCase().replace(/[^A-Z0-9_.-]/g, '-').slice(0, 30) || 'AKJ-26';
   const template = ['sertifikat', 'surat_keterangan', 'sttp'].includes(String(data.certificateTemplateType))
     ? data.certificateTemplateType as Webinar['certificateTemplateType']
     : 'sertifikat';
@@ -91,8 +94,11 @@ async function syncToKMS(webinar: Partial<Pick<Webinar, 'title' | 'scheduledAt'>
 export async function getWebinars(): Promise<Webinar[]> {
   try {
     const rows = await sql`
-      SELECT id, title, description, thumbnail_url, scheduled_at, status,
-             join_window_minutes, created_at, updated_at
+      SELECT id, title, description, thumbnail_url, meeting_link, material_url,
+             virtual_background_url, scheduled_at, status, join_window_minutes,
+             is_attendance_open, youtube_url, certificate_enabled, certificate_auto_issue,
+             certificate_template_type, certificate_number_prefix, certificate_jp,
+             created_at, updated_at
       FROM webinars
       WHERE status = 'published' 
       ORDER BY scheduled_at ASC
@@ -104,13 +110,83 @@ export async function getWebinars(): Promise<Webinar[]> {
   }
 }
 
+export async function getFeaturedWebinar(): Promise<Webinar | null> {
+  try {
+    // 1. Prioritize webinar that is currently live (attendance open OR scheduled today within live window)
+    const liveRows = await sql`
+      SELECT id, title, description, thumbnail_url, meeting_link, material_url,
+             virtual_background_url, scheduled_at, status, join_window_minutes,
+             is_attendance_open, youtube_url, certificate_enabled, certificate_auto_issue,
+             certificate_template_type, certificate_number_prefix, certificate_jp,
+             created_at, updated_at
+      FROM webinars
+      WHERE status = 'published'
+        AND (
+          is_attendance_open = TRUE
+          OR (
+            scheduled_at <= CURRENT_TIMESTAMP + INTERVAL '1 hour'
+            AND scheduled_at >= CURRENT_TIMESTAMP - INTERVAL '6 hours'
+          )
+        )
+      ORDER BY is_attendance_open DESC, scheduled_at ASC
+      LIMIT 1
+    `;
+    if (liveRows.length > 0) {
+      return mapPublicWebinarRow(liveRows[0]);
+    }
+
+    // 2. Otherwise get the nearest upcoming published webinar
+    const upcomingRows = await sql`
+      SELECT id, title, description, thumbnail_url, meeting_link, material_url,
+             virtual_background_url, scheduled_at, status, join_window_minutes,
+             is_attendance_open, youtube_url, certificate_enabled, certificate_auto_issue,
+             certificate_template_type, certificate_number_prefix, certificate_jp,
+             created_at, updated_at
+      FROM webinars
+      WHERE status = 'published'
+        AND scheduled_at > CURRENT_TIMESTAMP
+      ORDER BY scheduled_at ASC
+      LIMIT 1
+    `;
+    if (upcomingRows.length > 0) {
+      return mapPublicWebinarRow(upcomingRows[0]);
+    }
+
+    return null;
+  } catch (error) {
+    console.error("Failed to fetch featured webinar:", error);
+    return null;
+  }
+}
+
+export async function toggleWebinarAttendance(webinarId: string, isOpen: boolean): Promise<{ success: boolean; error?: string }> {
+  try {
+    await requireAdminSession();
+    await sql`
+      UPDATE webinars
+      SET is_attendance_open = ${isOpen},
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${webinarId}
+    `;
+    revalidatePath('/admin/webinars');
+    revalidatePath(`/webinars/${webinarId}`);
+    revalidatePath('/');
+    return { success: true };
+  } catch (error: unknown) {
+    console.error("Failed to toggle webinar attendance:", error);
+    return { success: false, error: errorMessage(error, "Gagal mengubah status presensi.") };
+  }
+}
+
 export async function getAdminWebinars(): Promise<Webinar[]> {
   try {
     await requireAdminSession();
 
     const rows = await sql`
-      SELECT * FROM webinars 
-      ORDER BY created_at DESC
+      SELECT w.*, 
+             (SELECT COUNT(*)::INTEGER FROM webinar_registrations wr WHERE wr.webinar_id = w.id AND wr.attended = TRUE) AS attendance_count
+      FROM webinars w 
+      ORDER BY w.created_at DESC
     `;
     return rows.map(row => mapWebinarRow(row, true));
   } catch (error) {
@@ -123,8 +199,11 @@ export async function getAdminWebinars(): Promise<Webinar[]> {
 export async function getWebinar(id: string): Promise<Webinar | null> {
   try {
     const rows = await sql`
-      SELECT id, title, description, thumbnail_url, scheduled_at, status,
-             join_window_minutes, created_at, updated_at
+      SELECT id, title, description, thumbnail_url, meeting_link, material_url,
+             virtual_background_url, scheduled_at, status, join_window_minutes,
+             is_attendance_open, youtube_url, certificate_enabled, certificate_auto_issue,
+             certificate_template_type, certificate_number_prefix, certificate_jp,
+             created_at, updated_at
       FROM webinars WHERE id = ${id} AND status <> 'draft'
     `;
     if (rows.length === 0) return null;
@@ -186,11 +265,11 @@ export async function createWebinar(input: unknown): Promise<{ success: boolean;
     await sql`
       INSERT INTO webinars (
         id, title, description, thumbnail_url, meeting_link, 
-        material_url, virtual_background_url, scheduled_at, attendance_code, status, quiz_settings, join_window_minutes,
+        material_url, virtual_background_url, youtube_url, is_attendance_open, scheduled_at, attendance_code, status, quiz_settings, join_window_minutes,
         certificate_enabled, certificate_auto_issue, certificate_template_type, certificate_number_prefix, certificate_jp
       ) VALUES (
         ${id}, ${data.title}, ${data.description}, ${data.thumbnailUrl || null}, ${data.meetingLink || null},
-        ${data.materialUrl || null}, ${data.virtualBackgroundUrl || null}, ${data.scheduledAt}, ${data.attendanceCode || null}, ${data.status || 'draft'},
+        ${data.materialUrl || null}, ${data.virtualBackgroundUrl || null}, ${data.youtubeUrl || null}, ${Boolean(data.isAttendanceOpen)}, ${data.scheduledAt}, ${data.attendanceCode || null}, ${data.status || 'draft'},
         ${JSON.stringify(data.quizSettings || null)},
         ${data.joinWindowMinutes || 30}, ${certificate.enabled}, ${certificate.autoIssue}, ${certificate.template}, ${certificate.prefix}, ${certificate.jp}
       )
@@ -198,6 +277,7 @@ export async function createWebinar(input: unknown): Promise<{ success: boolean;
     
     revalidatePath('/admin/webinars');
     revalidatePath('/webinars');
+    revalidatePath('/');
  
     // Sync to KMS
     if (data.thumbnailUrl) await syncToKMS(data, data.thumbnailUrl, 'Thumbnail');
@@ -233,6 +313,8 @@ export async function updateWebinar(id: string, input: unknown): Promise<{ succe
         meeting_link = COALESCE(${data.meetingLink !== undefined ? data.meetingLink : null}, meeting_link),
         material_url = COALESCE(${data.materialUrl !== undefined ? data.materialUrl : null}, material_url),
         virtual_background_url = COALESCE(${data.virtualBackgroundUrl !== undefined ? data.virtualBackgroundUrl : null}, virtual_background_url),
+        youtube_url = COALESCE(${data.youtubeUrl !== undefined ? data.youtubeUrl : null}, youtube_url),
+        is_attendance_open = COALESCE(${data.isAttendanceOpen !== undefined ? data.isAttendanceOpen : null}, is_attendance_open),
         scheduled_at = COALESCE(${data.scheduledAt !== undefined ? data.scheduledAt : null}, scheduled_at),
         attendance_code = COALESCE(${data.attendanceCode !== undefined ? data.attendanceCode : null}, attendance_code),
         status = COALESCE(${data.status !== undefined ? data.status : null}, status),
@@ -444,6 +526,9 @@ function mapWebinarRow(input: Record<string, unknown>, includeAnswers = true): W
     meetingLink: row.meeting_link || null,
     materialUrl: row.material_url || null,
     virtualBackgroundUrl: row.virtual_background_url || null,
+    youtubeUrl: row.youtube_url || null,
+    isAttendanceOpen: Boolean(row.is_attendance_open),
+    attendanceCount: row.attendance_count !== undefined ? Number(row.attendance_count) : undefined,
     scheduledAt: new Date(row.scheduled_at).toISOString(),
     attendanceCode: includeAnswers ? row.attendance_code || null : null,
     status: row.status,
@@ -466,19 +551,22 @@ function mapPublicWebinarRow(input: Record<string, unknown>): Webinar {
     title: row.title,
     description: row.description,
     thumbnailUrl: row.thumbnail_url,
-    meetingLink: null,
-    materialUrl: null,
-    virtualBackgroundUrl: null,
+    meetingLink: row.meeting_link || null,
+    materialUrl: row.material_url || null,
+    virtualBackgroundUrl: row.virtual_background_url || null,
+    youtubeUrl: row.youtube_url || null,
+    isAttendanceOpen: Boolean(row.is_attendance_open),
+    attendanceCount: row.attendance_count !== undefined ? Number(row.attendance_count) : undefined,
     scheduledAt: new Date(row.scheduled_at).toISOString(),
     attendanceCode: null,
     status: row.status,
     quizSettings: undefined,
     joinWindowMinutes: row.join_window_minutes || 30,
-    certificateEnabled: false,
-    certificateAutoIssue: false,
-    certificateTemplateType: 'sertifikat',
-    certificateNumberPrefix: 'WEB',
-    certificateJp: 2,
+    certificateEnabled: row.certificate_enabled !== false,
+    certificateAutoIssue: row.certificate_auto_issue !== false,
+    certificateTemplateType: row.certificate_template_type || 'sertifikat',
+    certificateNumberPrefix: row.certificate_number_prefix || 'WEB',
+    certificateJp: row.certificate_jp || 2,
     createdAt: new Date(row.created_at).toISOString(),
     updatedAt: new Date(row.updated_at).toISOString(),
   };
@@ -532,3 +620,171 @@ function mapRegistrationRow(input: Record<string, unknown>): WebinarRegistration
     evaluationScore: row.evaluation_score,
   };
 }
+
+export async function submitPublicWebinarAttendance(input: {
+  webinarId: string;
+  nip: string;
+  name: string;
+  agency: string;
+  position?: string;
+  phone?: string;
+  skmAnswers: SkmAnswer[];
+  feedback?: string;
+}): Promise<{ success: boolean; error?: string; message?: string }> {
+  try {
+    const webinarId = input.webinarId;
+    const cleanNip = input.nip.trim().replace(/\D/g, '');
+    const cleanName = sanitizePlainText(input.name.trim());
+    const cleanAgency = sanitizePlainText(input.agency.trim());
+    const cleanPosition = input.position ? sanitizePlainText(input.position.trim()) : '';
+    const cleanPhone = input.phone ? input.phone.trim() : '';
+
+    if (!cleanNip || cleanNip.length < 8) {
+      return { success: false, error: "NIP/NIK minimal 8 digit angka." };
+    }
+    if (!cleanName || cleanName.length < 3) {
+      return { success: false, error: "Nama lengkap wajib diisi." };
+    }
+    if (!cleanAgency || cleanAgency.length < 2) {
+      return { success: false, error: "Instansi asal wajib diisi." };
+    }
+
+    const webinarRows = await sql`
+      SELECT id, status, is_attendance_open, certificate_enabled, certificate_auto_issue
+      FROM webinars WHERE id = ${webinarId}
+    `;
+    if (!webinarRows[0] || webinarRows[0].status !== 'published') {
+      return { success: false, error: "Webinar tidak ditemukan atau belum dipublikasi." };
+    }
+    if (!webinarRows[0].is_attendance_open) {
+      return { success: false, error: "Presensi untuk webinar ini sedang ditutup oleh panitia." };
+    }
+
+    // Hitung skor evaluasi SKM secara dinamis berdasarkan standar konversi Permenpan RB (skala 0 - 100)
+    let calculatedEvaluationScore = 0;
+    if (Array.isArray(input.skmAnswers) && input.skmAnswers.length > 0) {
+      const totalScore = input.skmAnswers.reduce((sum, item) => sum + (Number(item.score) || 0), 0);
+      const maxPossibleScore = input.skmAnswers.length * 4;
+      calculatedEvaluationScore = maxPossibleScore > 0 ? Math.round((totalScore / maxPossibleScore) * 100) : 0;
+    }
+
+    // Link or create user by NIP
+    const existingUser = await sql`
+      SELECT id FROM users WHERE nip = ${cleanNip} LIMIT 1
+    `;
+    let userId: string;
+    if (existingUser[0]) {
+      userId = String(existingUser[0].id);
+      await sql`
+        UPDATE users SET
+          name = COALESCE(NULLIF(name, ''), ${cleanName}),
+          instansi_asal = COALESCE(NULLIF(instansi_asal, ''), ${cleanAgency}),
+          jabatan = COALESCE(NULLIF(jabatan, ''), ${cleanPosition || null})
+        WHERE id = ${userId}
+      `;
+    } else {
+      userId = `guest_${cleanNip}`;
+      await sql`
+        INSERT INTO users (id, name, nip, username, email, password, role, instansi_asal, jabatan)
+        VALUES (
+          ${userId}, ${cleanName}, ${cleanNip}, ${'guest_' + cleanNip}, ${cleanNip + '@guest.corpuku.id'},
+          'GUEST_NO_AUTH', 'user', ${cleanAgency}, ${cleanPosition || null}
+        )
+        ON CONFLICT (id) DO UPDATE SET
+          name = EXCLUDED.name,
+          instansi_asal = EXCLUDED.instansi_asal,
+          jabatan = EXCLUDED.jabatan
+      `;
+    }
+
+    const regId = uuidv4();
+    await sql`
+      INSERT INTO webinar_registrations (
+        id, user_id, webinar_id, registered_at, attended, attended_at,
+        evaluation_completed, evaluation_completed_at, evaluation_score,
+        evaluation_answers, agency_name, phone_number, position_title, skm_answers
+      ) VALUES (
+        ${regId}, ${userId}, ${webinarId}, CURRENT_TIMESTAMP, TRUE, CURRENT_TIMESTAMP,
+        TRUE, CURRENT_TIMESTAMP, ${calculatedEvaluationScore},
+        ${JSON.stringify({ type: 'skm', answers: input.skmAnswers, feedback: input.feedback })},
+        ${cleanAgency}, ${cleanPhone || null}, ${cleanPosition || null},
+        ${JSON.stringify(input.skmAnswers)}
+      )
+      ON CONFLICT (user_id, webinar_id) DO UPDATE SET
+        attended = TRUE,
+        attended_at = COALESCE(webinar_registrations.attended_at, CURRENT_TIMESTAMP),
+        evaluation_completed = TRUE,
+        evaluation_completed_at = COALESCE(webinar_registrations.evaluation_completed_at, CURRENT_TIMESTAMP),
+        evaluation_score = ${calculatedEvaluationScore},
+        agency_name = EXCLUDED.agency_name,
+        phone_number = EXCLUDED.phone_number,
+        position_title = EXCLUDED.position_title,
+        skm_answers = EXCLUDED.skm_answers
+    `;
+
+    if (webinarRows[0].certificate_enabled && webinarRows[0].certificate_auto_issue) {
+      await issueWebinarCertificate(userId, webinarId);
+    }
+
+    revalidatePath(`/webinars/${webinarId}`);
+    revalidatePath(`/admin/webinars`);
+
+    return { success: true, message: "Presensi dan evaluasi berhasil dicatat!" };
+  } catch (error: unknown) {
+    console.error("Failed to submit public attendance:", error);
+    return { success: false, error: errorMessage(error, "Gagal mencatat presensi.") };
+  }
+}
+
+export async function checkWebinarCertificateByNip(webinarId: string, nip: string): Promise<{
+  success: boolean;
+  certificate?: IssuedWebinarCertificate | null;
+  error?: string;
+}> {
+  try {
+    const cleanNip = nip.trim().replace(/\D/g, '');
+    if (!cleanNip || cleanNip.length < 5) {
+      return { success: false, error: "NIP/NIK tidak valid." };
+    }
+
+    const regRows = await sql`
+      SELECT wr.user_id, wr.attended, wr.evaluation_completed
+      FROM webinar_registrations wr
+      JOIN users u ON u.id = wr.user_id
+      WHERE wr.webinar_id = ${webinarId}
+        AND (u.nip = ${cleanNip} OR u.id = ${'guest_' + cleanNip})
+      ORDER BY wr.attended DESC, wr.evaluation_completed DESC
+      LIMIT 1
+    `;
+    if (!regRows[0] || !regRows[0].attended) {
+      return { success: false, error: "NIP/NIK ini belum tercatat dalam presensi kehadiran webinar ini." };
+    }
+    const userId = String(regRows[0].user_id);
+
+    const webinar = await sql`
+      SELECT certificate_enabled, certificate_auto_issue FROM webinars WHERE id = ${webinarId}
+    `;
+    if (!webinar[0]?.certificate_enabled) {
+      return { success: false, error: "Webinar ini tidak menyediakan sertifikat." };
+    }
+
+    if (webinar[0].certificate_auto_issue) {
+      await issueWebinarCertificate(userId, webinarId);
+    }
+
+    const certRows = await sql`
+      SELECT * FROM issued_webinar_certificates
+      WHERE user_id = ${userId} AND webinar_id = ${webinarId} AND revoked_at IS NULL
+      LIMIT 1
+    `;
+    if (!certRows[0]) {
+      return { success: false, error: "Sertifikat sedang diproses atau menunggu penerbitan oleh admin." };
+    }
+
+    return { success: true, certificate: mapCertificate(certRows[0]) };
+  } catch (error: unknown) {
+    console.error("Failed to check certificate by NIP:", error);
+    return { success: false, error: errorMessage(error, "Gagal memeriksa sertifikat.") };
+  }
+}
+

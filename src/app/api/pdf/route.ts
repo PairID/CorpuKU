@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import puppeteer, { type Browser } from 'puppeteer';
 import { getAuthSession } from '@/app/actions/auth';
-import { getWebinarCertificateForDownload, reserveCertificateDownload } from '@/lib/webinar-certificates';
+import { getWebinarCertificateForDownload, reserveCertificateDownload, getCertificateByVerificationToken, formatWebinarCertificateFilename } from '@/lib/webinar-certificates';
 import { getCourseCertificateForDownload, reserveCourseCertificateDownload } from '@/lib/course-certificates';
 
 export const runtime = 'nodejs';
@@ -74,24 +74,39 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Origin tidak diizinkan.' }, { status: 403 });
     }
 
-    const session = await getAuthSession();
-    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
     const body: unknown = await req.json();
     if (!body || typeof body !== 'object') {
       return NextResponse.json({ error: 'Payload tidak valid.' }, { status: 400 });
     }
     const data = body as Record<string, unknown>;
-    const isWebinar = data.type === 'webinar_certificate' && typeof data.webinarId === 'string' && data.webinarId.length <= 255;
-    const isCourse = data.type === 'course_certificate' && typeof data.courseId === 'string' && data.courseId.length <= 255;
+    const token = typeof data.verificationToken === 'string' && /^[0-9a-f-]{36}$/i.test(data.verificationToken)
+      ? data.verificationToken
+      : null;
+
+    const session = await getAuthSession();
+    if (!session && !token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    const isWebinar = data.type === 'webinar_certificate';
+    const isCourse = data.type === 'course_certificate';
     if (!isWebinar && !isCourse) return NextResponse.json({ error: 'Permintaan sertifikat tidak valid.' }, { status: 400 });
 
-    const webinarCertificate = isWebinar
-      ? await getWebinarCertificateForDownload(session.user.id, String(data.webinarId))
-      : null;
-    const courseCertificate = isCourse
-      ? await getCourseCertificateForDownload(session.user.id, String(data.courseId))
-      : null;
+    let webinarCertificate = null;
+    let courseCertificate = null;
+
+    if (token) {
+      const certFromToken = await getCertificateByVerificationToken(token);
+      if (certFromToken && !certFromToken.revokedAt) {
+        webinarCertificate = certFromToken;
+      }
+    } else if (session) {
+      if (isWebinar && typeof data.webinarId === 'string' && data.webinarId.length <= 255) {
+        webinarCertificate = await getWebinarCertificateForDownload(session.user.id, String(data.webinarId));
+      }
+      if (isCourse && typeof data.courseId === 'string' && data.courseId.length <= 255) {
+        courseCertificate = await getCourseCertificateForDownload(session.user.id, String(data.courseId));
+      }
+    }
+
     const certificate = webinarCertificate ? {
       ...webinarCertificate,
       activityTitle: webinarCertificate.webinarTitle,
@@ -194,11 +209,18 @@ export async function POST(req: Request) {
     await page.setContent(html, { waitUntil: 'networkidle0', timeout: 20_000 });
     const pdf = await page.pdf({ width: `${width}px`, height: `${height}px`, landscape: orientation === 'landscape', printBackground: true, margin: { top: 0, right: 0, bottom: 0, left: 0 } });
 
-    const encodedTitle = encodeURIComponent(`Sertifikat-${certificate.activityTitle}.pdf`);
+    const safeCertFilename = webinarCertificate
+      ? formatWebinarCertificateFilename({
+          participantName: certificate.participantName,
+          certificateNumber: certificate.certificateNumber,
+          category: 'Yang Lain',
+        })
+      : `Sertifikat-${certificate.activityTitle}.pdf`.replace(/[/\\?%*:|"<>]/g, '_');
+    const encodedTitle = encodeURIComponent(safeCertFilename);
     return new NextResponse(pdf as BodyInit, {
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="sertifikat.pdf"; filename*=UTF-8''${encodedTitle}`,
+        'Content-Disposition': `attachment; filename="${safeCertFilename.replace(/"/g, '')}"; filename*=UTF-8''${encodedTitle}`,
         'Cache-Control': 'private, no-store',
         'X-Content-Type-Options': 'nosniff',
       },

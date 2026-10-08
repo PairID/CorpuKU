@@ -19,6 +19,7 @@
     "db:migrate:production-upgrade": "node scripts/migrate-production-upgrade.mjs",
     "db:migrate:learning-paths": "node scripts/migrate-learning-paths.mjs",
     "db:migrate:course-pacing": "node scripts/migrate-course-pacing.mjs",
+    "db:migrate:webinar-live-portal": "node scripts/migrate-webinar-live-portal.mjs",
     "check:webinar-certificates": "node scripts/check-webinar-certificate-readiness.mjs",
     "check:production-readiness": "node scripts/check-production-readiness.mjs"
   },

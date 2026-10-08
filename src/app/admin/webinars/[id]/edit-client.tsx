@@ -23,6 +23,8 @@ export default function EditWebinarClient({ webinar }: { webinar: Webinar }) {
         meetingLink: webinar.meetingLink || "",
         materialUrl: webinar.materialUrl || "",
         virtualBackgroundUrl: webinar.virtualBackgroundUrl || "",
+        youtubeUrl: webinar.youtubeUrl || "",
+        isAttendanceOpen: Boolean(webinar.isAttendanceOpen),
         scheduledAt: formattedDate,
         attendanceCode: webinar.attendanceCode || "",
         status: webinar.status,
@@ -201,6 +203,21 @@ export default function EditWebinarClient({ webinar }: { webinar: Webinar }) {
                                     />
                                 </div>
 
+                                <div className="col-span-1 md:col-span-2">
+                                    <label className="block text-sm font-semibold text-oxford-900 dark:text-white mb-2">Link YouTube (Live Stream / Replay Embed)</label>
+                                    <input type="url" value={formData.youtubeUrl} onChange={e => setFormData({...formData, youtubeUrl: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-oxford-200 dark:border-oxford-700 focus:outline-none focus:ring-2 focus:ring-gold-500/50 focus:border-gold-500 transition-all bg-oxford-50 dark:bg-oxford-950/50" placeholder="https://www.youtube.com/watch?v=... atau https://youtu.be/..." />
+                                    <p className="text-xs text-oxford-500 mt-1">Siaran live YouTube otomatis terpasang (embed) di portal webinar.</p>
+                                </div>
+
+                                <div className="col-span-1 md:col-span-2">
+                                    <div className="flex items-center gap-3 p-4 bg-oxford-50 dark:bg-oxford-950/50 rounded-xl border border-border-base">
+                                        <input type="checkbox" id="editIsAttendanceOpen" checked={formData.isAttendanceOpen} onChange={e => setFormData({...formData, isAttendanceOpen: e.target.checked})} className="w-5 h-5 rounded text-gold-500 focus:ring-gold-500 cursor-pointer" />
+                                        <label htmlFor="editIsAttendanceOpen" className="text-sm font-medium cursor-pointer text-foreground">
+                                            <strong>Buka Presensi Live Sekarang</strong> (Peserta dapat langsung mengisi form presensi & SKM)
+                                        </label>
+                                    </div>
+                                </div>
+
                                 <div>
                                     <label className="block text-sm font-semibold text-oxford-900 dark:text-white mb-2">Link Meeting (Zoom/Meet)</label>
                                     <input type="url" value={formData.meetingLink} onChange={e => setFormData({...formData, meetingLink: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-oxford-200 dark:border-oxford-700 focus:outline-none focus:ring-2 focus:ring-gold-500/50 focus:border-gold-500 transition-all bg-oxford-50 dark:bg-oxford-950/50" />
@@ -254,7 +271,7 @@ export default function EditWebinarClient({ webinar }: { webinar: Webinar }) {
 
                             <div className="grid gap-5 md:grid-cols-3">
                                 <div><label className="mb-2 block text-sm font-semibold">Jenis template</label><select disabled={!formData.certificateEnabled} value={formData.certificateTemplateType} onChange={e => setFormData({...formData, certificateTemplateType: e.target.value as Webinar['certificateTemplateType']})} className="w-full rounded-xl border border-oxford-200 bg-oxford-50 px-4 py-3 dark:bg-oxford-950"><option value="sertifikat">Sertifikat</option><option value="surat_keterangan">Surat Keterangan</option><option value="sttp">STTP</option></select></div>
-                                <div><label className="mb-2 block text-sm font-semibold">Awalan nomor</label><input disabled={!formData.certificateEnabled} required maxLength={20} value={formData.certificateNumberPrefix} onChange={e => setFormData({...formData, certificateNumberPrefix: e.target.value.toUpperCase()})} placeholder="WEB" className="w-full rounded-xl border border-oxford-200 bg-oxford-50 px-4 py-3 font-mono dark:bg-oxford-950" /><p className="mt-1 text-xs text-oxford-400">Contoh: WEB/2026/000001</p></div>
+                                <div><label className="mb-2 block text-sm font-semibold">Awalan nomor (Kode Event/Seri)</label><input disabled={!formData.certificateEnabled} required maxLength={30} value={formData.certificateNumberPrefix} onChange={e => setFormData({...formData, certificateNumberPrefix: e.target.value.toUpperCase()})} placeholder="AKJ-26" className="w-full rounded-xl border border-oxford-200 bg-oxford-50 px-4 py-3 font-mono dark:bg-oxford-950" /><p className="mt-1 text-xs text-oxford-400">Contoh: AKJ-26 (Format: 800.2.5_[No Urut]_BPSDM_AKJ-26_[Bulan]_[Tahun])</p></div>
                                 <div><label className="mb-2 block text-sm font-semibold">Jam Pelajaran</label><input disabled={!formData.certificateEnabled} type="number" min={1} max={999} value={formData.certificateJp} onChange={e => setFormData({...formData, certificateJp: Number(e.target.value)})} className="w-full rounded-xl border border-oxford-200 bg-oxford-50 px-4 py-3 dark:bg-oxford-950" /></div>
                             </div>
                         </div>

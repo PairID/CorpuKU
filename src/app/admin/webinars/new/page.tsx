@@ -19,13 +19,15 @@ export default function NewWebinarPage() {
         meetingLink: "",
         materialUrl: "",
         virtualBackgroundUrl: "",
+        youtubeUrl: "",
+        isAttendanceOpen: false,
         scheduledAt: "",
         attendanceCode: "",
         status: "draft" as "draft" | "published" | "completed",
         certificateEnabled: true,
         certificateAutoIssue: true,
         certificateTemplateType: "sertifikat" as "sertifikat" | "surat_keterangan" | "sttp",
-        certificateNumberPrefix: "WEB",
+        certificateNumberPrefix: "AKJ-26",
         certificateJp: 2,
     });
 
@@ -110,6 +112,21 @@ export default function NewWebinarPage() {
                                 />
                             </div>
 
+                            <div className="col-span-1 md:col-span-2">
+                                <label className="block text-sm font-semibold text-oxford-900 dark:text-white mb-2">Link YouTube (Live Stream / Replay Embed)</label>
+                                <input type="url" value={formData.youtubeUrl} onChange={e => setFormData({...formData, youtubeUrl: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-oxford-200 dark:border-oxford-700 focus:outline-none focus:ring-2 focus:ring-gold-500/50 focus:border-gold-500 transition-all bg-oxford-50 dark:bg-oxford-950/50" placeholder="https://www.youtube.com/watch?v=... atau https://youtu.be/..." />
+                                <p className="text-xs text-oxford-500 mt-1">Jika diisi, siaran live YouTube akan otomatis terpasang (embed) di portal publik webinar.</p>
+                            </div>
+
+                            <div className="col-span-1 md:col-span-2">
+                                <div className="flex items-center gap-3 p-4 bg-oxford-50 dark:bg-oxford-950/50 rounded-xl border border-border-base">
+                                    <input type="checkbox" id="isAttendanceOpen" checked={formData.isAttendanceOpen} onChange={e => setFormData({...formData, isAttendanceOpen: e.target.checked})} className="w-5 h-5 rounded text-gold-500 focus:ring-gold-500 cursor-pointer" />
+                                    <label htmlFor="isAttendanceOpen" className="text-sm font-medium cursor-pointer text-foreground">
+                                        <strong>Buka Presensi Live Sekarang</strong> (Peserta dapat langsung mengisi form presensi & SKM)
+                                    </label>
+                                </div>
+                            </div>
+
                             <div>
                                 <label className="block text-sm font-semibold text-oxford-900 dark:text-white mb-2">Link Meeting (Zoom/Meet)</label>
                                 <input type="url" value={formData.meetingLink} onChange={e => setFormData({...formData, meetingLink: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-oxford-200 dark:border-oxford-700 focus:outline-none focus:ring-2 focus:ring-gold-500/50 focus:border-gold-500 transition-all bg-oxford-50 dark:bg-oxford-950/50" placeholder="https://zoom.us/j/..." />
@@ -149,7 +166,7 @@ export default function NewWebinarPage() {
                             <h3 className="flex items-center gap-2 font-bold text-oxford-900"><Award className="text-emerald-600" size={21} /> Sertifikat Otomatis</h3>
                             <label className="flex cursor-pointer items-start gap-3"><input type="checkbox" checked={formData.certificateEnabled} onChange={e => setFormData({...formData, certificateEnabled: e.target.checked})} className="mt-1 h-5 w-5 accent-emerald-600" /><span><strong className="block">Aktifkan sertifikat</strong><span className="text-sm text-oxford-500">Peserta yang hadir dan lulus evaluasi berhak memperoleh sertifikat.</span></span></label>
                             <label className={`flex items-start gap-3 ${formData.certificateEnabled ? 'cursor-pointer' : 'opacity-50'}`}><input type="checkbox" disabled={!formData.certificateEnabled} checked={formData.certificateAutoIssue} onChange={e => setFormData({...formData, certificateAutoIssue: e.target.checked})} className="mt-1 h-5 w-5 accent-emerald-600" /><span><strong className="block">Terbitkan otomatis setelah lulus</strong><span className="text-sm text-oxford-500">Tidak perlu persetujuan admin satu per satu.</span></span></label>
-                            <div className="grid gap-4 md:grid-cols-3"><div><label className="mb-2 block text-sm font-semibold">Jenis template</label><select disabled={!formData.certificateEnabled} value={formData.certificateTemplateType} onChange={e => setFormData({...formData, certificateTemplateType: e.target.value as typeof formData.certificateTemplateType})} className="w-full rounded-xl border border-oxford-200 bg-white px-4 py-3"><option value="sertifikat">Sertifikat</option><option value="surat_keterangan">Surat Keterangan</option><option value="sttp">STTP</option></select></div><div><label className="mb-2 block text-sm font-semibold">Awalan nomor</label><input disabled={!formData.certificateEnabled} maxLength={20} value={formData.certificateNumberPrefix} onChange={e => setFormData({...formData, certificateNumberPrefix: e.target.value.toUpperCase()})} className="w-full rounded-xl border border-oxford-200 bg-white px-4 py-3 font-mono" /></div><div><label className="mb-2 block text-sm font-semibold">Jam Pelajaran</label><input disabled={!formData.certificateEnabled} type="number" min={1} max={999} value={formData.certificateJp} onChange={e => setFormData({...formData, certificateJp: Number(e.target.value)})} className="w-full rounded-xl border border-oxford-200 bg-white px-4 py-3" /></div></div>
+                            <div className="grid gap-4 md:grid-cols-3"><div><label className="mb-2 block text-sm font-semibold">Jenis template</label><select disabled={!formData.certificateEnabled} value={formData.certificateTemplateType} onChange={e => setFormData({...formData, certificateTemplateType: e.target.value as typeof formData.certificateTemplateType})} className="w-full rounded-xl border border-oxford-200 bg-white px-4 py-3"><option value="sertifikat">Sertifikat</option><option value="surat_keterangan">Surat Keterangan</option><option value="sttp">STTP</option></select></div><div><label className="mb-2 block text-sm font-semibold">Awalan nomor (Kode Event/Seri)</label><input disabled={!formData.certificateEnabled} maxLength={30} value={formData.certificateNumberPrefix} onChange={e => setFormData({...formData, certificateNumberPrefix: e.target.value.toUpperCase()})} placeholder="AKJ-26" className="w-full rounded-xl border border-oxford-200 bg-white px-4 py-3 font-mono" /><p className="mt-1 text-xs text-oxford-500">Contoh: AKJ-26 (Format: 800.2.5_[No Urut]_BPSDM_AKJ-26_[Bulan]_[Tahun])</p></div><div><label className="mb-2 block text-sm font-semibold">Jam Pelajaran</label><input disabled={!formData.certificateEnabled} type="number" min={1} max={999} value={formData.certificateJp} onChange={e => setFormData({...formData, certificateJp: Number(e.target.value)})} className="w-full rounded-xl border border-oxford-200 bg-white px-4 py-3" /></div></div>
                         </div>
 
                         <div className="pt-6 border-t border-oxford-100 dark:border-oxford-800 flex justify-end">

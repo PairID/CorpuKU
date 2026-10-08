@@ -1,10 +1,10 @@
 import crypto from 'crypto';
-import { sql } from '@/lib/db';
-import type { IssuedWebinarCertificate } from '@/lib/types';
+import { sql } from './db';
+import type { IssuedWebinarCertificate } from './types';
 
 type CertificateRow = Record<string, unknown>;
 
-function mapCertificate(row: CertificateRow): IssuedWebinarCertificate {
+export function mapCertificate(row: CertificateRow): IssuedWebinarCertificate {
   return {
     id: String(row.id),
     certificateNumber: String(row.certificate_number),
@@ -62,8 +62,17 @@ export async function issueWebinarCertificate(userId: string, webinarId: string)
         certificate_jp, template_settings
       )
       SELECT ${certificateId}, registration_id, user_id, webinar_id,
-             certificate_number_prefix || '/' || EXTRACT(YEAR FROM CURRENT_TIMESTAMP)::INTEGER || '/' ||
-               LPAD(nextval('webinar_certificate_number_seq')::TEXT, 6, '0'),
+             CASE
+               WHEN certificate_number_prefix ~ '^800\.2\.5_' THEN
+                 certificate_number_prefix || '_' || LPAD(nextval('webinar_certificate_number_seq')::TEXT, 5, '0')
+               ELSE
+                 '800.2.5_' ||
+                 LPAD(nextval('webinar_certificate_number_seq')::TEXT, 5, '0') ||
+                 '_BPSDM_' ||
+                 certificate_number_prefix || '_' ||
+                 (ARRAY['I','II','III','IV','V','VI','VII','VIII','IX','X','XI','XII'])[EXTRACT(MONTH FROM COALESCE(scheduled_at, CURRENT_TIMESTAMP))::INTEGER] || '_' ||
+                 EXTRACT(YEAR FROM COALESCE(scheduled_at, CURRENT_TIMESTAMP))::INTEGER
+             END,
              ${verificationToken}, name, nip, pangkat, jabatan, instansi_asal,
              title, scheduled_at, certificate_template_type,
              certificate_jp, template_settings
@@ -196,4 +205,36 @@ export async function getUserWebinarCertificates(userId: string) {
     ORDER BY issued_at DESC LIMIT 500
   `;
   return rows.map(mapCertificate);
+}
+
+export const ROMAN_MONTHS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'] as const;
+
+export function formatWebinarCertificateNumber(options: {
+  sequenceNumber: number | string;
+  seriesCode: string;
+  date?: Date | string;
+  classificationCode?: string;
+  institution?: string;
+}): string {
+  const seq = String(options.sequenceNumber).padStart(5, '0');
+  const series = options.seriesCode.trim().toUpperCase() || 'AKJ-26';
+  const classification = options.classificationCode || '800.2.5';
+  const inst = options.institution || 'BPSDM';
+  const d = options.date ? new Date(options.date) : new Date();
+  const monthIdx = Number.isNaN(d.getTime()) ? new Date().getMonth() : d.getMonth();
+  const romanMonth = ROMAN_MONTHS[monthIdx] || 'I';
+  const year = Number.isNaN(d.getTime()) ? new Date().getFullYear() : d.getFullYear();
+  return `${classification}_${seq}_${inst}_${series}_${romanMonth}_${year}`;
+}
+
+export function formatWebinarCertificateFilename(options: {
+  participantName: string;
+  certificateNumber: string;
+  category?: string;
+}): string {
+  const safeName = options.participantName.trim() || 'Peserta';
+  const safeCertNum = options.certificateNumber.trim();
+  const cat = options.category?.trim() || 'Yang Lain';
+  const filename = `${safeName}-${safeCertNum}-${cat}.pdf`;
+  return filename.replace(/[/\\?%*:|"<>]/g, '_');
 }

@@ -1,11 +1,54 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { motion, type Variants, AnimatePresence } from "framer-motion";
-import { ArrowRight, BookOpen, Calendar, Layers3, ChevronRight, Award } from "lucide-react";
+import { ArrowRight, BookOpen, Calendar, Layers3, ChevronRight, Award, Radio, PlayCircle, Clock, Video } from "lucide-react";
 import { optimizeImage } from "@/lib/utils";
+import type { Webinar } from "@/lib/types";
+
+function useCountdown(targetDateStr: string | null | undefined) {
+  const [mounted, setMounted] = useState(false);
+  const [timeLeft, setTimeLeft] = useState<{ days: number; hours: number; minutes: number; seconds: number; isPast: boolean }>({
+    days: 0, hours: 0, minutes: 0, seconds: 0, isPast: false
+  });
+
+  useEffect(() => {
+    setMounted(true);
+    if (!targetDateStr) return;
+
+    const targetTime = new Date(targetDateStr).getTime();
+    if (isNaN(targetTime)) return;
+
+    let intervalId: NodeJS.Timeout | null = null;
+
+    const calculate = () => {
+      const diff = targetTime - Date.now();
+      if (diff <= 0) {
+        setTimeLeft({ days: 0, hours: 0, minutes: 0, seconds: 0, isPast: true });
+        if (intervalId) {
+          clearInterval(intervalId);
+          intervalId = null;
+        }
+        return;
+      }
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+      setTimeLeft({ days, hours, minutes, seconds, isPast: false });
+    };
+
+    calculate();
+    intervalId = setInterval(calculate, 1000);
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [targetDateStr]);
+
+  return { ...timeLeft, mounted };
+}
 
 // ANIMATIONS
 const fadeIn: Variants = {
@@ -49,7 +92,19 @@ const CATEGORY_TO_TYPE: Record<string, { type: string, color: string }> = {
   "default": { type: "Lainnya", color: "bg-oxford-600" }
 };
 
-export default function HomeClient({ courses }: { courses: CourseProp[] }) {
+export default function HomeClient({ courses, featuredWebinar }: { courses: CourseProp[]; featuredWebinar?: Webinar | null }) {
+  const isWebinarLive = Boolean(
+    featuredWebinar && (
+      featuredWebinar.isAttendanceOpen ||
+      (
+        new Date().getTime() >= new Date(featuredWebinar.scheduledAt).getTime() - (featuredWebinar.joinWindowMinutes || 30) * 60 * 1000 &&
+        new Date().getTime() <= new Date(featuredWebinar.scheduledAt).getTime() + 4 * 60 * 60 * 1000
+      )
+    )
+  );
+
+  const countdown = useCountdown(featuredWebinar?.scheduledAt);
+
   // Hanya kursus dengan jadwal eksplisit yang boleh tampil sebagai jadwal.
   const scheduledData = courses.flatMap((course) => {
     if (!course.startDate) return [];
@@ -121,6 +176,156 @@ export default function HomeClient({ courses }: { courses: CourseProp[] }) {
 
         <div className="absolute bottom-0 left-0 w-full h-24 bg-gradient-to-t from-background to-transparent" />
       </section>
+
+      {/* 2. ROW PERTAMA: WEBINAR SHOWCASE (LIVE / UPCOMING) */}
+      {featuredWebinar && (
+        <section className="relative z-20 -mt-16 sm:-mt-24 mb-16 container mx-auto px-4">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className={`rounded-3xl overflow-hidden border shadow-2xl transition-all ${
+              isWebinarLive
+                ? "bg-gradient-to-br from-oxford-950 via-crimson-950/70 to-oxford-900 border-crimson-500/40 shadow-crimson-900/20"
+                : "bg-gradient-to-br from-oxford-950 via-oxford-900 to-[#121724] border-gold-500/30 shadow-gold-950/20"
+            }`}
+          >
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center p-6 sm:p-10">
+              {/* Kolom Teks & Aksi */}
+              <div className="lg:col-span-7 flex flex-col justify-center">
+                {/* Badge Status */}
+                <div className="flex flex-wrap items-center gap-3 mb-4">
+                  {isWebinarLive ? (
+                    <span className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-crimson-600 text-white font-sans text-xs font-bold uppercase tracking-wider shadow-lg shadow-crimson-600/40 animate-pulse">
+                      <span className="w-2.5 h-2.5 rounded-full bg-white" />
+                      Live Sekarang
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-gold-500/20 text-gold-400 border border-gold-500/30 font-sans text-xs font-bold uppercase tracking-wider">
+                      <Video size={14} className="text-gold-400" />
+                      Webinar Terdekat
+                    </span>
+                  )}
+
+                  <span className="text-xs text-oxford-300 font-medium flex items-center gap-1.5">
+                    <Calendar size={14} className="text-gold-400" />
+                    {new Date(featuredWebinar.scheduledAt).toLocaleDateString("id-ID", {
+                      weekday: "long",
+                      day: "numeric",
+                      month: "long",
+                      year: "numeric",
+                      timeZone: "Asia/Makassar"
+                    })}
+                  </span>
+                  <span className="text-xs text-oxford-300 font-medium flex items-center gap-1.5">
+                    <Clock size={14} className="text-gold-400" />
+                    {new Date(featuredWebinar.scheduledAt).toLocaleTimeString("id-ID", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                      timeZone: "Asia/Makassar"
+                    })}{" "}
+                    WITA
+                  </span>
+                </div>
+
+                {/* Judul & Deskripsi */}
+                <h2 className="text-2xl sm:text-3xl md:text-4xl font-sans font-bold text-white mb-3 leading-tight">
+                  {featuredWebinar.title}
+                </h2>
+                <p className="text-oxford-300 text-sm sm:text-base line-clamp-2 mb-6 leading-relaxed">
+                  {featuredWebinar.description}
+                </p>
+
+                {/* Countdown jika belum live */}
+                {!isWebinarLive && countdown.mounted && !countdown.isPast && (
+                  <div className="flex items-center gap-2 sm:gap-3 mb-6">
+                    <div className="bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-center min-w-[56px]">
+                      <div className="text-xl sm:text-2xl font-bold text-gold-400 font-mono">{countdown.days}</div>
+                      <div className="text-[10px] text-oxford-400 uppercase tracking-wider font-semibold">Hari</div>
+                    </div>
+                    <span className="text-oxford-500 font-bold">:</span>
+                    <div className="bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-center min-w-[56px]">
+                      <div className="text-xl sm:text-2xl font-bold text-white font-mono">{String(countdown.hours).padStart(2, "0")}</div>
+                      <div className="text-[10px] text-oxford-400 uppercase tracking-wider font-semibold">Jam</div>
+                    </div>
+                    <span className="text-oxford-500 font-bold">:</span>
+                    <div className="bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-center min-w-[56px]">
+                      <div className="text-xl sm:text-2xl font-bold text-white font-mono">{String(countdown.minutes).padStart(2, "0")}</div>
+                      <div className="text-[10px] text-oxford-400 uppercase tracking-wider font-semibold">Menit</div>
+                    </div>
+                    <span className="text-oxford-500 font-bold">:</span>
+                    <div className="bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-center min-w-[56px]">
+                      <div className="text-xl sm:text-2xl font-bold text-gold-500 font-mono">{String(countdown.seconds).padStart(2, "0")}</div>
+                      <div className="text-[10px] text-oxford-400 uppercase tracking-wider font-semibold">Detik</div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Action Buttons */}
+                <div className="flex flex-wrap items-center gap-4">
+                  <Link
+                    href={`/webinars/${featuredWebinar.id}`}
+                    className={`px-7 py-3.5 rounded-full font-bold font-sans text-sm sm:text-base flex items-center gap-2.5 transition-all shadow-lg hover:scale-105 ${
+                      isWebinarLive
+                        ? "bg-crimson-600 hover:bg-crimson-500 text-white shadow-crimson-600/30"
+                        : "bg-gold-500 hover:bg-gold-400 text-oxford-950 shadow-gold-500/20"
+                    }`}
+                  >
+                    {isWebinarLive ? (
+                      <>
+                        <Radio size={18} className="animate-pulse" />
+                        Ikuti Siaran & Presensi Sekarang
+                      </>
+                    ) : (
+                      <>
+                        <PlayCircle size={18} />
+                        Lihat Detail & Bergabung
+                      </>
+                    )}
+                    <ArrowRight size={16} />
+                  </Link>
+
+                  <Link
+                    href="/webinars"
+                    className="px-5 py-3 rounded-full font-sans text-sm text-oxford-300 hover:text-white hover:bg-white/5 transition-colors border border-white/10"
+                  >
+                    Katalog Webinar
+                  </Link>
+                </div>
+              </div>
+
+              {/* Kolom Preview Poster */}
+              <div className="lg:col-span-5 flex justify-center">
+                <Link
+                  href={`/webinars/${featuredWebinar.id}`}
+                  className="relative group w-full max-w-md h-56 sm:h-72 rounded-2xl overflow-hidden border border-white/10 shadow-xl cursor-pointer"
+                >
+                  {featuredWebinar.thumbnailUrl ? (
+                    <Image
+                      src={featuredWebinar.thumbnailUrl}
+                      alt={featuredWebinar.title}
+                      fill
+                      sizes="(min-width: 1024px) 40vw, 100vw"
+                      unoptimized
+                      className="object-cover group-hover:scale-105 transition-transform duration-500"
+                    />
+                  ) : (
+                    <div className="absolute inset-0 bg-oxford-900 flex flex-col items-center justify-center text-oxford-400">
+                      <Video size={48} className="mb-2 opacity-50" />
+                      <p className="text-sm font-sans">Poster Webinar</p>
+                    </div>
+                  )}
+                  <div className="absolute inset-0 bg-gradient-to-t from-oxford-950/80 via-transparent to-transparent flex items-end p-4">
+                    <span className="text-xs text-gold-400 font-semibold group-hover:underline flex items-center gap-1">
+                      Buka Halaman Webinar <ChevronRight size={14} />
+                    </span>
+                  </div>
+                </Link>
+              </div>
+            </div>
+          </motion.div>
+        </section>
+      )}
 
       {/* KURSUS TERBARU DARI DATABASE */}
       <section className="py-24 bg-background transition-colors duration-300">

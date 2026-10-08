@@ -1,7 +1,8 @@
-import { getAdminWebinars, deleteWebinar } from "@/app/actions/webinars";
+import { getAdminWebinars } from "@/app/actions/webinars";
 import { AdminSidebar } from "@/components/layout/AdminSidebar";
 import Link from "next/link";
-import { Video, Plus, Edit, Trash2, Calendar, Award, Eye } from "lucide-react";
+import { Video, Plus, Edit, Calendar, Award, Eye } from "lucide-react";
+import { AttendanceToggleButton, DeleteWebinarButton } from "./admin-webinar-controls";
 
 export const dynamic = "force-dynamic";
 
@@ -39,14 +40,15 @@ export default async function AdminWebinarsPage() {
                                         <th className="p-4 font-sans font-semibold text-oxford-800 dark:text-oxford-100">Judul Webinar</th>
                                         <th className="p-4 font-sans font-semibold text-oxford-800 dark:text-oxford-100">Jadwal</th>
                                         <th className="p-4 font-sans font-semibold text-oxford-800 dark:text-oxford-100">Status</th>
-                                        <th className="p-4 font-sans font-semibold text-oxford-800 dark:text-oxford-100">Kode Presensi</th>
+                                        <th className="p-4 font-sans font-semibold text-oxford-800 dark:text-oxford-100">Presensi Live</th>
+                                        <th className="p-4 font-sans font-semibold text-oxford-800 dark:text-oxford-100">Hadir</th>
                                         <th className="p-4 font-sans font-semibold text-oxford-800 dark:text-oxford-100 text-right">Aksi</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {webinars.length === 0 ? (
                                         <tr>
-                                            <td colSpan={5} className="p-8 text-center text-oxford-500 dark:text-oxford-400">
+                                            <td colSpan={6} className="p-8 text-center text-oxford-500 dark:text-oxford-400">
                                                 Belum ada webinar yang dibuat.
                                             </td>
                                         </tr>
@@ -54,6 +56,9 @@ export default async function AdminWebinarsPage() {
                                         <tr key={webinar.id} className="border-b border-oxford-50 dark:border-oxford-900 hover:bg-oxford-50 dark:hover:bg-oxford-950/50 transition-colors">
                                             <td className="p-4">
                                                 <div className="font-serif font-medium text-oxford-900 dark:text-white line-clamp-1">{webinar.title}</div>
+                                                {webinar.youtubeUrl && (
+                                                    <span className="text-[11px] text-crimson-600 font-medium">YouTube Terhubung</span>
+                                                )}
                                             </td>
                                             <td className="p-4">
                                                 <div className="flex items-center gap-2 text-sm text-oxford-700 dark:text-oxford-200">
@@ -71,15 +76,20 @@ export default async function AdminWebinarsPage() {
                                                 </span>
                                             </td>
                                             <td className="p-4">
-                                                {webinar.attendanceCode ? (
-                                                    <span className="font-mono bg-oxford-100 dark:bg-[#161B2A] px-2 py-1 rounded text-sm font-semibold">{webinar.attendanceCode}</span>
-                                                ) : (
-                                                    <span className="text-oxford-400 text-sm italic">Belum diatur</span>
-                                                )}
+                                                <AttendanceToggleButton
+                                                    webinarId={webinar.id}
+                                                    isAttendanceOpen={Boolean(webinar.isAttendanceOpen)}
+                                                />
+                                            </td>
+                                            <td className="p-4">
+                                                <span className="text-sm font-bold text-foreground">
+                                                    {webinar.attendanceCount || 0}
+                                                </span>
+                                                <span className="text-xs text-oxford-400 ml-1">peserta</span>
                                             </td>
                                             <td className="p-4">
                                                 <div className="flex items-center justify-end gap-2">
-                                                    <Link href={`/dashboard/webinars/${webinar.id}`} target="_blank" className="p-2 text-oxford-500 dark:text-oxford-400 hover:text-oxford-900 dark:hover:text-white hover:bg-oxford-100 dark:hover:bg-[#161B2A] rounded-lg transition-colors" title="Lihat Dashboard">
+                                                    <Link href={`/webinars/${webinar.id}`} target="_blank" className="p-2 text-oxford-500 dark:text-oxford-400 hover:text-gold-600 hover:bg-oxford-100 dark:hover:bg-[#161B2A] rounded-lg transition-colors" title="Lihat Portal Publik">
                                                         <Eye size={18} />
                                                     </Link>
                                                     <Link href={`/admin/webinars/${webinar.id}`} className="p-2 text-oxford-500 dark:text-oxford-400 hover:text-gold-600 hover:bg-gold-50 rounded-lg transition-colors" title="Edit">
@@ -88,14 +98,10 @@ export default async function AdminWebinarsPage() {
                                                     <Link href={`/admin/webinars/${webinar.id}/certificates`} className="p-2 text-oxford-500 dark:text-oxford-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors" title="Kelola Sertifikat">
                                                         <Award size={18} />
                                                     </Link>
-                                                    <form action={async () => {
-                                                        "use server";
-                                                        await deleteWebinar(webinar.id);
-                                                    }}>
-                                                        <button type="submit" className="p-2 text-oxford-500 dark:text-oxford-400 hover:text-crimson-600 hover:bg-crimson-50 rounded-lg transition-colors" title="Hapus">
-                                                            <Trash2 size={18} />
-                                                        </button>
-                                                    </form>
+                                                    <DeleteWebinarButton
+                                                        webinarId={webinar.id}
+                                                        webinarTitle={webinar.title}
+                                                    />
                                                 </div>
                                             </td>
                                         </tr>

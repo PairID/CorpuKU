@@ -43,7 +43,7 @@ export async function globalSearch(query: string): Promise<GlobalSearchResult[]>
                 LIMIT 5
             `,
             sql`
-                SELECT id, title, description, category, thumbnail_url as "imageUrl"
+                SELECT id, title, description, 'Webinar' AS category, thumbnail_url as "imageUrl"
                 FROM webinars
                 WHERE (title ILIKE ${q} OR description ILIKE ${q}) AND status = 'published'
                 LIMIT 5
