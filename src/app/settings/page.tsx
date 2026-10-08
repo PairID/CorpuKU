@@ -19,7 +19,7 @@ export default function Settings() {
     const [activeTab, setActiveTab] = useState<SettingsTab>("profile");
     const [notification, setNotification] = useState<{ type: "success" | "error"; message: string } | null>(null);
     useEffect(() => {
-        if (!isPending && !session) {
+        if (!isPending && !session?.user) {
             router.push('/login');
         }
     }, [session, isPending, router]);
@@ -29,7 +29,7 @@ export default function Settings() {
         setTimeout(() => setNotification(null), 3000);
     };
 
-    if (isPending || !session) {
+    if (isPending || !session?.user) {
         return (
             <div className="min-h-screen bg-oxford-50 dark:bg-oxford-950 flex items-center justify-center">
                 <Loader2 size={40} className="animate-spin text-gold-500" />
@@ -37,8 +37,7 @@ export default function Settings() {
         );
     }
 
-    const user = session.user!;
-
+    const user = session.user;
     const storedUser = user;
 
     const tabs: { key: SettingsTab; label: string; icon: React.ReactNode }[] = [
@@ -132,9 +131,9 @@ function ProfileTab({ user, storedUser, onNotify }: {
     const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
     const [uploadProgress, setUploadProgress] = useState<number | null>(null);
     const [formData, setFormData] = useState({
-        name: user.name || "",
-        email: user.email || "",
-        nip: storedUser?.nip || user.nip || "",
+        name: user?.name || "",
+        email: user?.email || "",
+        nip: storedUser?.nip || user?.nip || "",
         instansiAsal: storedUser?.instansiAsal || "BPSDM Provinsi",
         pangkat: storedUser?.pangkat || "",
         jabatan: storedUser?.jabatan || "",
@@ -239,10 +238,10 @@ function ProfileTab({ user, storedUser, onNotify }: {
                 <div className="flex items-center gap-6">
                     <div className="relative group">
                         <div className="w-20 h-20 rounded-full bg-oxford-900 flex items-center justify-center text-white text-3xl font-bold shadow-md uppercase overflow-hidden">
-                            {avatarPreview || user.image ? (
-                                <Image src={avatarPreview || user.image || ""} alt={user.name} width={80} height={80} unoptimized className="w-full h-full object-cover" />
+                            {avatarPreview || user?.image ? (
+                                <Image src={avatarPreview || user?.image || ""} alt={user?.name || "User"} width={80} height={80} unoptimized className="w-full h-full object-cover" />
                             ) : (
-                                user.name.charAt(0)
+                                (user?.name || "U").charAt(0)
                             )}
                             
                             {/* Upload Progress Overlay */}

@@ -93,6 +93,8 @@ export default function Login() {
                                     onChange={(e) => setUsername(e.target.value)}
                                     placeholder="Masukkan NIP Anda"
                                     autoComplete="username"
+                                    data-1p-ignore="true"
+                                    data-lpignore="true"
                                     className="w-full pl-12 pr-4 py-3 border border-oxford-200 dark:border-oxford-700 bg-white dark:bg-[#161B2A] rounded-xl focus:outline-none focus:ring-4 focus:ring-gold-500/10 focus:border-gold-500 transition-all font-sans text-oxford-900 dark:text-white"
                                 />
                             </div>
@@ -113,6 +115,8 @@ export default function Login() {
                                     onChange={(e) => setPassword(e.target.value)}
                                     placeholder="••••••••"
                                     autoComplete="current-password"
+                                    data-1p-ignore="true"
+                                    data-lpignore="true"
                                     className="w-full pl-12 pr-12 py-3 border border-oxford-200 dark:border-oxford-700 bg-white dark:bg-[#161B2A] rounded-xl focus:outline-none focus:ring-4 focus:ring-gold-500/10 focus:border-gold-500 transition-all font-sans text-oxford-900 dark:text-white"
                                 />
                                 <button

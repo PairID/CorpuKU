@@ -47,31 +47,34 @@ const templateUrlSchema = z.union([
 ]);
 const certificateElementSchema = z.object({
     id: z.string().min(1).max(100),
-    type: z.enum(["text", "image"]).optional(),
-    text: z.string().max(5000),
+    type: z.enum(["text", "image"]).optional().default("text"),
+    text: z.string().max(5000).optional().default(""),
     imageUrl: templateUrlSchema.optional(),
-    x: z.number().min(0).max(100), y: z.number().min(0).max(100),
-    fontSize: z.number().min(6).max(200),
-    fontFamily: z.enum(["bookman", "serif", "sans", "mono"]),
-    fontWeight: z.enum(["normal", "bold"]),
-    color: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
-    textAlign: z.enum(["left", "center", "right", "justify"]),
-    width: z.number().min(1).max(100), height: z.number().min(1).max(100).optional(),
+    x: z.number().min(0).max(100),
+    y: z.number().min(0).max(100),
+    fontSize: z.number().min(6).max(200).optional().default(12),
+    fontFamily: z.string().max(100).optional().default("bookman"),
+    fontWeight: z.string().max(50).optional().default("normal"),
+    color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional().default("#000000"),
+    textAlign: z.enum(["left", "center", "right", "justify"]).optional().default("center"),
+    width: z.number().min(1).max(100),
+    height: z.number().min(1).max(100).optional(),
 });
 const certificateTypeConfigSchema: z.ZodTypeAny = z.object({
-    templateUrl: templateUrlSchema,
-    orientation: z.enum(["landscape", "portrait"]).optional(),
-    elements: z.array(certificateElementSchema).max(100),
+    templateUrl: templateUrlSchema.optional(),
+    orientation: z.enum(["landscape", "portrait"]).optional().default("landscape"),
+    elements: z.array(certificateElementSchema).max(100).default([]),
     page2: z.object({
-        enabled: z.boolean(), templateUrl: templateUrlSchema,
-        elements: z.array(certificateElementSchema).max(100),
+        enabled: z.boolean().default(false),
+        templateUrl: templateUrlSchema.optional(),
+        elements: z.array(certificateElementSchema).max(100).default([]),
     }).optional(),
 });
 const certificateSettingsSchema = z.object({
     sertifikat: certificateTypeConfigSchema.optional(),
     surat_keterangan: certificateTypeConfigSchema.optional(),
     sttp: certificateTypeConfigSchema.optional(),
-}).strict();
+}).passthrough();
 
 interface CourseRecord {
     id: string;
@@ -835,8 +838,19 @@ export async function updateCourseDetails(id: string, input: unknown) {
 
 export async function getCertificateSettings() {
     try {
-        const data = await sql`SELECT settings FROM certificate_settings WHERE type = 'sertifikat'`;
-        return data[0]?.settings || {};
+        const rows = await sql`SELECT type, settings FROM certificate_settings`;
+        const result: Record<string, unknown> = {};
+
+        for (const row of rows) {
+            const rowSettings = (row.settings as Record<string, unknown>) || {};
+            // If the row contains nested types like { sertifikat: { ... } }, merge them
+            if (rowSettings.sertifikat || rowSettings.surat_keterangan || rowSettings.sttp) {
+                Object.assign(result, rowSettings);
+            } else if (row.type) {
+                result[row.type as string] = rowSettings;
+            }
+        }
+        return result;
     } catch {
         return {};
     }
@@ -846,15 +860,33 @@ export async function updateCertificateSettings(settings: unknown) {
     try {
         await requireAdminSession();
         const parsed = certificateSettingsSchema.safeParse(settings);
-        if (!parsed.success) return { success: false, error: "Konfigurasi template tidak valid." };
+        if (!parsed.success) {
+            console.error("Certificate settings validation failed:", parsed.error);
+            return { success: false, error: "Konfigurasi template tidak valid." };
+        }
 
+        const data = parsed.data as Record<string, unknown>;
+
+        // Save both to the aggregate 'sertifikat' row for legacy readers and to individual type rows
         await sql`
             INSERT INTO certificate_settings (type, settings)
-            VALUES ('sertifikat', ${JSON.stringify(parsed.data)})
+            VALUES ('sertifikat', ${JSON.stringify(data)})
             ON CONFLICT (type) DO UPDATE SET settings = EXCLUDED.settings
         `;
+
+        for (const type of ["sertifikat", "surat_keterangan", "sttp"]) {
+            if (data[type]) {
+                await sql`
+                    INSERT INTO certificate_settings (type, settings)
+                    VALUES (${type}, ${JSON.stringify(data[type])})
+                    ON CONFLICT (type) DO UPDATE SET settings = EXCLUDED.settings
+                `;
+            }
+        }
+
         return { success: true };
-    } catch {
+    } catch (err) {
+        console.error("Failed to update certificate settings:", err);
         return { success: false, error: "Gagal memperbarui pengaturan." };
     }
 }
