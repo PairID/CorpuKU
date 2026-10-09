@@ -284,6 +284,56 @@ export default function CertificateAdminClient({
     setActiveEditElementId(newId);
   };
 
+  const addIdentityTableElement = () => {
+    const newId = "tabel_identitas_" + Date.now();
+    const newElement = {
+      id: newId,
+      text: "Nama : {{nama}}\nNIP/NIK : {{nip}}\nInstansi : {{instansi}}",
+      x: 50,
+      y: 40,
+      fontSize: 18,
+      fontFamily: "bookman",
+      fontWeight: "normal",
+      color: "#000000",
+      textAlign: "left" as const,
+      width: 85,
+    };
+
+    setSettings((prev) => {
+      const typeConfig = prev[activeTab] || {
+        orientation: "landscape",
+        templateUrl: null,
+        elements: [],
+      };
+      if (activePage === 1) {
+        return {
+          ...prev,
+          [activeTab]: {
+            ...typeConfig,
+            elements: [...(typeConfig.elements || []), newElement],
+          },
+        };
+      } else {
+        const page2 = typeConfig.page2 || {
+          enabled: true,
+          templateUrl: null,
+          elements: [],
+        };
+        return {
+          ...prev,
+          [activeTab]: {
+            ...typeConfig,
+            page2: {
+              ...page2,
+              elements: [...(page2.elements || []), newElement],
+            },
+          },
+        };
+      }
+    });
+    setActiveEditElementId(newId);
+  };
+
   const addImageElement = () => {
     const newId = "img_" + Date.now();
     const newElement = {
@@ -756,6 +806,12 @@ export default function CertificateAdminClient({
               </p>
             </div>
             <div className="flex gap-2">
+              <button
+                onClick={addIdentityTableElement}
+                className="p-2 border border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 rounded-lg hover:border-emerald-500 hover:bg-emerald-100 flex gap-2 text-xs font-bold items-center transition-colors"
+              >
+                <FileText size={14} /> + Tabel Identitas
+              </button>
               <button
                 onClick={addElement}
                 className="p-2 border border-oxford-200 dark:border-oxford-700 text-oxford-600 dark:text-oxford-300 rounded-lg hover:border-gold-500 hover:text-gold-600 flex gap-2 text-xs font-bold items-center transition-colors"

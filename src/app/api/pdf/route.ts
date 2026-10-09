@@ -263,7 +263,22 @@ export async function POST(req: Request) {
         const align = safeTextAlign(element.textAlign);
         const justifyCss = `text-align:${align};`;
 
-        return `<div style="${baseStyle}font-size:${computedFontSizePx}px;font-family:${fontFamily};font-weight:${fontWeight};color:${safeColor(element.color)};${justifyCss}white-space:pre-wrap;line-height:1.4;">${parseText(element.text)}</div>`;
+        const parsedRaw = parseText(element.text);
+        const lines = parsedRaw.split('\n').map(l => l.trim()).filter(Boolean);
+        const isKeyValueTable = lines.length >= 2 && lines.every(l => l.includes(':'));
+
+        if (isKeyValueTable) {
+          const rows = lines.map(line => {
+            const colonIdx = line.indexOf(':');
+            const label = line.slice(0, colonIdx).trim();
+            const value = line.slice(colonIdx + 1).trim();
+            return `<tr style="vertical-align:top;"><td style="width:1%;white-space:nowrap;padding-right:1.5em;text-align:left;">${label}</td><td style="width:1%;white-space:nowrap;padding-right:1.5em;text-align:center;">:</td><td style="width:auto;text-align:left;">${value}</td></tr>`;
+          }).join('');
+
+          return `<div style="${baseStyle}font-size:${computedFontSizePx}px;font-family:${fontFamily};font-weight:${fontWeight};color:${safeColor(element.color)};line-height:1.4;"><table style="width:100%;border-collapse:collapse;table-layout:auto;"><tbody>${rows}</tbody></table></div>`;
+        }
+
+        return `<div style="${baseStyle}font-size:${computedFontSizePx}px;font-family:${fontFamily};font-weight:${fontWeight};color:${safeColor(element.color)};${justifyCss}white-space:pre-wrap;line-height:1.4;">${parsedRaw}</div>`;
       }));
       return rendered.join('');
     };

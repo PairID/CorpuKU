@@ -145,6 +145,56 @@ export const CertificateView: React.FC<Props> = ({ data, config = DEFAULT_CONFIG
                 );
             }
 
+            const parsedRaw = parseText(el.text);
+            const lines = parsedRaw.split('\n').map(l => l.trim()).filter(Boolean);
+            const isKeyValueTable = lines.length >= 2 && lines.every(l => l.includes(':'));
+
+            if (isKeyValueTable) {
+                const rows = lines.map(line => {
+                    const colonIdx = line.indexOf(':');
+                    return {
+                        label: line.slice(0, colonIdx).trim(),
+                        value: line.slice(colonIdx + 1).trim(),
+                    };
+                });
+
+                return (
+                    <div
+                        key={el.id}
+                        className="absolute"
+                        style={{
+                            left: `${el.x}%`,
+                            top: `${el.y}%`,
+                            transform: 'translate(-50%, -50%)',
+                            width: el.width ? `${el.width}%` : 'auto',
+                            fontSize: `${(el.fontSize / 800) * 100}cqi`,
+                            fontFamily: el.fontFamily === 'bookman' ? '"Bookman Old Style", "Bookman", "URW Bookman L", "Palatino", serif' : el.fontFamily === 'serif' ? 'Georgia, serif' : el.fontFamily === 'mono' ? 'monospace' : 'Inter, sans-serif',
+                            fontWeight: el.fontWeight,
+                            color: el.color,
+                            lineHeight: '1.4'
+                        }}
+                    >
+                        <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'auto' }}>
+                            <tbody>
+                                {rows.map((row, idx) => (
+                                    <tr key={idx} style={{ verticalAlign: 'top' }}>
+                                        <td style={{ width: '1%', whiteSpace: 'nowrap', paddingRight: '1.5em', textAlign: 'left', fontWeight: 'inherit', color: 'inherit' }}>
+                                            {row.label}
+                                        </td>
+                                        <td style={{ width: '1%', whiteSpace: 'nowrap', paddingRight: '1.5em', textAlign: 'center', fontWeight: 'inherit', color: 'inherit' }}>
+                                            :
+                                        </td>
+                                        <td style={{ width: 'auto', textAlign: 'left', fontWeight: 'inherit', color: 'inherit' }}>
+                                            {row.value}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                );
+            }
+
             return (
                 <div 
                     key={el.id}
@@ -163,7 +213,7 @@ export const CertificateView: React.FC<Props> = ({ data, config = DEFAULT_CONFIG
                         lineHeight: '1.4'
                     }}
                 >
-                    {parseText(el.text)}
+                    {parsedRaw}
                 </div>
             );
         })
