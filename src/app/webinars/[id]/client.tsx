@@ -6,10 +6,11 @@ import Image from "next/image";
 import { motion } from "framer-motion";
 import { 
   Calendar, Clock, Video, CheckCircle, AlertCircle, ArrowLeft, 
-  Download, Award, User, ExternalLink, Search, Printer, Sparkles, Check
+  Download, Award, User, ExternalLink, Search, Printer, Sparkles, Check,
+  Loader2, ShieldCheck, Info
 } from "lucide-react";
 import { toast } from "sonner";
-import { submitPublicWebinarAttendance, checkWebinarCertificateByNip } from "@/app/actions/webinars";
+import { submitPublicWebinarAttendance, checkWebinarCertificateByNip, lookupParticipantByNip } from "@/app/actions/webinars";
 import type { Webinar, IssuedWebinarCertificate, SkmAnswer } from "@/lib/types";
 
 type WebinarUser = {
@@ -192,6 +193,10 @@ export default function WebinarDetailClient({
   const [isSubmittingAttendance, setIsSubmittingAttendance] = useState(false);
   const [attendanceSuccess, setAttendanceSuccess] = useState(Boolean(userRegistration?.attended));
 
+  // NIP Auto-lookup State
+  const [isLookingUpNip, setIsLookingUpNip] = useState(false);
+  const [nipFoundInDb, setNipFoundInDb] = useState(false);
+
   // Certificate Lookup State
   const [searchCertNip, setSearchCertNip] = useState("");
   const [isSearchingCert, setIsSearchingCert] = useState(false);
@@ -227,6 +232,39 @@ export default function WebinarDetailClient({
     }
   }, [user]);
 
+  // Handler auto-lookup NIP dari database
+  const handleNipLookup = async (inputNip: string) => {
+    const clean = inputNip.trim().replace(/\D/g, "");
+    if (clean.length < 8) {
+      setNipFoundInDb(false);
+      return;
+    }
+
+    setIsLookingUpNip(true);
+    try {
+      const res = await lookupParticipantByNip(clean);
+      if (res.found) {
+        setNipFoundInDb(true);
+        if (res.name) setName(res.name);
+        if (res.agency) setAgency(res.agency);
+        if (res.position) setPosition(res.position);
+        toast.info("Data profil ditemukan di database! Data di bawah telah diisi otomatis dan dapat disesuaikan untuk sertifikat.", {
+          duration: 4000,
+        });
+      } else {
+        setNipFoundInDb(false);
+        if (res.error) {
+          toast.warning(res.error);
+        }
+      }
+    } catch (err) {
+      console.error("NIP lookup error:", err);
+      setNipFoundInDb(false);
+    } finally {
+      setIsLookingUpNip(false);
+    }
+  };
+
   // Set default SKM to "Sangat Baik / A"
   useEffect(() => {
     const defaults: Record<number, { key: "A" | "B" | "C" | "D"; text: string; score: number }> = {};
@@ -261,6 +299,16 @@ export default function WebinarDetailClient({
       return;
     }
 
+    // Proteksi Solusi C: Cek apakah perangkat ini sudah pernah presensi untuk webinar ini dengan NIP lain
+    if (typeof window !== "undefined") {
+      const recordedNipKey = `corpuku_webinar_${webinar.id}_claimed_nip`;
+      const prevClaimedNip = localStorage.getItem(recordedNipKey);
+      if (prevClaimedNip && prevClaimedNip !== cleanNip) {
+        toast.error(`Perangkat ini sudah mencatat presensi webinar untuk NIP ${prevClaimedNip}. Demi integritas data, satu perangkat tidak dapat mendaftarkan peserta lain.`);
+        return;
+      }
+    }
+
     const payloadSkm: SkmAnswer[] = SKM_QUESTIONS.map(q => {
       const selected = skmSelected[q.id] || { key: "A", text: q.options[0].text, score: q.options[0].score };
       return {
@@ -289,6 +337,7 @@ export default function WebinarDetailClient({
         toast.success(res.message || "Presensi dan evaluasi berhasil dicatat!");
         setAttendanceSuccess(true);
         if (typeof window !== "undefined") {
+          localStorage.setItem(`corpuku_webinar_${webinar.id}_claimed_nip`, cleanNip);
           localStorage.setItem("corpuku_attendee_nip", cleanNip);
           localStorage.setItem("corpuku_attendee_name", name);
           localStorage.setItem("corpuku_attendee_agency", agency);
@@ -750,17 +799,44 @@ export default function WebinarDetailClient({
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="col-span-1 md:col-span-2">
-                        <label className="block text-xs font-semibold text-oxford-700 dark:text-oxford-300 mb-1">
-                          NIP / NIK (Angka Saja) *
-                        </label>
-                        <input
-                          required
-                          type="text"
-                          value={nip}
-                          onChange={e => setNip(e.target.value.replace(/\D/g, ""))}
-                          placeholder="Masukkan 18 digit NIP atau NIK Anda..."
-                          className="w-full px-4 py-3 rounded-xl border border-border-base bg-background text-foreground font-mono focus:ring-2 focus:ring-gold-500/50 outline-none text-sm"
-                        />
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block text-xs font-semibold text-oxford-700 dark:text-oxford-300">
+                            NIP / NIK (Angka Saja) *
+                          </label>
+                          {isLookingUpNip && (
+                            <span className="text-[11px] text-oxford-500 flex items-center gap-1 font-mono">
+                              <Loader2 size={12} className="animate-spin text-gold-500" />
+                              Memeriksa database...
+                            </span>
+                          )}
+                          {!isLookingUpNip && nipFoundInDb && (
+                            <span className="text-[11px] text-emerald-600 dark:text-emerald-400 flex items-center gap-1 font-medium bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md border border-emerald-500/20">
+                              <ShieldCheck size={12} />
+                              Data terdaftar di sistem (bisa disesuaikan khusus sertifikat)
+                            </span>
+                          )}
+                        </div>
+                        <div className="relative">
+                          <input
+                            required
+                            type="text"
+                            value={nip}
+                            onChange={e => {
+                              const val = e.target.value.replace(/\D/g, "");
+                              setNip(val);
+                              if (val.length >= 18 && !isLookingUpNip && !nipFoundInDb) {
+                                handleNipLookup(val);
+                              }
+                            }}
+                            onBlur={e => handleNipLookup(e.target.value)}
+                            placeholder="Masukkan 18 digit NIP atau NIK Anda..."
+                            className="w-full px-4 py-3 rounded-xl border border-border-base bg-background text-foreground font-mono focus:ring-2 focus:ring-gold-500/50 outline-none text-sm"
+                          />
+                        </div>
+                        <p className="text-[11px] text-oxford-500 mt-1 flex items-center gap-1">
+                          <Info size={12} className="text-oxford-400 shrink-0" />
+                          Jika NIP terdaftar di database ASN BPSDM, data otomatis terisi. Anda dapat mengoreksi gelar/instansi khusus untuk pencetakan sertifikat tanpa mengubah akun asli sistem.
+                        </p>
                       </div>
 
                       <div>

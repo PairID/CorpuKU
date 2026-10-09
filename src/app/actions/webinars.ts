@@ -3,11 +3,13 @@
 import { sql } from '@/lib/db';
 import { Webinar, WebinarQuizQuestion, WebinarRegistration, SkmAnswer, IssuedWebinarCertificate } from '@/lib/types';
 import { revalidatePath } from 'next/cache';
+import { headers } from 'next/headers';
 import { v4 as uuidv4 } from 'uuid';
 import { createKnowledgeItem } from './knowledge';
 import { requireAdminSession, requireUserSession } from "./auth";
 import { issueEligibleWebinarCertificates, issueWebinarCertificate, mapCertificate } from '@/lib/webinar-certificates';
 import { sanitizePlainText } from '@/lib/content-security';
+import { consumeRateLimit } from '@/lib/request-security';
 import { z } from 'zod';
 
 const optionalUrl = z.union([z.string().url().max(2048), z.literal(''), z.null()]).optional();
@@ -621,6 +623,56 @@ function mapRegistrationRow(input: Record<string, unknown>): WebinarRegistration
   };
 }
 
+export async function lookupParticipantByNip(nip: string): Promise<{
+  found: boolean;
+  name?: string;
+  agency?: string;
+  position?: string;
+  error?: string;
+}> {
+  try {
+    const cleanNip = nip.trim().replace(/\D/g, '');
+    if (!cleanNip || cleanNip.length < 8) {
+      return { found: false };
+    }
+
+    // Rate limiting: 15 lookups per minute per IP to prevent NIP enumeration abuse
+    const reqHeaders = await headers();
+    const forwardedIp = reqHeaders.get("x-forwarded-for")?.split(",")[0]?.trim() || reqHeaders.get("x-real-ip") || "unknown";
+    const rateLimit = await consumeRateLimit({
+      scope: "webinar_nip_lookup",
+      identifier: forwardedIp,
+      limit: 15,
+      windowSeconds: 60,
+      blockSeconds: 120,
+    });
+    if (!rateLimit.allowed) {
+      return { found: false, error: "Terlalu banyak permintaan. Silakan coba sesaat lagi." };
+    }
+
+    const rows = await sql`
+      SELECT name, instansi_asal, jabatan
+      FROM users
+      WHERE nip = ${cleanNip}
+      LIMIT 1
+    `;
+
+    if (rows.length > 0 && rows[0]) {
+      return {
+        found: true,
+        name: rows[0].name ? String(rows[0].name) : undefined,
+        agency: rows[0].instansi_asal ? String(rows[0].instansi_asal) : undefined,
+        position: rows[0].jabatan ? String(rows[0].jabatan) : undefined,
+      };
+    }
+
+    return { found: false };
+  } catch (error) {
+    console.error("Failed to lookup participant by NIP:", error);
+    return { found: false };
+  }
+}
+
 export async function submitPublicWebinarAttendance(input: {
   webinarId: string;
   nip: string;
@@ -649,6 +701,38 @@ export async function submitPublicWebinarAttendance(input: {
       return { success: false, error: "Instansi asal wajib diisi." };
     }
 
+    // Rate Limiting (Solusi C): Max 5 submissions per 10 minutes per IP
+    const reqHeaders = await headers();
+    const forwardedIp = reqHeaders.get("x-forwarded-for")?.split(",")[0]?.trim() || reqHeaders.get("x-real-ip") || "unknown";
+    const ipLimit = await consumeRateLimit({
+      scope: "public_attendance_ip",
+      identifier: forwardedIp,
+      limit: 6,
+      windowSeconds: 600,
+      blockSeconds: 600,
+    });
+    if (!ipLimit.allowed) {
+      return {
+        success: false,
+        error: `Terlalu banyak permintaan presensi dari perangkat/jaringan ini. Silakan coba kembali dalam ${ipLimit.retryAfterSeconds} detik.`,
+      };
+    }
+
+    // Rate Limiting per NIP (Solusi C): Max 3 attempts per 15 minutes per NIP
+    const nipLimit = await consumeRateLimit({
+      scope: "public_attendance_nip",
+      identifier: cleanNip,
+      limit: 3,
+      windowSeconds: 900,
+      blockSeconds: 900,
+    });
+    if (!nipLimit.allowed) {
+      return {
+        success: false,
+        error: `NIP ini telah melakukan presensi. Silakan tunggu ${nipLimit.retryAfterSeconds} detik untuk verifikasi ulang.`,
+      };
+    }
+
     const webinarRows = await sql`
       SELECT id, status, is_attendance_open, certificate_enabled, certificate_auto_issue
       FROM webinars WHERE id = ${webinarId}
@@ -660,6 +744,23 @@ export async function submitPublicWebinarAttendance(input: {
       return { success: false, error: "Presensi untuk webinar ini sedang ditutup oleh panitia." };
     }
 
+    // Single Certificate Idempotency Lock (Solusi C):
+    // Check if certificate already exists for this webinar and NIP
+    const existingCertRows = await sql`
+      SELECT id, certificate_number, participant_name
+      FROM issued_webinar_certificates
+      WHERE webinar_id = ${webinarId}
+        AND (participant_nip = ${cleanNip} OR user_id = ${'guest_' + cleanNip})
+        AND revoked_at IS NULL
+      LIMIT 1
+    `;
+    if (existingCertRows.length > 0 && existingCertRows[0]) {
+      return {
+        success: false,
+        error: `Sertifikat webinar ini sudah pernah diterbitkan atas nama "${existingCertRows[0].participant_name}" (No: ${existingCertRows[0].certificate_number}). Identitas peserta terkunci demi keamanan integritas sertifikat.`,
+      };
+    }
+
     // Hitung skor evaluasi SKM secara dinamis berdasarkan standar konversi Permenpan RB (skala 0 - 100)
     let calculatedEvaluationScore = 0;
     if (Array.isArray(input.skmAnswers) && input.skmAnswers.length > 0) {
@@ -669,19 +770,15 @@ export async function submitPublicWebinarAttendance(input: {
     }
 
     // Link or create user by NIP
+    // ATURAN PENTING: User existing di database TIDAK BOLEH di-update profil aslinya!
+    // Perubahan nama/instansi hanya bersifat transien untuk pencetakan sertifikat ini.
     const existingUser = await sql`
-      SELECT id FROM users WHERE nip = ${cleanNip} LIMIT 1
+      SELECT id, name, instansi_asal, jabatan FROM users WHERE nip = ${cleanNip} LIMIT 1
     `;
     let userId: string;
     if (existingUser[0]) {
       userId = String(existingUser[0].id);
-      await sql`
-        UPDATE users SET
-          name = COALESCE(NULLIF(name, ''), ${cleanName}),
-          instansi_asal = COALESCE(NULLIF(instansi_asal, ''), ${cleanAgency}),
-          jabatan = COALESCE(NULLIF(jabatan, ''), ${cleanPosition || null})
-        WHERE id = ${userId}
-      `;
+      // PENTING: Tidak menjalankan UPDATE users! Data profil user di database tetap utuh.
     } else {
       userId = `guest_${cleanNip}`;
       await sql`
@@ -723,7 +820,11 @@ export async function submitPublicWebinarAttendance(input: {
     `;
 
     if (webinarRows[0].certificate_enabled && webinarRows[0].certificate_auto_issue) {
-      await issueWebinarCertificate(userId, webinarId);
+      await issueWebinarCertificate(userId, webinarId, {
+        participantName: cleanName,
+        participantPosition: cleanPosition || undefined,
+        participantInstitution: cleanAgency,
+      });
     }
 
     revalidatePath(`/webinars/${webinarId}`);
@@ -747,8 +848,22 @@ export async function checkWebinarCertificateByNip(webinarId: string, nip: strin
       return { success: false, error: "NIP/NIK tidak valid." };
     }
 
+    // Rate Limiting lookup sertifikat (10 per minute per IP)
+    const reqHeaders = await headers();
+    const forwardedIp = reqHeaders.get("x-forwarded-for")?.split(",")[0]?.trim() || reqHeaders.get("x-real-ip") || "unknown";
+    const certLimit = await consumeRateLimit({
+      scope: "webinar_cert_check",
+      identifier: forwardedIp,
+      limit: 10,
+      windowSeconds: 60,
+      blockSeconds: 60,
+    });
+    if (!certLimit.allowed) {
+      return { success: false, error: `Terlalu banyak permintaan pengecekan. Silakan coba lagi dalam ${certLimit.retryAfterSeconds} detik.` };
+    }
+
     const regRows = await sql`
-      SELECT wr.user_id, wr.attended, wr.evaluation_completed
+      SELECT wr.user_id, wr.agency_name, wr.position_title, wr.attended, wr.evaluation_completed
       FROM webinar_registrations wr
       JOIN users u ON u.id = wr.user_id
       WHERE wr.webinar_id = ${webinarId}
@@ -769,7 +884,10 @@ export async function checkWebinarCertificateByNip(webinarId: string, nip: strin
     }
 
     if (webinar[0].certificate_auto_issue) {
-      await issueWebinarCertificate(userId, webinarId);
+      await issueWebinarCertificate(userId, webinarId, {
+        participantPosition: regRows[0].position_title ? String(regRows[0].position_title) : undefined,
+        participantInstitution: regRows[0].agency_name ? String(regRows[0].agency_name) : undefined,
+      });
     }
 
     const certRows = await sql`

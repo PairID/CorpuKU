@@ -27,14 +27,31 @@ export function mapCertificate(row: CertificateRow): IssuedWebinarCertificate {
   };
 }
 
-export async function issueWebinarCertificate(userId: string, webinarId: string) {
+export async function issueWebinarCertificate(
+  userId: string,
+  webinarId: string,
+  participantDetails?: {
+    participantName?: string;
+    participantNip?: string;
+    participantRank?: string;
+    participantPosition?: string;
+    participantInstitution?: string;
+  }
+) {
   const certificateId = crypto.randomUUID();
   const verificationToken = crypto.randomUUID();
+
+  const customName = participantDetails?.participantName ? participantDetails.participantName.trim() : null;
+  const customPosition = participantDetails?.participantPosition ? participantDetails.participantPosition.trim() : null;
+  const customInstitution = participantDetails?.participantInstitution ? participantDetails.participantInstitution.trim() : null;
 
   const rows = await sql`
     WITH eligible AS (
       SELECT wr.id AS registration_id, wr.user_id, wr.webinar_id,
-             u.name, u.nip, u.pangkat, u.jabatan, u.instansi_asal,
+             COALESCE(${customName}, u.name) AS resolved_name,
+             u.nip, u.pangkat,
+             COALESCE(${customPosition}, NULLIF(wr.position_title, ''), u.jabatan) AS resolved_jabatan,
+             COALESCE(${customInstitution}, NULLIF(wr.agency_name, ''), u.instansi_asal) AS resolved_instansi,
              w.title, w.scheduled_at, w.certificate_number_prefix,
              w.certificate_template_type, w.certificate_jp,
              COALESCE(
@@ -73,10 +90,16 @@ export async function issueWebinarCertificate(userId: string, webinarId: string)
                  (ARRAY['I','II','III','IV','V','VI','VII','VIII','IX','X','XI','XII'])[EXTRACT(MONTH FROM COALESCE(scheduled_at, CURRENT_TIMESTAMP))::INTEGER] || '_' ||
                  EXTRACT(YEAR FROM COALESCE(scheduled_at, CURRENT_TIMESTAMP))::INTEGER
              END,
-             ${verificationToken}, name, nip, pangkat, jabatan, instansi_asal,
+             ${verificationToken},
+             COALESCE(NULLIF(resolved_name, ''), u_name),
+             nip, pangkat, resolved_jabatan, resolved_instansi,
              title, scheduled_at, certificate_template_type,
              certificate_jp, template_settings
-      FROM eligible
+      FROM (
+        SELECT eligible.*, u.name AS u_name
+        FROM eligible
+        JOIN users u ON u.id = eligible.user_id
+      ) sub
       ON CONFLICT (registration_id) DO NOTHING
       RETURNING *, TRUE AS _newly_issued
     )
