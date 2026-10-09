@@ -3,7 +3,38 @@ import { sql } from "@/lib/db";
 
 export function isSameOrigin(request: Request): boolean {
   const origin = request.headers.get("origin");
-  if (origin) return origin === new URL(request.url).origin;
+  const host = request.headers.get("x-forwarded-host") || request.headers.get("host");
+
+  if (origin) {
+    try {
+      const originUrl = new URL(origin);
+      const reqUrl = new URL(request.url);
+      if (originUrl.origin === reqUrl.origin) return true;
+      if (host && (originUrl.host === host || originUrl.host === host.split(':')[0])) return true;
+
+      // Check configured APP URL
+      if (process.env.NEXT_PUBLIC_APP_URL) {
+        try {
+          const appUrl = new URL(process.env.NEXT_PUBLIC_APP_URL);
+          if (originUrl.origin === appUrl.origin) return true;
+        } catch { /* ignore */ }
+      }
+
+      // Allow LAN IPs and localhost dev variants
+      const isLocalHost = (hostname: string) =>
+        hostname === 'localhost' ||
+        hostname === '127.0.0.1' ||
+        hostname.startsWith('192.168.') ||
+        hostname.startsWith('10.') ||
+        hostname.startsWith('172.');
+
+      if (isLocalHost(originUrl.hostname) && (isLocalHost(reqUrl.hostname) || host)) {
+        return true;
+      }
+    } catch {
+      return false;
+    }
+  }
 
   const fetchSite = request.headers.get("sec-fetch-site");
   return !fetchSite || fetchSite === "same-origin" || fetchSite === "none";
