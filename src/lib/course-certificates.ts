@@ -69,7 +69,7 @@ export async function issueCourseCertificate(userId: string, courseId: string, o
              enrollment.completed_at, user_account.name, user_account.nip,
              user_account.pangkat, user_account.jabatan, user_account.instansi_asal,
              course.title, course.jp, course.certificate_type,
-             course.certificate_number_prefix,
+             course.certificate_number_prefix, course.certificate_start_number,
              COALESCE(NULLIF(settings.settings -> course.certificate_type, 'null'::jsonb),
                       NULLIF(settings.settings -> 'sertifikat', 'null'::jsonb),
                       NULLIF(settings.settings, 'null'::jsonb), '{}'::jsonb) AS template_settings
@@ -88,8 +88,16 @@ export async function issueCourseCertificate(userId: string, courseId: string, o
         template_version, template_settings
       )
       SELECT ${certificateId}, enrollment_id, user_id, course_id,
-             certificate_number_prefix || '/' || EXTRACT(YEAR FROM CURRENT_TIMESTAMP)::INTEGER || '/' ||
-               LPAD(nextval('course_certificate_number_seq')::TEXT, 6, '0'),
+             CASE
+               WHEN certificate_start_number IS NOT NULL THEN
+                 certificate_number_prefix || '/' || EXTRACT(YEAR FROM CURRENT_TIMESTAMP)::INTEGER || '/' ||
+                   LPAD((certificate_start_number + (
+                     SELECT COUNT(*)::INTEGER FROM issued_course_certificates existing WHERE existing.course_id = eligible.course_id
+                   ))::TEXT, 6, '0')
+               ELSE
+                 certificate_number_prefix || '/' || EXTRACT(YEAR FROM CURRENT_TIMESTAMP)::INTEGER || '/' ||
+                   LPAD(nextval('course_certificate_number_seq')::TEXT, 6, '0')
+             END,
              ${verificationToken}, name, nip, pangkat, jabatan, instansi_asal,
              title, completed_at, COALESCE(jp, 0), COALESCE(certificate_type, 'sertifikat'),
              template_settings

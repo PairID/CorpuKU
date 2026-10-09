@@ -158,10 +158,10 @@ export async function POST(req: Request) {
       : `Sertifikat-${certificate.activityTitle}.pdf`.replace(/[/\\?%*:|"<>]/g, '_');
     const encodedTitle = encodeURIComponent(safeCertFilename);
 
-    // Disk Cache check: jika PDF sudah pernah dicetak dan template belum berubah, kirim langsung dari disk (tanpa throttle Puppeteer)
+    // Disk Cache check: jika PDF sudah pernah dicetak dan template/data nomor belum berubah, kirim langsung dari disk
     const templateHash = crypto
       .createHash('md5')
-      .update(JSON.stringify(config))
+      .update(JSON.stringify(config) + String(certificate.certificateNumber))
       .digest('hex')
       .slice(0, 10);
     const cacheDir = path.join(process.cwd(), '.cache', 'certificates');

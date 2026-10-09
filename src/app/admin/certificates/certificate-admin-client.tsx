@@ -551,7 +551,7 @@ export default function CertificateAdminClient({
   };
 
   const previewData = {
-    certificateNumber: "BPSDM/2026/001-PRVW",
+    certificateNumber: "800.2.5/12331/BPSDM/AKJ-27/X/2026",
     date: "8 April 2026",
     issueDate: "8 April 2026",
     activityDate: "1 - 5 April 2026",

@@ -10,6 +10,7 @@ import { requireCourseEditor } from "@/lib/course-authorization";
 import { sanitizePlainText, sanitizeRichText } from "@/lib/content-security";
 import { issueCourseCertificate } from "@/lib/course-certificates";
 import { syncLearningPathCompletions } from "@/lib/learning-paths";
+import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 const courseMutationSchema = z.object({
@@ -28,6 +29,7 @@ const courseMutationSchema = z.object({
     certificateEnabled: z.boolean().default(true),
     certificateAutoIssue: z.boolean().default(true),
     certificateNumberPrefix: z.string().trim().toUpperCase().regex(/^[A-Z0-9-]{2,20}$/).default("CRS"),
+    certificateStartNumber: z.number().int().min(1).nullable().optional(),
     passingScore: z.number().int().min(0).max(100).default(60),
 }).superRefine((course, context) => {
     if (course.pacingType === "instructor_paced" && !course.startDate) {
@@ -221,6 +223,7 @@ export async function getAllCourses() {
                    instructor_id as "instructorId", jp, 
                    certificate_type as "certificateType", certificate_enabled as "certificateEnabled",
                    certificate_auto_issue as "certificateAutoIssue", certificate_number_prefix as "certificateNumberPrefix",
+                   certificate_start_number as "certificateStartNumber",
                    passing_score as "passingScore", pacing_type as "pacingType", start_date as "startDate", end_date as "endDate",
                    created_at as "createdAt", 
                    updated_at as "updatedAt"
@@ -243,6 +246,7 @@ export async function getCourseById(id: string): Promise<CourseRecord | null> {
                    instructor_id as "instructorId", jp, 
                    certificate_type as "certificateType", certificate_enabled as "certificateEnabled",
                    certificate_auto_issue as "certificateAutoIssue", certificate_number_prefix as "certificateNumberPrefix",
+                   certificate_start_number as "certificateStartNumber",
                    passing_score as "passingScore", pacing_type as "pacingType", start_date as "startDate", end_date as "endDate",
                    created_at as "createdAt", 
                    updated_at as "updatedAt"
@@ -701,6 +705,7 @@ export async function getCoursesWithStats(): Promise<Array<CourseRecord & { inst
                        instructor_id as "instructorId", jp,
                        certificate_type as "certificateType", certificate_enabled as "certificateEnabled",
                        certificate_auto_issue as "certificateAutoIssue", certificate_number_prefix as "certificateNumberPrefix",
+                       certificate_start_number as "certificateStartNumber",
                        passing_score as "passingScore", pacing_type as "pacingType", start_date as "startDate", end_date as "endDate",
                        created_at as "createdAt", updated_at as "updatedAt"
                 FROM courses ORDER BY created_at DESC
@@ -711,6 +716,7 @@ export async function getCoursesWithStats(): Promise<Array<CourseRecord & { inst
                        instructor_id as "instructorId", jp,
                        certificate_type as "certificateType", certificate_enabled as "certificateEnabled",
                        certificate_auto_issue as "certificateAutoIssue", certificate_number_prefix as "certificateNumberPrefix",
+                       certificate_start_number as "certificateStartNumber",
                        passing_score as "passingScore", pacing_type as "pacingType", start_date as "startDate", end_date as "endDate",
                        created_at as "createdAt", updated_at as "updatedAt"
                 FROM courses WHERE instructor_id = ${session.user.id}
@@ -788,12 +794,13 @@ export async function createCourse(input: unknown) {
             INSERT INTO courses (
                 id, title, description, category, level, thumbnail_url, status, instructor_id, pacing_type,
                 start_date, end_date, jp, certificate_type, certificate_enabled, certificate_auto_issue,
-                certificate_number_prefix, passing_score, created_at, updated_at
+                certificate_number_prefix, certificate_start_number, passing_score, created_at, updated_at
             ) VALUES (
                 ${id}, ${sanitizePlainText(data.title)}, ${sanitizePlainText(data.description)}, ${sanitizePlainText(data.category)},
                 ${data.level}, ${data.thumbnailUrl || null}, 'draft', ${instructorId}, ${data.pacingType}, ${data.startDate || null},
                 ${data.endDate || null}, ${data.jp}, ${data.certificateType}, ${data.certificateEnabled},
-                ${data.certificateEnabled && data.certificateAutoIssue}, ${data.certificateNumberPrefix}, ${data.passingScore}, ${now}, ${now}
+                ${data.certificateEnabled && data.certificateAutoIssue}, ${data.certificateNumberPrefix},
+                ${data.certificateStartNumber || null}, ${data.passingScore}, ${now}, ${now}
             )
         `;
         
@@ -824,7 +831,9 @@ export async function updateCourseDetails(id: string, input: unknown) {
                 start_date = ${data.startDate || null}, end_date = ${data.endDate || null}, jp = ${data.jp},
                 certificate_type = ${data.certificateType}, certificate_enabled = ${data.certificateEnabled},
                 certificate_auto_issue = ${data.certificateEnabled && data.certificateAutoIssue},
-                certificate_number_prefix = ${data.certificateNumberPrefix}, passing_score = ${data.passingScore},
+                certificate_number_prefix = ${data.certificateNumberPrefix},
+                certificate_start_number = CASE WHEN ${data.certificateStartNumber !== undefined} THEN ${data.certificateStartNumber || null} ELSE certificate_start_number END,
+                passing_score = ${data.passingScore},
                 status = ${data.status},
                 updated_at = ${now}
             WHERE id = ${id}
@@ -888,5 +897,115 @@ export async function updateCertificateSettings(settings: unknown) {
     } catch (err) {
         console.error("Failed to update certificate settings:", err);
         return { success: false, error: "Gagal memperbarui pengaturan." };
+    }
+}
+
+export async function getCertificateGlobalSequence() {
+    try {
+        await requireAdminSession();
+        const webinarSeq = await sql`
+            SELECT last_value, is_called 
+            FROM pg_sequences 
+            WHERE sequencename = 'webinar_certificate_number_seq'
+        `;
+        const courseSeq = await sql`
+            SELECT last_value, is_called 
+            FROM pg_sequences 
+            WHERE sequencename = 'course_certificate_number_seq'
+        `;
+        const numberingRow = await sql`
+            SELECT settings 
+            FROM certificate_settings 
+            WHERE type = 'global_numbering' 
+            LIMIT 1
+        `;
+
+        const wLast = webinarSeq[0]?.last_value ? Number(webinarSeq[0].last_value) : 1;
+        const wCalled = webinarSeq[0]?.is_called ?? false;
+        const wNext = wCalled ? wLast + 1 : wLast;
+
+        const cLast = courseSeq[0]?.last_value ? Number(courseSeq[0].last_value) : 1;
+        const cCalled = courseSeq[0]?.is_called ?? false;
+        const cNext = cCalled ? cLast + 1 : cLast;
+
+        return {
+            success: true,
+            webinar: {
+                currentValue: wLast,
+                nextValue: wNext,
+                isCalled: wCalled,
+            },
+            course: {
+                currentValue: cLast,
+                nextValue: cNext,
+                isCalled: cCalled,
+            },
+            format: (numberingRow[0]?.settings as {
+                classificationCode?: string;
+                institutionCode?: string;
+                delimiter?: string;
+            }) || {
+                classificationCode: '800.2.5',
+                institutionCode: 'BPSDM',
+                delimiter: '/',
+            },
+        };
+    } catch (err) {
+        console.error("Failed to get certificate global sequence:", err);
+        return {
+            success: false,
+            error: "Gagal memuat status nomor sertifikat global.",
+            webinar: { currentValue: 1, nextValue: 1, isCalled: false },
+            course: { currentValue: 1, nextValue: 1, isCalled: false },
+            format: { classificationCode: '800.2.5', institutionCode: 'BPSDM', delimiter: '/' },
+        };
+    }
+}
+
+export async function updateCertificateGlobalSequence(type: 'webinar' | 'course', nextValue: number) {
+    try {
+        await requireAdminSession();
+        const num = Math.floor(Number(nextValue));
+        if (Number.isNaN(num) || num < 1 || num > 999_999_999) {
+            return { success: false, error: "Nomor awal sertifikat harus bilangan bulat positif (minimal 1)." };
+        }
+
+        const seqName = type === 'webinar' ? 'webinar_certificate_number_seq' : 'course_certificate_number_seq';
+        // When is_called is false, nextval() will return the exact nextValue.
+        await sql.query(`SELECT setval('${seqName}', ${num}, false)`);
+
+        revalidatePath('/admin/certificates');
+        revalidatePath('/admin/webinars');
+        return { success: true };
+    } catch (err) {
+        console.error(`Failed to update ${type} certificate sequence:`, err);
+        return { success: false, error: "Gagal memperbarui urutan nomor sertifikat." };
+    }
+}
+
+export async function updateCertificateGlobalFormat(format: {
+    classificationCode?: string;
+    institutionCode?: string;
+    delimiter?: string;
+}) {
+    try {
+        await requireAdminSession();
+        const cleanFormat = {
+            classificationCode: String(format.classificationCode || '800.2.5').trim(),
+            institutionCode: String(format.institutionCode || 'BPSDM').trim(),
+            delimiter: '/',
+        };
+
+        await sql`
+            INSERT INTO certificate_settings (type, settings)
+            VALUES ('global_numbering', ${JSON.stringify(cleanFormat)}::jsonb)
+            ON CONFLICT (type) DO UPDATE SET settings = EXCLUDED.settings
+        `;
+
+        revalidatePath('/admin/certificates');
+        return { success: true };
+    } catch (err) {
+        console.error("Failed to update global certificate format:", err);
+        return { success: false, error: "Gagal memperbarui format penomoran sertifikat." };
     }
 }

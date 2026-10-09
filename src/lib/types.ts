@@ -105,6 +105,7 @@ export interface Webinar {
     certificateAutoIssue: boolean;
     certificateTemplateType: 'sertifikat' | 'surat_keterangan' | 'sttp';
     certificateNumberPrefix: string;
+    certificateStartNumber?: number | null;
     certificateJp: number;
     attendanceCount?: number;
     createdAt: string;

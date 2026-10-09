@@ -54,6 +54,7 @@ export async function issueWebinarCertificate(
              COALESCE(${customInstitution}, NULLIF(wr.agency_name, ''), u.instansi_asal) AS resolved_instansi,
              w.title, w.scheduled_at, w.certificate_number_prefix,
              w.certificate_template_type, w.certificate_jp,
+             w.certificate_start_number,
              COALESCE(
                NULLIF(cs.settings -> w.certificate_template_type, 'null'::jsonb),
                NULLIF(cs.settings -> 'sertifikat', 'null'::jsonb),
@@ -80,14 +81,23 @@ export async function issueWebinarCertificate(
       )
       SELECT ${certificateId}, registration_id, user_id, webinar_id,
              CASE
-               WHEN certificate_number_prefix ~ '^800\.2\.5_' THEN
-                 certificate_number_prefix || '_' || LPAD(nextval('webinar_certificate_number_seq')::TEXT, 5, '0')
+               WHEN certificate_start_number IS NOT NULL THEN
+                 '800.2.5/' ||
+                 LPAD((certificate_start_number + (
+                   SELECT COUNT(*)::INTEGER FROM issued_webinar_certificates existing WHERE existing.webinar_id = eligible.webinar_id
+                 ))::TEXT, 5, '0') ||
+                 '/BPSDM/' ||
+                 certificate_number_prefix || '/' ||
+                 (ARRAY['I','II','III','IV','V','VI','VII','VIII','IX','X','XI','XII'])[EXTRACT(MONTH FROM COALESCE(scheduled_at, CURRENT_TIMESTAMP))::INTEGER] || '/' ||
+                 EXTRACT(YEAR FROM COALESCE(scheduled_at, CURRENT_TIMESTAMP))::INTEGER
+               WHEN certificate_number_prefix ~ '^800\.2\.5[/_]' THEN
+                 REPLACE(certificate_number_prefix, '_', '/') || '/' || LPAD(nextval('webinar_certificate_number_seq')::TEXT, 5, '0')
                ELSE
-                 '800.2.5_' ||
+                 '800.2.5/' ||
                  LPAD(nextval('webinar_certificate_number_seq')::TEXT, 5, '0') ||
-                 '_BPSDM_' ||
-                 certificate_number_prefix || '_' ||
-                 (ARRAY['I','II','III','IV','V','VI','VII','VIII','IX','X','XI','XII'])[EXTRACT(MONTH FROM COALESCE(scheduled_at, CURRENT_TIMESTAMP))::INTEGER] || '_' ||
+                 '/BPSDM/' ||
+                 certificate_number_prefix || '/' ||
+                 (ARRAY['I','II','III','IV','V','VI','VII','VIII','IX','X','XI','XII'])[EXTRACT(MONTH FROM COALESCE(scheduled_at, CURRENT_TIMESTAMP))::INTEGER] || '/' ||
                  EXTRACT(YEAR FROM COALESCE(scheduled_at, CURRENT_TIMESTAMP))::INTEGER
              END,
              ${verificationToken},
@@ -247,7 +257,7 @@ export function formatWebinarCertificateNumber(options: {
   const monthIdx = Number.isNaN(d.getTime()) ? new Date().getMonth() : d.getMonth();
   const romanMonth = ROMAN_MONTHS[monthIdx] || 'I';
   const year = Number.isNaN(d.getTime()) ? new Date().getFullYear() : d.getFullYear();
-  return `${classification}_${seq}_${inst}_${series}_${romanMonth}_${year}`;
+  return `${classification}/${seq}/${inst}/${series}/${romanMonth}/${year}`;
 }
 
 export function formatWebinarCertificateFilename(options: {

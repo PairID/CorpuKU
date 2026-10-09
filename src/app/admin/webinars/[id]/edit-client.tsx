@@ -33,6 +33,7 @@ export default function EditWebinarClient({ webinar }: { webinar: Webinar }) {
         certificateAutoIssue: webinar.certificateAutoIssue,
         certificateTemplateType: webinar.certificateTemplateType,
         certificateNumberPrefix: webinar.certificateNumberPrefix,
+        certificateStartNumber: webinar.certificateStartNumber ? String(webinar.certificateStartNumber) : "",
         certificateJp: webinar.certificateJp,
         quizSettings: webinar.quizSettings || {
             questions: [
@@ -115,6 +116,7 @@ export default function EditWebinarClient({ webinar }: { webinar: Webinar }) {
         try {
             const res = await updateWebinar(webinar.id, {
                 ...formData,
+                certificateStartNumber: formData.certificateStartNumber ? parseInt(formData.certificateStartNumber) : null,
                 scheduledAt: new Date(formData.scheduledAt).toISOString()
             });
             if (res.success) {
@@ -269,10 +271,29 @@ export default function EditWebinarClient({ webinar }: { webinar: Webinar }) {
                                 <span><strong className="block text-oxford-900 dark:text-white">Terbitkan otomatis setelah peserta lulus</strong><span className="text-sm text-oxford-500">Nomor dan snapshot data peserta dibuat otomatis. Matikan jika perlu persetujuan admin.</span></span>
                             </label>
 
-                            <div className="grid gap-5 md:grid-cols-3">
-                                <div><label className="mb-2 block text-sm font-semibold">Jenis template</label><select disabled={!formData.certificateEnabled} value={formData.certificateTemplateType} onChange={e => setFormData({...formData, certificateTemplateType: e.target.value as Webinar['certificateTemplateType']})} className="w-full rounded-xl border border-oxford-200 bg-oxford-50 px-4 py-3 dark:bg-oxford-950"><option value="sertifikat">Sertifikat</option><option value="surat_keterangan">Surat Keterangan</option><option value="sttp">STTP</option></select></div>
-                                <div><label className="mb-2 block text-sm font-semibold">Awalan nomor (Kode Event/Seri)</label><input disabled={!formData.certificateEnabled} required maxLength={30} value={formData.certificateNumberPrefix} onChange={e => setFormData({...formData, certificateNumberPrefix: e.target.value.toUpperCase()})} placeholder="AKJ-26" className="w-full rounded-xl border border-oxford-200 bg-oxford-50 px-4 py-3 font-mono dark:bg-oxford-950" /><p className="mt-1 text-xs text-oxford-400">Contoh: AKJ-26 (Format: 800.2.5_[No Urut]_BPSDM_AKJ-26_[Bulan]_[Tahun])</p></div>
-                                <div><label className="mb-2 block text-sm font-semibold">Jam Pelajaran</label><input disabled={!formData.certificateEnabled} type="number" min={1} max={999} value={formData.certificateJp} onChange={e => setFormData({...formData, certificateJp: Number(e.target.value)})} className="w-full rounded-xl border border-oxford-200 bg-oxford-50 px-4 py-3 dark:bg-oxford-950" /></div>
+                            <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
+                                <div>
+                                    <label className="mb-2 block text-sm font-semibold">Jenis template</label>
+                                    <select disabled={!formData.certificateEnabled} value={formData.certificateTemplateType} onChange={e => setFormData({...formData, certificateTemplateType: e.target.value as Webinar['certificateTemplateType']})} className="w-full rounded-xl border border-oxford-200 bg-oxford-50 px-4 py-3 dark:bg-oxford-950">
+                                        <option value="sertifikat">Sertifikat</option>
+                                        <option value="surat_keterangan">Surat Keterangan</option>
+                                        <option value="sttp">STTP</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="mb-2 block text-sm font-semibold">Awalan nomor (Kode Seri)</label>
+                                    <input disabled={!formData.certificateEnabled} required maxLength={30} value={formData.certificateNumberPrefix} onChange={e => setFormData({...formData, certificateNumberPrefix: e.target.value.toUpperCase()})} placeholder="AKJ-27" className="w-full rounded-xl border border-oxford-200 bg-oxford-50 px-4 py-3 font-mono dark:bg-oxford-950" />
+                                    <p className="mt-1 text-xs text-oxford-400">Format: 800.2.5/[No Urut]/BPSDM/{formData.certificateNumberPrefix || 'AKJ-27'}/[Bulan]/[Tahun]</p>
+                                </div>
+                                <div>
+                                    <label className="mb-2 block text-sm font-semibold">Nomor Urut Awal Khusus</label>
+                                    <input disabled={!formData.certificateEnabled} type="number" min={1} value={formData.certificateStartNumber} onChange={e => setFormData({...formData, certificateStartNumber: e.target.value})} placeholder="Otomatis (Global)" className="w-full rounded-xl border border-oxford-200 bg-oxford-50 px-4 py-3 font-mono dark:bg-oxford-950" />
+                                    <p className="mt-1 text-xs text-oxford-400">Kosongkan jika mengikuti register global platform</p>
+                                </div>
+                                <div>
+                                    <label className="mb-2 block text-sm font-semibold">Jam Pelajaran (JP)</label>
+                                    <input disabled={!formData.certificateEnabled} type="number" min={1} max={999} value={formData.certificateJp} onChange={e => setFormData({...formData, certificateJp: Number(e.target.value)})} className="w-full rounded-xl border border-oxford-200 bg-oxford-50 px-4 py-3 dark:bg-oxford-950" />
+                                </div>
                             </div>
                         </div>
 

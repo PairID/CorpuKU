@@ -31,6 +31,7 @@ const webinarInputSchema = z.object({
   certificateEnabled: z.boolean().default(true), certificateAutoIssue: z.boolean().default(true),
   certificateTemplateType: z.enum(['sertifikat', 'surat_keterangan', 'sttp']).default('sertifikat'),
   certificateNumberPrefix: z.string().trim().min(2).max(30).default('AKJ-26'),
+  certificateStartNumber: z.number().int().min(1).nullable().optional(),
   certificateJp: z.number().int().min(1).max(999).default(2),
 });
 
@@ -43,6 +44,7 @@ type WebinarDbRow = {
   certificate_enabled?: boolean; certificate_auto_issue?: boolean;
   certificate_template_type?: Webinar['certificateTemplateType'];
   certificate_number_prefix?: string; certificate_jp?: number;
+  certificate_start_number?: number | null;
 };
 
 type RegistrationDbRow = {
@@ -61,11 +63,13 @@ function certificateConfig(data: Partial<Webinar>) {
     ? data.certificateTemplateType as Webinar['certificateTemplateType']
     : 'sertifikat';
   const rawJp = Number(data.certificateJp ?? 2);
+  const rawStart = data.certificateStartNumber ? Number(data.certificateStartNumber) : null;
   return {
     enabled: data.certificateEnabled !== false,
     autoIssue: data.certificateAutoIssue !== false,
     template,
     prefix,
+    startNumber: Number.isInteger(rawStart) && (rawStart as number) >= 1 ? rawStart : null,
     jp: Number.isInteger(rawJp) && rawJp >= 1 && rawJp <= 999 ? rawJp : 2,
   };
 }
@@ -100,7 +104,7 @@ export async function getWebinars(): Promise<Webinar[]> {
              virtual_background_url, scheduled_at, status, join_window_minutes,
              is_attendance_open, youtube_url, certificate_enabled, certificate_auto_issue,
              certificate_template_type, certificate_number_prefix, certificate_jp,
-             created_at, updated_at
+             certificate_start_number, created_at, updated_at
       FROM webinars
       WHERE status = 'published' 
       ORDER BY scheduled_at ASC
@@ -120,7 +124,7 @@ export async function getFeaturedWebinar(): Promise<Webinar | null> {
              virtual_background_url, scheduled_at, status, join_window_minutes,
              is_attendance_open, youtube_url, certificate_enabled, certificate_auto_issue,
              certificate_template_type, certificate_number_prefix, certificate_jp,
-             created_at, updated_at
+             certificate_start_number, created_at, updated_at
       FROM webinars
       WHERE status = 'published'
         AND (
@@ -143,7 +147,7 @@ export async function getFeaturedWebinar(): Promise<Webinar | null> {
              virtual_background_url, scheduled_at, status, join_window_minutes,
              is_attendance_open, youtube_url, certificate_enabled, certificate_auto_issue,
              certificate_template_type, certificate_number_prefix, certificate_jp,
-             created_at, updated_at
+             certificate_start_number, created_at, updated_at
       FROM webinars
       WHERE status = 'published'
         AND scheduled_at > CURRENT_TIMESTAMP
@@ -205,7 +209,7 @@ export async function getWebinar(id: string): Promise<Webinar | null> {
              virtual_background_url, scheduled_at, status, join_window_minutes,
              is_attendance_open, youtube_url, certificate_enabled, certificate_auto_issue,
              certificate_template_type, certificate_number_prefix, certificate_jp,
-             created_at, updated_at
+             certificate_start_number, created_at, updated_at
       FROM webinars WHERE id = ${id} AND status <> 'draft'
     `;
     if (rows.length === 0) return null;
@@ -238,7 +242,7 @@ export async function getParticipantWebinar(id: string): Promise<Webinar | null>
              NULL AS attendance_code, w.status, w.quiz_settings,
              w.join_window_minutes, w.certificate_enabled, w.certificate_auto_issue,
              w.certificate_template_type, w.certificate_number_prefix, w.certificate_jp,
-             w.created_at, w.updated_at
+             w.certificate_start_number, w.created_at, w.updated_at
       FROM webinars w
       JOIN webinar_registrations wr ON wr.webinar_id = w.id
       WHERE w.id = ${id} AND wr.user_id = ${session.user.id}
@@ -268,12 +272,12 @@ export async function createWebinar(input: unknown): Promise<{ success: boolean;
       INSERT INTO webinars (
         id, title, description, thumbnail_url, meeting_link, 
         material_url, virtual_background_url, youtube_url, is_attendance_open, scheduled_at, attendance_code, status, quiz_settings, join_window_minutes,
-        certificate_enabled, certificate_auto_issue, certificate_template_type, certificate_number_prefix, certificate_jp
+        certificate_enabled, certificate_auto_issue, certificate_template_type, certificate_number_prefix, certificate_jp, certificate_start_number
       ) VALUES (
         ${id}, ${data.title}, ${data.description}, ${data.thumbnailUrl || null}, ${data.meetingLink || null},
         ${data.materialUrl || null}, ${data.virtualBackgroundUrl || null}, ${data.youtubeUrl || null}, ${Boolean(data.isAttendanceOpen)}, ${data.scheduledAt}, ${data.attendanceCode || null}, ${data.status || 'draft'},
         ${JSON.stringify(data.quizSettings || null)},
-        ${data.joinWindowMinutes || 30}, ${certificate.enabled}, ${certificate.autoIssue}, ${certificate.template}, ${certificate.prefix}, ${certificate.jp}
+        ${data.joinWindowMinutes || 30}, ${certificate.enabled}, ${certificate.autoIssue}, ${certificate.template}, ${certificate.prefix}, ${certificate.jp}, ${certificate.startNumber}
       )
     `;
     
@@ -326,6 +330,7 @@ export async function updateWebinar(id: string, input: unknown): Promise<{ succe
         certificate_auto_issue = COALESCE(${data.certificateAutoIssue !== undefined ? certificate.autoIssue : null}, certificate_auto_issue),
         certificate_template_type = COALESCE(${data.certificateTemplateType !== undefined ? certificate.template : null}, certificate_template_type),
         certificate_number_prefix = COALESCE(${data.certificateNumberPrefix !== undefined ? certificate.prefix : null}, certificate_number_prefix),
+        certificate_start_number = CASE WHEN ${data.certificateStartNumber !== undefined} THEN ${certificate.startNumber} ELSE certificate_start_number END,
         certificate_jp = COALESCE(${data.certificateJp !== undefined ? certificate.jp : null}, certificate_jp),
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ${id}
@@ -540,6 +545,7 @@ function mapWebinarRow(input: Record<string, unknown>, includeAnswers = true): W
     certificateAutoIssue: row.certificate_auto_issue !== false,
     certificateTemplateType: row.certificate_template_type || 'sertifikat',
     certificateNumberPrefix: row.certificate_number_prefix || 'WEB',
+    certificateStartNumber: row.certificate_start_number !== undefined && row.certificate_start_number !== null ? Number(row.certificate_start_number) : null,
     certificateJp: row.certificate_jp || 2,
     createdAt: new Date(row.created_at).toISOString(),
     updatedAt: new Date(row.updated_at).toISOString(),
@@ -568,6 +574,7 @@ function mapPublicWebinarRow(input: Record<string, unknown>): Webinar {
     certificateAutoIssue: row.certificate_auto_issue !== false,
     certificateTemplateType: row.certificate_template_type || 'sertifikat',
     certificateNumberPrefix: row.certificate_number_prefix || 'WEB',
+    certificateStartNumber: row.certificate_start_number !== undefined && row.certificate_start_number !== null ? Number(row.certificate_start_number) : null,
     certificateJp: row.certificate_jp || 2,
     createdAt: new Date(row.created_at).toISOString(),
     updatedAt: new Date(row.updated_at).toISOString(),

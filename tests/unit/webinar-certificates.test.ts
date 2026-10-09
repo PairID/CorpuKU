@@ -13,8 +13,8 @@ describe('webinar certificate numbering and filename formatting', () => {
       date: new Date('2026-07-15T08:00:00Z'),
     });
 
-    // Format: [Kode Klasifikasi]_[Nomor Urut]_[Instansi]_[Kode Event/Seri]_[Bulan Romawi]_[Tahun]
-    expect(certNum).toBe('800.2.5_12327_BPSDM_AKJ-26_VII_2026');
+    // Format: [Kode Klasifikasi]/[Nomor Urut]/[Instansi]/[Kode Event/Seri]/[Bulan Romawi]/[Tahun]
+    expect(certNum).toBe('800.2.5/12327/BPSDM/AKJ-26/VII/2026');
   });
 
   it('pads sequence numbers with leading zeros up to 5 digits if below 10000', () => {
@@ -24,7 +24,7 @@ describe('webinar certificate numbering and filename formatting', () => {
       date: new Date('2026-10-07T08:00:00Z'),
     });
 
-    expect(certNum).toBe('800.2.5_00001_BPSDM_AKJ-26_X_2026');
+    expect(certNum).toBe('800.2.5/00001/BPSDM/AKJ-26/X/2026');
   });
 
   it('supports custom classification code and institution if specified', () => {
@@ -36,7 +36,7 @@ describe('webinar certificate numbering and filename formatting', () => {
       institution: 'BPSDM_KALTARA',
     });
 
-    expect(certNum).toBe('893.3_00042_BPSDM_KALTARA_WEB-01_I_2026');
+    expect(certNum).toBe('893.3/00042/BPSDM_KALTARA/WEB-01/I/2026');
   });
 
   it('correctly maps all 12 Roman month numerals', () => {
@@ -47,10 +47,10 @@ describe('webinar certificate numbering and filename formatting', () => {
     expect(ROMAN_MONTHS[11]).toBe('XII');
   });
 
-  it('formats downloaded PDF filename according to standard convention', () => {
+  it('formats downloaded PDF filename according to standard convention (sanitizing slashes)', () => {
     const filename = formatWebinarCertificateFilename({
       participantName: 'A.S. Fitriannur Azim, S.Sos.',
-      certificateNumber: '800.2.5_12327_BPSDM_AKJ-26_VII_2026',
+      certificateNumber: '800.2.5/12327/BPSDM/AKJ-26/VII/2026',
       category: 'Yang Lain',
     });
 

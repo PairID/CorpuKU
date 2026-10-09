@@ -28,6 +28,7 @@ export default function NewWebinarPage() {
         certificateAutoIssue: true,
         certificateTemplateType: "sertifikat" as "sertifikat" | "surat_keterangan" | "sttp",
         certificateNumberPrefix: "AKJ-26",
+        certificateStartNumber: "",
         certificateJp: 2,
     });
 
@@ -46,6 +47,7 @@ export default function NewWebinarPage() {
         try {
             const res = await createWebinar({
                 ...formData,
+                certificateStartNumber: formData.certificateStartNumber ? parseInt(formData.certificateStartNumber) : null,
                 scheduledAt: new Date(formData.scheduledAt).toISOString()
             });
             if (res.success) {
@@ -166,7 +168,30 @@ export default function NewWebinarPage() {
                             <h3 className="flex items-center gap-2 font-bold text-oxford-900"><Award className="text-emerald-600" size={21} /> Sertifikat Otomatis</h3>
                             <label className="flex cursor-pointer items-start gap-3"><input type="checkbox" checked={formData.certificateEnabled} onChange={e => setFormData({...formData, certificateEnabled: e.target.checked})} className="mt-1 h-5 w-5 accent-emerald-600" /><span><strong className="block">Aktifkan sertifikat</strong><span className="text-sm text-oxford-500">Peserta yang hadir dan lulus evaluasi berhak memperoleh sertifikat.</span></span></label>
                             <label className={`flex items-start gap-3 ${formData.certificateEnabled ? 'cursor-pointer' : 'opacity-50'}`}><input type="checkbox" disabled={!formData.certificateEnabled} checked={formData.certificateAutoIssue} onChange={e => setFormData({...formData, certificateAutoIssue: e.target.checked})} className="mt-1 h-5 w-5 accent-emerald-600" /><span><strong className="block">Terbitkan otomatis setelah lulus</strong><span className="text-sm text-oxford-500">Tidak perlu persetujuan admin satu per satu.</span></span></label>
-                            <div className="grid gap-4 md:grid-cols-3"><div><label className="mb-2 block text-sm font-semibold">Jenis template</label><select disabled={!formData.certificateEnabled} value={formData.certificateTemplateType} onChange={e => setFormData({...formData, certificateTemplateType: e.target.value as typeof formData.certificateTemplateType})} className="w-full rounded-xl border border-oxford-200 bg-white px-4 py-3"><option value="sertifikat">Sertifikat</option><option value="surat_keterangan">Surat Keterangan</option><option value="sttp">STTP</option></select></div><div><label className="mb-2 block text-sm font-semibold">Awalan nomor (Kode Event/Seri)</label><input disabled={!formData.certificateEnabled} maxLength={30} value={formData.certificateNumberPrefix} onChange={e => setFormData({...formData, certificateNumberPrefix: e.target.value.toUpperCase()})} placeholder="AKJ-26" className="w-full rounded-xl border border-oxford-200 bg-white px-4 py-3 font-mono" /><p className="mt-1 text-xs text-oxford-500">Contoh: AKJ-26 (Format: 800.2.5_[No Urut]_BPSDM_AKJ-26_[Bulan]_[Tahun])</p></div><div><label className="mb-2 block text-sm font-semibold">Jam Pelajaran</label><input disabled={!formData.certificateEnabled} type="number" min={1} max={999} value={formData.certificateJp} onChange={e => setFormData({...formData, certificateJp: Number(e.target.value)})} className="w-full rounded-xl border border-oxford-200 bg-white px-4 py-3" /></div></div>
+                            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                                <div>
+                                    <label className="mb-2 block text-sm font-semibold">Jenis template</label>
+                                    <select disabled={!formData.certificateEnabled} value={formData.certificateTemplateType} onChange={e => setFormData({...formData, certificateTemplateType: e.target.value as typeof formData.certificateTemplateType})} className="w-full rounded-xl border border-oxford-200 bg-white px-4 py-3">
+                                        <option value="sertifikat">Sertifikat</option>
+                                        <option value="surat_keterangan">Surat Keterangan</option>
+                                        <option value="sttp">STTP</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="mb-2 block text-sm font-semibold">Awalan nomor (Kode Seri)</label>
+                                    <input disabled={!formData.certificateEnabled} maxLength={30} value={formData.certificateNumberPrefix} onChange={e => setFormData({...formData, certificateNumberPrefix: e.target.value.toUpperCase()})} placeholder="AKJ-27" className="w-full rounded-xl border border-oxford-200 bg-white px-4 py-3 font-mono" />
+                                    <p className="mt-1 text-xs text-oxford-500">Format: 800.2.5/[No Urut]/BPSDM/{formData.certificateNumberPrefix || 'AKJ-27'}/[Bulan]/[Tahun]</p>
+                                </div>
+                                <div>
+                                    <label className="mb-2 block text-sm font-semibold">Nomor Urut Awal Khusus</label>
+                                    <input disabled={!formData.certificateEnabled} type="number" min={1} value={formData.certificateStartNumber} onChange={e => setFormData({...formData, certificateStartNumber: e.target.value})} placeholder="Otomatis (Global)" className="w-full rounded-xl border border-oxford-200 bg-white px-4 py-3 font-mono" />
+                                    <p className="mt-1 text-xs text-oxford-500">Kosongkan jika mengikuti register global platform</p>
+                                </div>
+                                <div>
+                                    <label className="mb-2 block text-sm font-semibold">Jam Pelajaran (JP)</label>
+                                    <input disabled={!formData.certificateEnabled} type="number" min={1} max={999} value={formData.certificateJp} onChange={e => setFormData({...formData, certificateJp: Number(e.target.value)})} className="w-full rounded-xl border border-oxford-200 bg-white px-4 py-3" />
+                                </div>
+                            </div>
                         </div>
 
                         <div className="pt-6 border-t border-oxford-100 dark:border-oxford-800 flex justify-end">
