@@ -17,6 +17,7 @@ export const metadata: Metadata = {
 
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "sonner";
+import { SessionIdleTracker } from "@/components/SessionIdleTracker";
 
 export default function RootLayout({
   children,
@@ -30,6 +31,7 @@ export default function RootLayout({
       >
         <ThemeProvider storageKey="corpuku-theme">
           <Toaster position="top-center" richColors />
+          <SessionIdleTracker />
           <Header />
           <main className="flex-1 flex flex-col pt-0">
             {children}

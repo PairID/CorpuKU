@@ -2,7 +2,8 @@ import crypto from "crypto";
 import { sql } from "@/lib/db";
 
 export const SESSION_COOKIE_NAME = "corpuku_session";
-export const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7;
+export const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7; // 7 hari untuk student biasa
+export const ADMIN_SESSION_MAX_AGE_SECONDS = 60 * 60 * 2; // Tepat 2 jam untuk Admin / Instruktur
 
 export interface AuthUser {
   id: string;
@@ -29,23 +30,26 @@ function hashToken(token: string): string {
   return crypto.createHash("sha256").update(token).digest("hex");
 }
 
-export function sessionCookieOptions() {
+export function sessionCookieOptions(maxAgeSeconds = SESSION_MAX_AGE_SECONDS) {
   return {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "strict" as const,
-    maxAge: SESSION_MAX_AGE_SECONDS,
+    maxAge: maxAgeSeconds,
     path: "/",
   };
 }
 
 export async function createServerSession(
   userId: string,
-  metadata?: { ipHash?: string | null; userAgent?: string | null },
-): Promise<{ token: string; sessionId: string; expiresAt: Date }> {
+  metadata?: { ipHash?: string | null; userAgent?: string | null; role?: string },
+): Promise<{ token: string; sessionId: string; expiresAt: Date; maxAgeSeconds: number }> {
   const token = crypto.randomBytes(32).toString("base64url");
   const sessionId = crypto.randomUUID();
-  const expiresAt = new Date(Date.now() + SESSION_MAX_AGE_SECONDS * 1000);
+  const maxAgeSeconds = metadata?.role === "admin" || metadata?.role === "instructor" 
+    ? ADMIN_SESSION_MAX_AGE_SECONDS 
+    : SESSION_MAX_AGE_SECONDS;
+  const expiresAt = new Date(Date.now() + maxAgeSeconds * 1000);
 
   await sql`
     DELETE FROM auth_sessions
@@ -71,7 +75,7 @@ export async function createServerSession(
     FROM ranked WHERE session.id = ranked.id AND ranked.session_rank > 10
   `;
 
-  return { token, sessionId, expiresAt };
+  return { token, sessionId, expiresAt, maxAgeSeconds };
 }
 
 export async function getServerSession(token: string): Promise<AuthSession | null> {

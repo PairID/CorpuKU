@@ -64,6 +64,7 @@ export async function POST(request: NextRequest) {
         const sessionRecord = await createServerSession(String(user.id), {
             ipHash: privacyHash(getClientIp(request)),
             userAgent: request.headers.get("user-agent"),
+            role,
         });
         const sessionData = {
             id: String(user.id),
@@ -79,7 +80,7 @@ export async function POST(request: NextRequest) {
             expiresAt: sessionRecord.expiresAt.toISOString(),
         }, { headers: NO_STORE_HEADERS });
 
-        response.cookies.set(SESSION_COOKIE_NAME, sessionRecord.token, sessionCookieOptions());
+        response.cookies.set(SESSION_COOKIE_NAME, sessionRecord.token, sessionCookieOptions(sessionRecord.maxAgeSeconds));
 
         return response;
     } catch (err) {

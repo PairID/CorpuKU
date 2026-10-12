@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { BookOpen, User, Lock, ArrowRight, Eye, EyeOff } from "lucide-react";
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
-export default function Login() {
+function LoginForm() {
+    const searchParams = useSearchParams();
+    const isTimeout = searchParams.get("reason") === "timeout";
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
     const [showPassword, setShowPassword] = useState(false);
@@ -72,6 +74,18 @@ export default function Login() {
 
                     <h1 className="text-3xl font-sans font-bold text-oxford-900 dark:text-white mb-2">Masuk ke Akun</h1>
                     <p className="text-oxford-500 dark:text-oxford-400 font-sans mb-8">Masukkan NIP (username) dan password Anda untuk mengakses LMS.</p>
+
+                    {isTimeout && (
+                        <div className="mb-4 p-4 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 rounded-xl border border-amber-300 dark:border-amber-700 text-sm font-medium flex items-start gap-3">
+                            <span className="text-lg">⏱️</span>
+                            <div>
+                                <p className="font-bold">Sesi Anda Telah Berakhir</p>
+                                <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">
+                                    Demi keamanan akses kedinasan, akun Anda otomatis keluar karena tidak ada aktivitas selama 2 jam. Silakan masuk kembali.
+                                </p>
+                            </div>
+                        </div>
+                    )}
 
                     {error && (
                         <div className="mb-4 p-3 bg-crimson-50 text-crimson-600 rounded-lg border border-crimson-200 text-sm font-medium">
@@ -156,5 +170,17 @@ export default function Login() {
             </div>
 
         </div>
+    );
+}
+
+export default function Login() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen bg-oxford-50 dark:bg-oxford-950 flex items-center justify-center">
+                <div className="w-8 h-8 border-4 border-gold-500 border-t-transparent rounded-full animate-spin" />
+            </div>
+        }>
+            <LoginForm />
+        </Suspense>
     );
 }

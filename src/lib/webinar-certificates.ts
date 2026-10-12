@@ -84,7 +84,7 @@ export async function issueWebinarCertificate(
                WHEN certificate_start_number IS NOT NULL THEN
                  '800.2.5/' ||
                  LPAD((certificate_start_number + (
-                   SELECT COUNT(*)::INTEGER FROM issued_webinar_certificates existing WHERE existing.webinar_id = eligible.webinar_id
+                   SELECT COUNT(*)::INTEGER FROM issued_webinar_certificates existing WHERE existing.webinar_id = sub.webinar_id
                  ))::TEXT, 5, '0') ||
                  '/BPSDM/' ||
                  certificate_number_prefix || '/' ||
