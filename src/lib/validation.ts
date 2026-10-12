@@ -30,6 +30,96 @@ export function parseJsonBody<T>(schema: z.ZodType<T>, value: unknown): T | null
   return parsed.success ? parsed.data : null;
 }
 
+export interface NipNikValidationResult {
+  valid: boolean;
+  type: "NIP" | "NIK" | null;
+  clean: string;
+  formatted: string;
+  error?: string;
+  metadata?: {
+    birthDate?: string;
+    gender?: "Pria" | "Wanita";
+    appointmentDate?: string;
+  };
+}
+
+export function validateNipOrNik(rawInput: string): NipNikValidationResult {
+  const clean = String(rawInput || "").replace(/\D/g, "");
+
+  if (!clean) {
+    return {
+      valid: false,
+      type: null,
+      clean: "",
+      formatted: "",
+      error: "NIP atau NIK wajib diisi.",
+    };
+  }
+
+  // 16 Digit: NIK Kependudukan
+  if (clean.length === 16) {
+    const formatted = `${clean.slice(0, 4)} ${clean.slice(4, 8)} ${clean.slice(8, 12)} ${clean.slice(12, 16)}`;
+    return {
+      valid: true,
+      type: "NIK",
+      clean,
+      formatted,
+    };
+  }
+
+  // 18 Digit: NIP ASN (PNS / PPPK Standar BKN)
+  // Format: YYYYMMDD (lahir) + YYYYMM (pengangkatan) + G (jenis kelamin: 1 pria, 2 wanita) + NNN (nomor urut)
+  if (clean.length === 18) {
+    const birthYear = parseInt(clean.slice(0, 4), 10);
+    const birthMonth = parseInt(clean.slice(4, 6), 10);
+    const birthDay = parseInt(clean.slice(6, 8), 10);
+
+    const currentYear = new Date().getFullYear();
+    const isBirthDatePlausible =
+      birthYear >= 1945 &&
+      birthYear <= currentYear - 17 &&
+      birthMonth >= 1 &&
+      birthMonth <= 12 &&
+      birthDay >= 1 &&
+      birthDay <= 31;
+
+    const genderCode = clean.slice(14, 15);
+    const gender = genderCode === "1" ? "Pria" : genderCode === "2" ? "Wanita" : undefined;
+
+    if (!isBirthDatePlausible) {
+      return {
+        valid: false,
+        type: "NIP",
+        clean,
+        formatted: clean,
+        error: "Struktur tanggal lahir pada 8 digit pertama NIP tidak valid.",
+      };
+    }
+
+    const formatted = `${clean.slice(0, 8)} ${clean.slice(8, 14)} ${clean.slice(14, 15)} ${clean.slice(15, 18)}`;
+    return {
+      valid: true,
+      type: "NIP",
+      clean,
+      formatted,
+      metadata: {
+        birthDate: `${birthDay.toString().padStart(2, "0")}/${birthMonth.toString().padStart(2, "0")}/${birthYear}`,
+        gender,
+        appointmentDate: `${clean.slice(12, 14)}/${clean.slice(8, 12)}`,
+      },
+    };
+  }
+
+  // Jika panjang digit belum atau bukan 16/18
+  return {
+    valid: false,
+    type: null,
+    clean,
+    formatted: clean,
+    error: `Jumlah digit tidak sesuai (${clean.length} digit). NIK wajib 16 digit, atau NIP ASN wajib 18 digit.`,
+  };
+}
+
 export async function readJsonRequest(request: Request, maxBytes = 32 * 1024): Promise<unknown | null> {
   const contentType = request.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
   if (contentType !== "application/json") return null;
@@ -60,3 +150,4 @@ export async function readJsonRequest(request: Request, maxBytes = 32 * 1024): P
     return null;
   }
 }
+

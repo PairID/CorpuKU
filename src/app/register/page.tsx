@@ -4,6 +4,7 @@ import Link from "next/link";
 import { BookOpen, Mail, Lock, User, Briefcase, Building2, ArrowRight, CheckCircle2, Loader2, Eye, EyeOff } from "lucide-react";
 import { useState } from "react";
 import { authClient } from "@/lib/auth-client";
+import { validateNipOrNik } from "@/lib/validation";
 
 export default function Register() {
     const [name, setName] = useState("");
@@ -29,11 +30,21 @@ export default function Register() {
             return;
         }
 
+        const cleanNip = nip.trim().replace(/\D/g, "");
+        if (cleanNip) {
+            const nipVal = validateNipOrNik(cleanNip);
+            if (!nipVal.valid) {
+                setError(nipVal.error || "Format NIP (18 digit) atau NIK (16 digit) tidak valid.");
+                setLoading(false);
+                return;
+            }
+        }
+
         const { error } = await authClient.signUp.email({
             email,
             password,
             name,
-            nip,
+            nip: cleanNip || undefined,
             instansiAsal,
         });
 
@@ -123,19 +134,36 @@ export default function Register() {
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-bold text-oxford-900 dark:text-white mb-2">NIP / ID Pegawai</label>
+                                    <div className="flex items-center justify-between mb-2">
+                                        <label className="block text-sm font-bold text-oxford-900 dark:text-white" htmlFor="nip">
+                                            NIP ASN (18 Digit) / NIK (16 Digit)
+                                        </label>
+                                        {nip.length > 0 && (
+                                            <span className={`text-[11px] font-mono px-2 py-0.5 rounded font-semibold ${
+                                                nip.length === 18 
+                                                    ? "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300" 
+                                                    : nip.length === 16 
+                                                    ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+                                                    : "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
+                                            }`}>
+                                                {nip.length === 18 ? "✓ NIP (18 digit)" : nip.length === 16 ? "✓ NIK (16 digit)" : `${nip.length}/18 digit`}
+                                            </span>
+                                        )}
+                                    </div>
                                     <div className="relative">
                                         <Briefcase className="absolute left-4 top-1/2 -translate-y-1/2 text-oxford-400" size={20} />
                                         <input
                                             type="text"
                                             id="nip"
                                             name="nip"
+                                            maxLength={18}
                                             value={nip}
-                                            onChange={(e) => setNip(e.target.value)}
-                                            placeholder="Nomor Induk Pegawai"
-                                            className="w-full pl-12 pr-4 py-3 border border-oxford-200 dark:border-oxford-700 bg-white dark:bg-[#161B2A] rounded-xl focus:outline-none focus:ring-4 focus:ring-gold-500/10 focus:border-gold-500 transition-all font-sans text-oxford-900 dark:text-white"
+                                            onChange={(e) => setNip(e.target.value.replace(/\D/g, "").slice(0, 18))}
+                                            placeholder="Contoh NIP: 199201012020121001 atau NIK: 6501020101920001"
+                                            className="w-full pl-12 pr-4 py-3 border border-oxford-200 dark:border-oxford-700 bg-white dark:bg-[#161B2A] rounded-xl focus:outline-none focus:ring-4 focus:ring-gold-500/10 focus:border-gold-500 transition-all font-mono text-oxford-900 dark:text-white tracking-wider text-sm"
                                         />
                                     </div>
+                                    <p className="text-xs text-oxford-400 mt-1">Opsional saat mendaftar. NIP/NIK digunakan untuk pencetakan sertifikat.</p>
                                 </div>
 
                                 <div>

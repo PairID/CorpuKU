@@ -3,7 +3,7 @@ import { sql } from "@/lib/db";
 import crypto from "crypto";
 import { hashPassword, validatePasswordStrength } from "@/lib/password";
 import { consumeRateLimit, getClientIp, isSameOrigin } from "@/lib/request-security";
-import { parseJsonBody, readJsonRequest, registerSchema } from "@/lib/validation";
+import { parseJsonBody, readJsonRequest, registerSchema, validateNipOrNik } from "@/lib/validation";
 
 const NO_STORE_HEADERS = { "Cache-Control": "no-store, max-age=0", Pragma: "no-cache" };
 
@@ -14,6 +14,13 @@ export async function POST(request: NextRequest) {
         }
         const data = parseJsonBody(registerSchema, await readJsonRequest(request));
         if (!data) return NextResponse.json({ error: "Data pendaftaran tidak valid." }, { status: 400, headers: NO_STORE_HEADERS });
+        if (data.nip) {
+            const clean = data.nip.replace(/\D/g, "");
+            const nipVal = validateNipOrNik(clean);
+            if (!nipVal.valid) {
+                return NextResponse.json({ error: nipVal.error || "Format NIP (18 digit) atau NIK (16 digit) tidak valid." }, { status: 400, headers: NO_STORE_HEADERS });
+            }
+        }
         const passwordError = validatePasswordStrength(data.password);
         if (passwordError) return NextResponse.json({ error: passwordError }, { status: 400, headers: NO_STORE_HEADERS });
         const rateLimit = await consumeRateLimit({

@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { submitPublicWebinarAttendance, checkWebinarCertificateByNip, lookupParticipantByNip } from "@/app/actions/webinars";
+import { validateNipOrNik } from "@/lib/validation";
 import type { Webinar, IssuedWebinarCertificate, SkmAnswer } from "@/lib/types";
 
 type WebinarUser = {
@@ -285,11 +286,12 @@ export default function WebinarDetailClient({
 
   const handleSubmitAttendance = async (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanNip = nip.replace(/\D/g, "");
-    if (!cleanNip || cleanNip.length < 8) {
-      toast.error("NIP/NIK minimal 8 digit angka.");
+    const nipValidation = validateNipOrNik(nip);
+    if (!nipValidation.valid) {
+      toast.error(nipValidation.error || "Nomor NIP (18 digit) atau NIK (16 digit) tidak valid.");
       return;
     }
+    const cleanNip = nipValidation.clean;
     if (!name.trim()) {
       toast.error("Nama lengkap wajib diisi.");
       return;
@@ -358,11 +360,13 @@ export default function WebinarDetailClient({
 
   const handleLookupCertificate = async (e?: React.FormEvent, customNip?: string) => {
     if (e) e.preventDefault();
-    const queryNip = (customNip || searchCertNip).trim().replace(/\D/g, "");
-    if (!queryNip || queryNip.length < 5) {
-      toast.error("Masukkan NIP/NIK yang valid.");
+    const rawVal = customNip || searchCertNip;
+    const nipValidation = validateNipOrNik(rawVal);
+    if (!nipValidation.valid) {
+      toast.error(nipValidation.error || "Masukkan 18 digit NIP atau 16 digit NIK yang valid.");
       return;
     }
+    const queryNip = nipValidation.clean;
 
     setIsSearchingCert(true);
     setCertSearchError("");
@@ -801,41 +805,64 @@ export default function WebinarDetailClient({
                       <div className="col-span-1 md:col-span-2">
                         <div className="flex items-center justify-between mb-1">
                           <label className="block text-xs font-semibold text-oxford-700 dark:text-oxford-300">
-                            NIP / NIK (Angka Saja) *
+                            NIP ASN (18 Digit) / NIK (16 Digit) *
                           </label>
-                          {isLookingUpNip && (
-                            <span className="text-[11px] text-oxford-500 flex items-center gap-1 font-mono">
-                              <Loader2 size={12} className="animate-spin text-gold-500" />
-                              Memeriksa database...
-                            </span>
-                          )}
-                          {!isLookingUpNip && nipFoundInDb && (
-                            <span className="text-[11px] text-emerald-600 dark:text-emerald-400 flex items-center gap-1 font-medium bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md border border-emerald-500/20">
-                              <ShieldCheck size={12} />
-                              Data terdaftar di sistem (bisa disesuaikan khusus sertifikat)
-                            </span>
-                          )}
+                          <div className="flex items-center gap-2">
+                            {isLookingUpNip && (
+                              <span className="text-[11px] text-oxford-500 flex items-center gap-1 font-mono">
+                                <Loader2 size={12} className="animate-spin text-gold-500" />
+                                Memeriksa database...
+                              </span>
+                            )}
+                            {!isLookingUpNip && nipFoundInDb && (
+                              <span className="text-[11px] text-emerald-600 dark:text-emerald-400 flex items-center gap-1 font-medium bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md border border-emerald-500/20">
+                                <ShieldCheck size={12} />
+                                Terdaftar di BPSDM
+                              </span>
+                            )}
+                            {nip.length > 0 && (
+                              <span className={`text-[11px] font-mono px-2 py-0.5 rounded-md font-semibold ${
+                                nip.length === 18 
+                                  ? "bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800" 
+                                  : nip.length === 16 
+                                  ? "bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
+                                  : "bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800"
+                              }`}>
+                                {nip.length === 18 
+                                  ? "✓ NIP ASN (18 digit)" 
+                                  : nip.length === 16 
+                                  ? "✓ NIK Kependudukan (16 digit)" 
+                                  : `${nip.length}/18 digit (Butuh 16 atau 18 digit)`}
+                              </span>
+                            )}
+                          </div>
                         </div>
                         <div className="relative">
                           <input
                             required
                             type="text"
+                            maxLength={18}
                             value={nip}
                             onChange={e => {
-                              const val = e.target.value.replace(/\D/g, "");
+                              const val = e.target.value.replace(/\D/g, "").slice(0, 18);
                               setNip(val);
-                              if (val.length >= 18 && !isLookingUpNip && !nipFoundInDb) {
+                              if ((val.length === 18 || val.length === 16) && !isLookingUpNip && !nipFoundInDb) {
                                 handleNipLookup(val);
                               }
                             }}
-                            onBlur={e => handleNipLookup(e.target.value)}
-                            placeholder="Masukkan 18 digit NIP atau NIK Anda..."
-                            className="w-full px-4 py-3 rounded-xl border border-border-base bg-background text-foreground font-mono focus:ring-2 focus:ring-gold-500/50 outline-none text-sm"
+                            onBlur={e => {
+                              const val = e.target.value.replace(/\D/g, "");
+                              if (val.length === 16 || val.length === 18) {
+                                handleNipLookup(val);
+                              }
+                            }}
+                            placeholder="Contoh NIP: 199201012020121001 atau NIK: 6501020101920001"
+                            className="w-full px-4 py-3 rounded-xl border border-border-base bg-background text-foreground font-mono focus:ring-2 focus:ring-gold-500/50 outline-none text-sm tracking-wider"
                           />
                         </div>
                         <p className="text-[11px] text-oxford-500 mt-1 flex items-center gap-1">
                           <Info size={12} className="text-oxford-400 shrink-0" />
-                          Jika NIP terdaftar di database ASN BPSDM, data otomatis terisi. Anda dapat mengoreksi gelar/instansi khusus untuk pencetakan sertifikat tanpa mengubah akun asli sistem.
+                          ASN wajib 18 digit NIP. Non-ASN/PPPK Paruh Waktu/Umum gunakan 16 digit NIK. Data profil otomatis terisi jika terdaftar.
                         </p>
                       </div>
 
@@ -1013,24 +1040,35 @@ export default function WebinarDetailClient({
                 </div>
 
                 {/* SEARCH BAR */}
-                <form onSubmit={e => handleLookupCertificate(e)} className="flex gap-2 max-w-lg mx-auto mb-8">
-                  <div className="relative flex-1">
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-oxford-400" size={18} />
-                    <input
-                      type="text"
-                      value={searchCertNip}
-                      onChange={e => setSearchCertNip(e.target.value.replace(/\D/g, ""))}
-                      placeholder="Masukkan NIP / NIK Anda..."
-                      className="w-full pl-11 pr-4 py-3.5 rounded-xl border border-border-base bg-background text-foreground font-mono focus:ring-2 focus:ring-gold-500/50 outline-none text-sm"
-                    />
+                <form onSubmit={e => handleLookupCertificate(e)} className="flex flex-col gap-2 max-w-lg mx-auto mb-8">
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-oxford-400" size={18} />
+                      <input
+                        type="text"
+                        maxLength={18}
+                        value={searchCertNip}
+                        onChange={e => setSearchCertNip(e.target.value.replace(/\D/g, "").slice(0, 18))}
+                        placeholder="Masukkan 18 digit NIP atau 16 digit NIK..."
+                        className="w-full pl-11 pr-4 py-3.5 rounded-xl border border-border-base bg-background text-foreground font-mono focus:ring-2 focus:ring-gold-500/50 outline-none text-sm tracking-wider"
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={isSearchingCert}
+                      className="px-6 py-3.5 bg-oxford-900 hover:bg-oxford-800 text-white font-bold rounded-xl transition-all shadow-md shrink-0 text-sm disabled:opacity-50"
+                    >
+                      {isSearchingCert ? "Mencari..." : "Cari Sertifikat"}
+                    </button>
                   </div>
-                  <button
-                    type="submit"
-                    disabled={isSearchingCert}
-                    className="px-6 py-3.5 bg-oxford-900 hover:bg-oxford-800 text-white font-bold rounded-xl transition-all shadow-md shrink-0 text-sm disabled:opacity-50"
-                  >
-                    {isSearchingCert ? "Mencari..." : "Cari Sertifikat"}
-                  </button>
+                  {searchCertNip.length > 0 && (
+                    <div className="flex items-center justify-between px-1 text-[11px] font-mono text-oxford-500">
+                      <span>Panjang: {searchCertNip.length} digit</span>
+                      <span className={searchCertNip.length === 18 ? "text-blue-600 font-semibold" : searchCertNip.length === 16 ? "text-emerald-600 font-semibold" : "text-amber-600"}>
+                        {searchCertNip.length === 18 ? "✓ Format NIP ASN (18 digit)" : searchCertNip.length === 16 ? "✓ Format NIK (16 digit)" : "Butuh tepat 16 (NIK) atau 18 digit (NIP)"}
+                      </span>
+                    </div>
+                  )}
                 </form>
 
                 {/* ERROR STATE */}

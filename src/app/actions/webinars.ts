@@ -10,6 +10,7 @@ import { requireAdminSession, requireUserSession } from "./auth";
 import { issueEligibleWebinarCertificates, issueWebinarCertificate, mapCertificate } from '@/lib/webinar-certificates';
 import { sanitizePlainText } from '@/lib/content-security';
 import { consumeRateLimit } from '@/lib/request-security';
+import { validateNipOrNik } from '@/lib/validation';
 import { z } from 'zod';
 
 const optionalUrl = z.union([z.string().url().max(2048), z.literal(''), z.null()]).optional();
@@ -692,15 +693,16 @@ export async function submitPublicWebinarAttendance(input: {
 }): Promise<{ success: boolean; error?: string; message?: string }> {
   try {
     const webinarId = input.webinarId;
-    const cleanNip = input.nip.trim().replace(/\D/g, '');
+    const nipValidation = validateNipOrNik(input.nip);
+    if (!nipValidation.valid) {
+      return { success: false, error: nipValidation.error || "Nomor NIP (18 digit) atau NIK (16 digit) tidak valid." };
+    }
+    const cleanNip = nipValidation.clean;
     const cleanName = sanitizePlainText(input.name.trim());
     const cleanAgency = sanitizePlainText(input.agency.trim());
     const cleanPosition = input.position ? sanitizePlainText(input.position.trim()) : '';
     const cleanPhone = input.phone ? input.phone.trim() : '';
 
-    if (!cleanNip || cleanNip.length < 8) {
-      return { success: false, error: "NIP/NIK minimal 8 digit angka." };
-    }
     if (!cleanName || cleanName.length < 3) {
       return { success: false, error: "Nama lengkap wajib diisi." };
     }
