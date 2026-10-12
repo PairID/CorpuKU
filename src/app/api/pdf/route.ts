@@ -329,10 +329,26 @@ export async function POST(req: Request) {
       </style>
       </head><body>${renderCertificatePage(elementsHtml, bgDataUri, true)}${page2Enabled ? renderCertificatePage(page2ElementsHtml, page2BgDataUri, false) : ''}</body></html>`;
 
-    const args = process.env.PUPPETEER_DISABLE_SANDBOX === 'true'
-      ? ['--no-sandbox', '--disable-setuid-sandbox']
-      : [];
-    browser = await puppeteer.launch({ headless: true, args });
+    const defaultLinuxChromium = ['/usr/bin/chromium-browser', '/usr/bin/chromium', '/usr/bin/google-chrome-stable']
+      .find(path => fs.existsSync(path));
+    const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || defaultLinuxChromium || undefined;
+
+    const baseArgs = [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--no-first-run',
+      '--no-zygote',
+      '--single-process',
+      '--font-render-hinting=none',
+    ];
+
+    browser = await puppeteer.launch({
+      headless: true,
+      executablePath,
+      args: baseArgs,
+    });
     const page = await browser.newPage();
     await page.setViewport({ width, height, deviceScaleFactor: 2 });
     await page.setContent(html, { waitUntil: 'load', timeout: 20_000 });

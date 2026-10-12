@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getAuthSession } from '@/app/actions/auth';
 import { generateReportHTML } from '@/lib/report-template';
 import puppeteer from 'puppeteer';
+import fs from 'fs';
 
 export async function GET() {
     try {
@@ -12,10 +13,24 @@ export async function GET() {
 
         const htmlContent = await generateReportHTML();
 
+        const defaultLinuxChromium = ['/usr/bin/chromium-browser', '/usr/bin/chromium', '/usr/bin/google-chrome-stable']
+            .find(path => fs.existsSync(path));
+        const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || defaultLinuxChromium || undefined;
+
         // Launch puppeteer
         const browser = await puppeteer.launch({
             headless: true,
-            args: ['--no-sandbox', '--disable-setuid-sandbox', '--font-render-hinting=none']
+            executablePath,
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-gpu',
+                '--no-first-run',
+                '--no-zygote',
+                '--single-process',
+                '--font-render-hinting=none',
+            ]
         });
         
         const page = await browser.newPage();
