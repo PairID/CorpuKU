@@ -42,8 +42,8 @@
   --color-crimson-700: #7f1d1d;
   --color-crimson-800: #5c1313;
 
-  --font-sans: var(--font-ubuntu);
-  --font-serif: var(--font-ubuntu);
+  --font-sans: 'Ubuntu', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-serif: 'Ubuntu', 'Bookman Old Style', Georgia, Cambria, serif;
 }
 
 /* Dark Mode Variants */

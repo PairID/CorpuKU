@@ -1,14 +1,7 @@
 import type { Metadata } from "next";
-import { Ubuntu } from "next/font/google";
 import "./globals.css";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
-
-const ubuntu = Ubuntu({
-  variable: "--font-ubuntu",
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "700"],
-});
 
 export const metadata: Metadata = {
   title: "CorpuKU Academy | Pengembangan Kompetensi ASN",
@@ -27,7 +20,7 @@ export default function RootLayout({
   return (
     <html lang="id">
       <body
-        className={`${ubuntu.variable} font-sans bg-background text-foreground antialiased min-h-screen flex flex-col`}
+        className="font-sans bg-background text-foreground antialiased min-h-screen flex flex-col"
       >
         <ThemeProvider storageKey="corpuku-theme">
           <Toaster position="top-center" richColors />
