@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { ArrowLeft, Award, CheckCircle2, ExternalLink, Settings2, Users } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { DownloadCertificateButton } from '@/components/DownloadCertificateButton';
 import { getAdminWebinar } from '@/app/actions/webinars';
 import { getWebinarCertificateDashboard, issueAllEligibleWebinarCertificates, issueSingleWebinarCertificate } from '@/app/actions/webinar-certificates';
 import { notFound } from 'next/navigation';
@@ -44,7 +45,31 @@ export default async function WebinarCertificatesPage({ params }: { params: Prom
           <table className="w-full min-w-[1000px] text-left text-sm"><thead className="bg-oxford-50 text-oxford-600 dark:bg-oxford-900 dark:text-oxford-300"><tr><th className="p-4">Peserta</th><th className="p-4">Presensi</th><th className="p-4">Evaluasi</th><th className="p-4">Sertifikat</th><th className="p-4">Aksi</th></tr></thead>
             <tbody>{participants.map(item => {
               const isReady = item.attended && item.evaluationCompleted && item.evaluationScore !== null;
-              return <tr key={String(item.registrationId)} className="border-t border-oxford-100 dark:border-oxford-800"><td className="p-4"><p className="font-bold text-oxford-900 dark:text-white">{String(item.participantName)}</p><p className="text-xs text-oxford-500">{item.participantNip ? String(item.participantNip) : '-'}</p></td><td className="p-4">{item.attended ? <span className="font-bold text-emerald-600">Hadir</span> : <span className="text-oxford-400">Belum hadir</span>}</td><td className="p-4">{item.evaluationCompleted && item.evaluationScore !== null ? <span className="font-bold text-emerald-600">Lulus ({String(item.evaluationScore)})</span> : <span className="text-oxford-400">Belum lulus</span>}</td><td className="p-4">{item.certificateId ? <div><p className={`font-mono font-bold ${item.revokedAt ? 'text-red-600' : 'text-emerald-600'}`}>{String(item.certificateNumber)}</p><p className="text-xs text-oxford-500">{item.revokedAt ? 'Dicabut' : 'Aktif'}</p></div> : <span className={isReady ? 'font-bold text-amber-600' : 'text-oxford-400'}>{isReady ? 'Siap diterbitkan' : 'Belum memenuhi syarat'}</span>}</td><td className="p-4">{item.certificateId ? <Link target="_blank" href={`/verify/certificates/${item.verificationToken}`} className="inline-flex items-center gap-1 font-bold text-blue-600"><ExternalLink size={14} /> Verifikasi</Link> : isReady && webinar.certificateEnabled ? <form action={issueSingleWebinarCertificate}><input type="hidden" name="webinarId" value={id} /><input type="hidden" name="userId" value={String(item.userId)} /><button className="rounded-lg bg-oxford-900 px-3 py-2 text-xs font-bold text-white">Terbitkan</button></form> : '-'}</td></tr>;
+              return (
+                <tr key={String(item.registrationId)} className="border-t border-oxford-100 dark:border-oxford-800">
+                  <td className="p-4"><p className="font-bold text-oxford-900 dark:text-white">{String(item.participantName)}</p><p className="text-xs text-oxford-500">{item.participantNip ? String(item.participantNip) : '-'}</p></td>
+                  <td className="p-4">{item.attended ? <span className="font-bold text-emerald-600">Hadir</span> : <span className="text-oxford-400">Belum hadir</span>}</td>
+                  <td className="p-4">{item.evaluationCompleted && item.evaluationScore !== null ? <span className="font-bold text-emerald-600">Lulus ({String(item.evaluationScore)})</span> : <span className="text-oxford-400">Belum lulus</span>}</td>
+                  <td className="p-4">{item.certificateId ? <div><p className={`font-mono font-bold ${item.revokedAt ? 'text-red-600' : 'text-emerald-600'}`}>{String(item.certificateNumber)}</p><p className="text-xs text-oxford-500">{item.revokedAt ? 'Dicabut' : 'Aktif'}</p></div> : <span className={isReady ? 'font-bold text-amber-600' : 'text-oxford-400'}>{isReady ? 'Siap diterbitkan' : 'Belum memenuhi syarat'}</span>}</td>
+                  <td className="p-4">
+                    {item.certificateId ? (
+                      <div className="flex flex-wrap items-center gap-3">
+                        <Link target="_blank" href={`/verify/certificates/${item.verificationToken}`} className="inline-flex items-center gap-1 font-bold text-blue-600 hover:underline"><ExternalLink size={14} /> Verifikasi</Link>
+                        {!item.revokedAt && item.verificationToken && (
+                          <DownloadCertificateButton
+                            verificationToken={String(item.verificationToken)}
+                            type="Webinar"
+                            participantName={String(item.participantName)}
+                            certificateNumber={String(item.certificateNumber)}
+                          />
+                        )}
+                      </div>
+                    ) : isReady && webinar.certificateEnabled ? (
+                      <form action={issueSingleWebinarCertificate}><input type="hidden" name="webinarId" value={id} /><input type="hidden" name="userId" value={String(item.userId)} /><button className="rounded-lg bg-oxford-900 px-3 py-2 text-xs font-bold text-white">Terbitkan</button></form>
+                    ) : '-'}
+                  </td>
+                </tr>
+              );
             })}{participants.length === 0 && <tr><td colSpan={5} className="p-10 text-center text-oxford-500">Belum ada peserta terdaftar.</td></tr>}</tbody>
           </table>
         </div>

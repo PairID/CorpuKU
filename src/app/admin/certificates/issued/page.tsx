@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ArrowLeft, ExternalLink, ShieldCheck } from "lucide-react";
+import { DownloadCertificateButton } from "@/components/DownloadCertificateButton";
 import { getIssuedWebinarCertificates, revokeWebinarCertificate } from "@/app/actions/webinar-certificates";
 import { getIssuedCourseCertificates, revokeCourseCertificate } from "@/app/actions/course-certificates";
 
@@ -67,7 +68,17 @@ export default async function IssuedCertificatesPage() {
                     <td className="p-4">{certificate.downloadCount}×</td>
                     <td className="p-4">
                       <p>{certificate.revokedAt ? <span className="font-bold text-red-600">Dicabut</span> : <span className="font-bold text-emerald-600">Aktif</span>}</p>
-                      <Link href={`/verify/certificates/${certificate.verificationToken}`} target="_blank" className="mt-2 inline-flex items-center gap-1 font-semibold text-blue-600"><ExternalLink size={14} /> Verifikasi</Link>
+                      <div className="mt-2 flex flex-wrap items-center gap-3">
+                        <Link href={`/verify/certificates/${certificate.verificationToken}`} target="_blank" className="inline-flex items-center gap-1 font-semibold text-blue-600 hover:underline"><ExternalLink size={14} /> Verifikasi</Link>
+                        {!certificate.revokedAt && (
+                          <DownloadCertificateButton
+                            verificationToken={certificate.verificationToken}
+                            type={certificate.type}
+                            participantName={certificate.participantName}
+                            certificateNumber={certificate.certificateNumber}
+                          />
+                        )}
+                      </div>
                       {!certificate.revokedAt && (
                         <form action={revokeAction} className="mt-3 flex gap-2">
                           <input type="hidden" name="id" value={certificate.id} />

@@ -23,6 +23,8 @@ import {
   Upload,
   Search,
   Copy,
+  Printer,
+  Loader2,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
@@ -37,6 +39,7 @@ export default function CertificateAdminClient({
 }) {
   const [settings, setSettings] = useState(initialSettings);
   const [isSaving, setIsSaving] = useState(false);
+  const [isTestPrinting, setIsTestPrinting] = useState(false);
   const [message, setMessage] = useState<{
     type: "success" | "error";
     text: string;
@@ -548,6 +551,51 @@ export default function CertificateAdminClient({
 
     // Auto-clear message after 4 seconds
     setTimeout(() => setMessage(null), 4000);
+  };
+
+  const handleTestPrint = async () => {
+    setIsTestPrinting(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "test_certificate",
+          templateType: activeTab,
+          templateSettings: settings[activeTab] || {},
+        }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => null);
+        throw new Error(errData?.error || "Gagal menguji cetak sertifikat PDF.");
+      }
+
+      const blob = await res.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = `Uji-Coba-Sertifikat-${activeTab}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => window.URL.revokeObjectURL(blobUrl), 3000);
+
+      setMessage({
+        type: "success",
+        text: `Uji coba cetak PDF (${activeTab}) berhasil di-generate menggunakan mesin sertifikat resmi!`,
+      });
+    } catch (err: unknown) {
+      console.error("Test print error:", err);
+      setMessage({
+        type: "error",
+        text: err instanceof Error ? err.message : "Terjadi kesalahan saat memproses PDF uji coba.",
+      });
+    } finally {
+      setIsTestPrinting(false);
+      setTimeout(() => setMessage(null), 5000);
+    }
   };
 
   const previewData = {
@@ -1267,24 +1315,42 @@ export default function CertificateAdminClient({
             )}
           </AnimatePresence>
 
-          <button
-            onClick={handleSave}
-            disabled={isSaving}
-            className="w-full h-14 bg-gold-500 text-oxford-950 rounded-2xl font-bold flex items-center justify-center gap-3 hover:bg-gold-400 transition-all shadow-xl shadow-gold-500/20 disabled:opacity-50 text-base"
-          >
-            {isSaving ? (
-              <div className="w-5 h-5 border-2 border-oxford-900 border-t-transparent rounded-full animate-spin" />
-            ) : (
-              <Save size={20} />
-            )}
-            Simpan Formasi Layout Global
-          </button>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={handleTestPrint}
+              disabled={isTestPrinting || isSaving}
+              className="h-14 bg-oxford-900 text-white dark:bg-oxford-800 dark:hover:bg-oxford-700 rounded-2xl font-bold flex items-center justify-center gap-2.5 hover:bg-oxford-800 transition-all shadow-md border border-oxford-700/50 disabled:opacity-50 text-sm"
+              title="Cetak uji coba PDF menggunakan mesin rendering Chromium resmi"
+            >
+              {isTestPrinting ? (
+                <Loader2 size={18} className="animate-spin text-gold-400" />
+              ) : (
+                <Printer size={18} className="text-gold-400" />
+              )}
+              <span>{isTestPrinting ? "Merender PDF..." : "Print Test Sertifikat"}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={isSaving || isTestPrinting}
+              className="h-14 bg-gold-500 text-oxford-950 rounded-2xl font-bold flex items-center justify-center gap-2.5 hover:bg-gold-400 transition-all shadow-xl shadow-gold-500/20 disabled:opacity-50 text-sm"
+            >
+              {isSaving ? (
+                <div className="w-5 h-5 border-2 border-oxford-900 border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <Save size={18} />
+              )}
+              <span>Simpan Layout Global</span>
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Right Col: Live Preview */}
       <div className="xl:sticky xl:top-28">
-        <div className="mb-4 flex items-center justify-between px-2">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 px-2">
           <h3 className="font-bold text-oxford-900 dark:text-white uppercase tracking-widest text-xs flex items-center gap-2">
             <span>Preview Integrasi Layout</span>
             <span className="bg-emerald-100 text-emerald-700 px-2.5 py-0.5 rounded-full lowercase tracking-normal bg-opacity-70">
@@ -1296,6 +1362,21 @@ export default function CertificateAdminClient({
               {isPortrait ? "Portrait" : "Landscape"}
             </span>
           </h3>
+
+          <button
+            type="button"
+            onClick={handleTestPrint}
+            disabled={isTestPrinting}
+            title="Uji coba cetak PDF dokumen saat ini dengan mesin Chromium"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-bold text-white shadow-md hover:bg-emerald-700 disabled:opacity-50 transition-all"
+          >
+            {isTestPrinting ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <Printer size={14} />
+            )}
+            <span>{isTestPrinting ? "Mencetak..." : "Print Test PDF"}</span>
+          </button>
         </div>
         {/* 
                   Wrapper div acts as scaling view for a 4K resolution native component.

@@ -6,7 +6,7 @@ import puppeteer, { type Browser } from 'puppeteer';
 import { sql } from '@/lib/db';
 import { getAuthSession } from '@/app/actions/auth';
 import { getWebinarCertificateForDownload, reserveCertificateDownload, getCertificateByVerificationToken, formatWebinarCertificateFilename } from '@/lib/webinar-certificates';
-import { getCourseCertificateForDownload, reserveCourseCertificateDownload } from '@/lib/course-certificates';
+import { getCourseCertificateForDownload, reserveCourseCertificateDownload, getCourseCertificateByVerificationToken } from '@/lib/course-certificates';
 
 export const runtime = 'nodejs';
 
@@ -90,17 +90,47 @@ export async function POST(req: Request) {
     const session = await getAuthSession();
     if (!session && !token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+    const isTest = data.type === 'test_certificate';
     const isWebinar = data.type === 'webinar_certificate';
     const isCourse = data.type === 'course_certificate';
-    if (!isWebinar && !isCourse) return NextResponse.json({ error: 'Permintaan sertifikat tidak valid.' }, { status: 400 });
+    if (!isTest && !isWebinar && !isCourse) return NextResponse.json({ error: 'Permintaan sertifikat tidak valid.' }, { status: 400 });
+
+    if (isTest) {
+      if (!session || session.user.role !== 'admin') {
+        return NextResponse.json({ error: 'Hanya administrator yang diizinkan menguji cetak sertifikat.' }, { status: 403 });
+      }
+    }
 
     let webinarCertificate = null;
     let courseCertificate = null;
 
-    if (token) {
+    if (isTest) {
+      // Mock data berstandar kedinasan BPSDM Kaltara untuk keperluan uji cetak langsung
+      webinarCertificate = {
+        id: 'test_preview_cert',
+        certificateNumber: '800.2.5/12331/BPSDM/AKJ-27/X/2026',
+        verificationToken: '00000000-0000-0000-0000-000000000000',
+        participantName: 'Budi Santoso, S.STP.',
+        participantNip: '199501012020011001',
+        participantRank: 'Penata Muda / III/a',
+        participantPosition: 'Analis Kebijakan Ahli Pertama',
+        participantInstitution: 'Sekretariat Daerah Provinsi Kalimantan Utara',
+        webinarTitle: 'Kepemimpinan Digital di Pemerintahan',
+        webinarScheduledAt: new Date().toISOString(),
+        issuedAt: new Date().toISOString(),
+        certificateJp: 40,
+        templateType: typeof data.templateType === 'string' ? data.templateType : 'sertifikat',
+        templateSettings: (data.templateSettings && typeof data.templateSettings === 'object') ? data.templateSettings : null,
+      };
+    } else if (token) {
       const certFromToken = await getCertificateByVerificationToken(token);
       if (certFromToken && !certFromToken.revokedAt) {
         webinarCertificate = certFromToken;
+      } else {
+        const courseCertFromToken = await getCourseCertificateByVerificationToken(token);
+        if (courseCertFromToken && !courseCertFromToken.revokedAt) {
+          courseCertificate = courseCertFromToken;
+        }
       }
     } else if (session) {
       if (isWebinar && typeof data.webinarId === 'string' && data.webinarId.length <= 255) {
@@ -128,15 +158,17 @@ export async function POST(req: Request) {
       ? certificate.templateSettings as Record<string, unknown>
       : {};
     const templateType = String(certificate.templateType || 'sertifikat');
-    try {
-      const activeRows = await sql`
-        SELECT settings FROM certificate_settings WHERE type = ${templateType} LIMIT 1
-      `;
-      if (activeRows[0]?.settings && typeof activeRows[0].settings === 'object') {
-        activeConfig = activeRows[0].settings as Record<string, unknown>;
+    if (!isTest || !data.templateSettings) {
+      try {
+        const activeRows = await sql`
+          SELECT settings FROM certificate_settings WHERE type = ${templateType} LIMIT 1
+        `;
+        if (activeRows[0]?.settings && typeof activeRows[0].settings === 'object') {
+          activeConfig = activeRows[0].settings as Record<string, unknown>;
+        }
+      } catch (err) {
+        console.warn('Gagal membaca template terbaru dari DB, menggunakan snapshot:', err);
       }
-    } catch (err) {
-      console.warn('Gagal membaca template terbaru dari DB, menggunakan snapshot:', err);
     }
 
     const config = activeConfig;
@@ -149,13 +181,15 @@ export async function POST(req: Request) {
     const page2Elements = page2Enabled && Array.isArray(page2?.elements) ? page2.elements as TemplateElement[] : [];
 
     // Setup filename
-    const safeCertFilename = webinarCertificate
-      ? formatWebinarCertificateFilename({
-          participantName: certificate.participantName,
-          certificateNumber: certificate.certificateNumber,
-          category: 'Yang Lain',
-        })
-      : `Sertifikat-${certificate.activityTitle}.pdf`.replace(/[/\\?%*:|"<>]/g, '_');
+    const safeCertFilename = isTest
+      ? `Uji-Coba-Sertifikat-${certificate.templateType}.pdf`
+      : webinarCertificate
+        ? formatWebinarCertificateFilename({
+            participantName: certificate.participantName,
+            certificateNumber: certificate.certificateNumber,
+            category: 'Yang Lain',
+          })
+        : `Sertifikat-${certificate.activityTitle}.pdf`.replace(/[/\\?%*:|"<>]/g, '_');
     const encodedTitle = encodeURIComponent(safeCertFilename);
 
     // Disk Cache check: jika PDF sudah pernah dicetak dan template/data nomor belum berubah, kirim langsung dari disk
@@ -167,7 +201,7 @@ export async function POST(req: Request) {
     const cacheDir = path.join(process.cwd(), '.cache', 'certificates');
     const cachedFilePath = path.join(cacheDir, `${certificate.id}_${templateHash}.pdf`);
 
-    if (fs.existsSync(cachedFilePath)) {
+    if (!isTest && fs.existsSync(cachedFilePath)) {
       try {
         const cachedPdf = fs.readFileSync(cachedFilePath);
         return new NextResponse(cachedPdf as BodyInit, {
@@ -184,12 +218,14 @@ export async function POST(req: Request) {
       }
     }
 
-    // Hanya throttle jika belum di-cache (akan memanggil Puppeteer yang berat)
-    const downloadReserved = webinarCertificate
-      ? await reserveCertificateDownload(certificate.id)
-      : await reserveCourseCertificateDownload(certificate.id);
-    if (!downloadReserved) {
-      return NextResponse.json({ error: 'Tunggu beberapa detik sebelum mengunduh ulang.' }, { status: 429 });
+    // Hanya throttle jika belum di-cache dan bukan sesi uji cetak
+    if (!isTest) {
+      const downloadReserved = webinarCertificate
+        ? await reserveCertificateDownload(certificate.id)
+        : await reserveCourseCertificateDownload(certificate.id);
+      if (!downloadReserved) {
+        return NextResponse.json({ error: 'Tunggu beberapa detik sebelum mengunduh ulang.' }, { status: 429 });
+      }
     }
 
     const publicOrigin = process.env.NEXT_PUBLIC_APP_URL
@@ -292,25 +328,28 @@ export async function POST(req: Request) {
 
     let fontFaceCss = '';
     try {
-      const regPath = 'C:/Windows/Fonts/BOOKOS.TTF';
-      const bldPath = 'C:/Windows/Fonts/BOOKOSB.TTF';
-      if (fs.existsSync(regPath) && fs.existsSync(bldPath)) {
-        const regB64 = fs.readFileSync(regPath).toString('base64');
-        const bldB64 = fs.readFileSync(bldPath).toString('base64');
-        fontFaceCss = `
-          @font-face {
-            font-family: 'Bookman Old Style';
-            src: url(data:font/truetype;charset=utf-8;base64,${regB64}) format('truetype');
-            font-weight: normal;
-            font-style: normal;
-          }
-          @font-face {
-            font-family: 'Bookman Old Style';
-            src: url(data:font/truetype;charset=utf-8;base64,${bldB64}) format('truetype');
-            font-weight: bold;
-            font-style: normal;
-          }
-        `;
+      if (process.platform === 'win32') {
+        const windir = process.env.WINDIR || 'C:\\Windows';
+        const regPath = path.join(windir, 'Fonts', 'BOOKOS.TTF');
+        const bldPath = path.join(windir, 'Fonts', 'BOOKOSB.TTF');
+        if (fs.existsSync(regPath) && fs.existsSync(bldPath)) {
+          const regB64 = fs.readFileSync(regPath).toString('base64');
+          const bldB64 = fs.readFileSync(bldPath).toString('base64');
+          fontFaceCss = `
+            @font-face {
+              font-family: 'Bookman Old Style';
+              src: url(data:font/truetype;charset=utf-8;base64,${regB64}) format('truetype');
+              font-weight: normal;
+              font-style: normal;
+            }
+            @font-face {
+              font-family: 'Bookman Old Style';
+              src: url(data:font/truetype;charset=utf-8;base64,${bldB64}) format('truetype');
+              font-weight: bold;
+              font-style: normal;
+            }
+          `;
+        }
       }
     } catch {
       // Fallback to system fonts
@@ -354,14 +393,16 @@ export async function POST(req: Request) {
     await page.setContent(html, { waitUntil: 'load', timeout: 20_000 });
     const pdf = await page.pdf({ width: `${width}px`, height: `${height}px`, landscape: orientation === 'landscape', printBackground: true, margin: { top: 0, right: 0, bottom: 0, left: 0 } });
 
-    // Simpan hasil cetak ke disk server agar pemanggilan berikutnya 0% beban CPU
-    try {
-      if (!fs.existsSync(cacheDir)) {
-        fs.mkdirSync(cacheDir, { recursive: true });
+    // Simpan hasil cetak ke disk server agar pemanggilan berikutnya 0% beban CPU (kecuali sesi uji coba)
+    if (!isTest) {
+      try {
+        if (!fs.existsSync(cacheDir)) {
+          fs.mkdirSync(cacheDir, { recursive: true });
+        }
+        fs.writeFileSync(cachedFilePath, pdf);
+      } catch (saveErr) {
+        console.warn('Gagal menyimpan cache PDF ke disk:', saveErr);
       }
-      fs.writeFileSync(cachedFilePath, pdf);
-    } catch (saveErr) {
-      console.warn('Gagal menyimpan cache PDF ke disk:', saveErr);
     }
 
     return new NextResponse(pdf as BodyInit, {
