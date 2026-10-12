@@ -225,13 +225,22 @@ export default function WebinarDetailClient({
       if (savedNip) {
         setNip(savedNip);
         setSearchCertNip(savedNip);
+        // Cek langsung ke database apakah user ini sudah pernah presensi/punya sertifikat
+        lookupParticipantByNip(savedNip, webinar.id).then(res => {
+          if (res.certificate) {
+            setFoundCertificate(res.certificate);
+            setAttendanceSuccess(true);
+          } else if (res.alreadyAttended) {
+            setAttendanceSuccess(true);
+          }
+        }).catch(() => {});
       }
       if (savedName) setName(savedName);
       if (savedAgency) setAgency(savedAgency);
       if (savedPosition) setPosition(savedPosition);
       if (savedPhone) setPhone(savedPhone);
     }
-  }, [user]);
+  }, [user, webinar.id]);
 
   // Handler auto-lookup NIP dari database
   const handleNipLookup = async (inputNip: string) => {
@@ -243,12 +252,36 @@ export default function WebinarDetailClient({
 
     setIsLookingUpNip(true);
     try {
-      const res = await lookupParticipantByNip(clean);
+      const res = await lookupParticipantByNip(clean, webinar.id);
       if (res.found) {
         setNipFoundInDb(true);
         if (res.name) setName(res.name);
         if (res.agency) setAgency(res.agency);
         if (res.position) setPosition(res.position);
+
+        if (res.certificate) {
+          setFoundCertificate(res.certificate);
+          setAttendanceSuccess(true);
+          setSearchCertNip(clean);
+          toast.success("Anda sudah terdaftar dan sertifikat sudah diterbitkan! Anda dialihkan ke kotak sertifikat.", {
+            duration: 5000,
+          });
+          const formEl = document.getElementById("form-presensi");
+          if (formEl) formEl.scrollIntoView({ behavior: "smooth" });
+          return;
+        }
+
+        if (res.alreadyAttended) {
+          setAttendanceSuccess(true);
+          setSearchCertNip(clean);
+          toast.info("Anda sudah mengisi presensi webinar ini sebelumnya.", {
+            duration: 4000,
+          });
+          const formEl = document.getElementById("form-presensi");
+          if (formEl) formEl.scrollIntoView({ behavior: "smooth" });
+          return;
+        }
+
         toast.info("Data profil ditemukan di database! Data di bawah telah diisi otomatis dan dapat disesuaikan untuk sertifikat.", {
           duration: 4000,
         });
@@ -336,7 +369,12 @@ export default function WebinarDetailClient({
       });
 
       if (res.success) {
-        toast.success(res.message || "Presensi dan evaluasi berhasil dicatat!");
+        if (res.alreadyIssued && res.certificate) {
+          toast.success("Sertifikat Anda telah ditemukan dan siap diunduh!");
+          setFoundCertificate(res.certificate);
+        } else {
+          toast.success(res.message || "Presensi dan evaluasi berhasil dicatat!");
+        }
         setAttendanceSuccess(true);
         if (typeof window !== "undefined") {
           localStorage.setItem(`corpuku_webinar_${webinar.id}_claimed_nip`, cleanNip);
@@ -347,6 +385,8 @@ export default function WebinarDetailClient({
           localStorage.setItem("corpuku_attendee_phone", phone);
         }
         setSearchCertNip(cleanNip);
+        const formEl = document.getElementById("form-presensi");
+        if (formEl) formEl.scrollIntoView({ behavior: "smooth" });
       } else {
         toast.error(res.error || "Gagal menyimpan presensi.");
       }

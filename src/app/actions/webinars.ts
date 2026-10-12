@@ -631,11 +631,13 @@ function mapRegistrationRow(input: Record<string, unknown>): WebinarRegistration
   };
 }
 
-export async function lookupParticipantByNip(nip: string): Promise<{
+export async function lookupParticipantByNip(nip: string, webinarId?: string): Promise<{
   found: boolean;
   name?: string;
   agency?: string;
   position?: string;
+  alreadyAttended?: boolean;
+  certificate?: IssuedWebinarCertificate | null;
   error?: string;
 }> {
   try {
@@ -650,12 +652,41 @@ export async function lookupParticipantByNip(nip: string): Promise<{
     const rateLimit = await consumeRateLimit({
       scope: "webinar_nip_lookup",
       identifier: forwardedIp,
-      limit: 15,
+      limit: 25,
       windowSeconds: 60,
       blockSeconds: 120,
     });
     if (!rateLimit.allowed) {
       return { found: false, error: "Terlalu banyak permintaan. Silakan coba sesaat lagi." };
+    }
+
+    // Cek apakah NIP ini sudah pernah presensi atau memiliki sertifikat di webinar ini
+    let alreadyAttended = false;
+    let certificate: IssuedWebinarCertificate | null = null;
+
+    if (webinarId) {
+      const existingCertRows = await sql`
+        SELECT * FROM issued_webinar_certificates
+        WHERE webinar_id = ${webinarId}
+          AND (participant_nip = ${cleanNip} OR user_id = ${'guest_' + cleanNip})
+          AND revoked_at IS NULL
+        LIMIT 1
+      `;
+      if (existingCertRows[0]) {
+        certificate = mapCertificate(existingCertRows[0]);
+        alreadyAttended = true;
+      } else {
+        const regRows = await sql`
+          SELECT wr.attended FROM webinar_registrations wr
+          JOIN users u ON u.id = wr.user_id
+          WHERE wr.webinar_id = ${webinarId}
+            AND (u.nip = ${cleanNip} OR u.id = ${'guest_' + cleanNip})
+          LIMIT 1
+        `;
+        if (regRows[0]?.attended) {
+          alreadyAttended = true;
+        }
+      }
     }
 
     const rows = await sql`
@@ -671,6 +702,19 @@ export async function lookupParticipantByNip(nip: string): Promise<{
         name: rows[0].name ? String(rows[0].name) : undefined,
         agency: rows[0].instansi_asal ? String(rows[0].instansi_asal) : undefined,
         position: rows[0].jabatan ? String(rows[0].jabatan) : undefined,
+        alreadyAttended,
+        certificate,
+      };
+    }
+
+    if (alreadyAttended || certificate) {
+      return {
+        found: true,
+        name: certificate?.participantName,
+        agency: certificate?.participantInstitution || undefined,
+        position: certificate?.participantPosition || undefined,
+        alreadyAttended,
+        certificate,
       };
     }
 
@@ -690,7 +734,13 @@ export async function submitPublicWebinarAttendance(input: {
   phone?: string;
   skmAnswers: SkmAnswer[];
   feedback?: string;
-}): Promise<{ success: boolean; error?: string; message?: string }> {
+}): Promise<{
+  success: boolean;
+  error?: string;
+  message?: string;
+  alreadyIssued?: boolean;
+  certificate?: IssuedWebinarCertificate | null;
+}> {
   try {
     const webinarId = input.webinarId;
     const nipValidation = validateNipOrNik(input.nip);
@@ -756,7 +806,7 @@ export async function submitPublicWebinarAttendance(input: {
     // Single Certificate Idempotency Lock (Solusi C):
     // Check if certificate already exists for this webinar and NIP
     const existingCertRows = await sql`
-      SELECT id, certificate_number, participant_name
+      SELECT *
       FROM issued_webinar_certificates
       WHERE webinar_id = ${webinarId}
         AND (participant_nip = ${cleanNip} OR user_id = ${'guest_' + cleanNip})
@@ -764,9 +814,12 @@ export async function submitPublicWebinarAttendance(input: {
       LIMIT 1
     `;
     if (existingCertRows.length > 0 && existingCertRows[0]) {
+      const cert = mapCertificate(existingCertRows[0]);
       return {
-        success: false,
-        error: `Sertifikat webinar ini sudah pernah diterbitkan atas nama "${existingCertRows[0].participant_name}" (No: ${existingCertRows[0].certificate_number}). Identitas peserta terkunci demi keamanan integritas sertifikat.`,
+        success: true,
+        alreadyIssued: true,
+        certificate: cert,
+        message: `Sertifikat Anda sudah siap diunduh (No: ${cert.certificateNumber}).`,
       };
     }
 
