@@ -11,6 +11,7 @@ import { getCourseCertificateForDownload, reserveCourseCertificateDownload, getC
 export const runtime = 'nodejs';
 
 type TemplateElement = {
+  id?: unknown;
   type?: unknown;
   text?: unknown;
   imageUrl?: unknown;
@@ -318,9 +319,102 @@ export async function POST(req: Request) {
       return rendered.join('');
     };
 
+    const renderStructuredNaskahDinasHtml = async (source: TemplateElement[]) => {
+      const logoEl = source.find(el => el.type === 'image' && (String(el.id || '').includes('logo') || String(el.text || '').toLowerCase().includes('logo') || (typeof el.imageUrl === 'string' && !el.imageUrl.includes('pab59388nfffraedyngo'))));
+      const kopEl = source.find(el => String(el.id || '') === 'kop_1' || String(el.text || '').includes('KEPALA BADAN'));
+      const titleEl = source.find(el => String(el.id || '') === 'title_1' || String(el.text || '').includes('SERTIFIKAT'));
+      const nomorEl = source.find(el => String(el.id || '') === 'nomor_1' || String(el.text || '').includes('Nomor'));
+      const labelToEl = source.find(el => String(el.id || '') === 'label_to_1' || String(el.text || '').includes('Diberikan'));
+      const tableEl = source.find(el => String(el.id || '') === 'table_identitas_1' || String(el.text || '').includes('Nama :'));
+      const paragraphEl = source.find(el => String(el.id || '') === 'paragraph_1' || String(el.text || '').includes('Atas partisipasinya'));
+      const sigDateEl = source.find(el => String(el.id || '') === 'sig_date' || String(el.text || '').includes('Tanjung Selor'));
+      const sigImgEl = source.find(el => el.type === 'image' && (String(el.id || '').includes('sig') || String(el.text || '').toLowerCase().includes('tanda tangan') || (typeof el.imageUrl === 'string' && el.imageUrl.includes('pab59388nfffraedyngo'))));
+      const footerEl = source.find(el => String(el.id || '') === 'footer_1' || String(el.text || '').includes('BSrE'));
+
+      const rawLogoUrl = allowedAssetUrl(logoEl?.imageUrl) || 'https://res.cloudinary.com/dxtbmu2ui/image/upload/v1778986621/corpuku-academy/tjvwh182kf3vlmctmsan.png';
+      const rawSigUrl = allowedAssetUrl(sigImgEl?.imageUrl) || 'https://res.cloudinary.com/dxtbmu2ui/image/upload/v1791857983/corpuku-academy/pab59388nfffraedyngo.png';
+
+      const [logoDataUri, sigDataUri] = await Promise.all([
+        toDataUri(rawLogoUrl),
+        toDataUri(rawSigUrl),
+      ]);
+
+      const kopText = parseText(kopEl?.text || 'KEPALA BADAN PENGEMBANGAN SUMBER DAYA MANUSIA\nPROVINSI KALIMANTAN UTARA');
+      const titleText = parseText(titleEl?.text || 'SERTIFIKAT');
+      const nomorText = parseText(nomorEl?.text || 'Nomor : {{nomor}}');
+      const labelToText = parseText(labelToEl?.text || 'Diberikan kepada:');
+      const paragraphText = parseText(paragraphEl?.text || 'Atas partisipasinya dalam {{kursus}} yang diselenggarakan oleh Badan Pengembangan Sumber Daya Manusia Provinsi Kalimantan Utara pada tanggal {{tanggal}} secara daring yang meliputi {{jp}} Jam Pelajaran.');
+      const sigDateText = parseText(sigDateEl?.text || 'Tanjung Selor, {{tanggal_terbit}}');
+      const footerText = parseText(footerEl?.text || 'Dokumen ini ditandatangani secara elektronik menggunakan sertifikat elektronik yang diterbitkan oleh Balai Sertifikat Elektronik (BSrE) BSSN');
+
+      const rawTableText = parseText(tableEl?.text || 'Nama : {{nama}}\nNIP/NIK : {{nip}}\nInstansi : {{instansi}}');
+      const tableLines = rawTableText.split('\n').map(l => l.trim()).filter(Boolean);
+      const identityRowsHtml = tableLines.map(line => {
+        const colonIdx = line.indexOf(':');
+        const label = colonIdx === -1 ? line : line.slice(0, colonIdx).trim();
+        const value = colonIdx === -1 ? '' : line.slice(colonIdx + 1).trim();
+        const isName = label.toLowerCase().includes('nama');
+        return `
+          <tr style="vertical-align: top;">
+            <td style="width: 1%; white-space: nowrap; padding: 4px 16px 4px 0; text-align: left; color: #000;">${label}</td>
+            <td style="width: 1%; white-space: nowrap; padding: 4px 16px 4px 0; text-align: center; color: #000;">:</td>
+            <td style="width: auto; text-align: left; padding: 4px 0; color: #000; font-weight: ${isName ? 'bold' : 'normal'};">${value}</td>
+          </tr>
+        `;
+      }).join('');
+
+      return `
+        <div style="display:flex;flex-direction:column;justify-content:space-between;width:100%;height:100%;box-sizing:border-box;padding:${orientation === 'portrait' ? '65px 75px 45px 75px' : '35px 65px 25px 65px'};font-family:'Bookman Old Style','Bookman',serif;color:#000;">
+          <!-- 1. KOP & LOGO -->
+          <div style="text-align:center;display:flex;flex-direction:column;align-items:center;">
+            ${logoDataUri ? `<div style="margin-bottom:12px;width:${orientation === 'portrait' ? '92px' : '75px'};height:${orientation === 'portrait' ? '108px' : '85px'};"><img src="${logoDataUri}" alt="Logo" style="width:100%;height:100%;object-fit:contain;" /></div>` : ''}
+            <div style="font-size:${orientation === 'portrait' ? '16px' : '14px'};font-weight:bold;line-height:1.25;text-transform:uppercase;white-space:pre-line;color:#000;">${kopText}</div>
+          </div>
+
+          <!-- 2. JUDUL DOKUMEN & NOMOR -->
+          <div style="text-align:center;margin:auto 0;padding:12px 0;">
+            <div style="font-size:${orientation === 'portrait' ? '29px' : '25px'};font-weight:bold;letter-spacing:1px;color:#000;margin-bottom:6px;">${titleText}</div>
+            <div style="font-size:${orientation === 'portrait' ? '14px' : '12.5px'};color:#000;">${nomorText}</div>
+          </div>
+
+          <!-- 3. PENGANTAR -->
+          <div style="text-align:center;margin-bottom:8px;">
+            <div style="font-size:${orientation === 'portrait' ? '14px' : '12.5px'};color:#000;">${labelToText}</div>
+          </div>
+
+          <!-- 4. TABEL IDENTITAS PESERTA -->
+          <div style="width:88%;margin:0 auto 12px auto;">
+            <table style="width:100%;border-collapse:collapse;font-size:${orientation === 'portrait' ? '14px' : '12.5px'};">
+              <tbody>${identityRowsHtml}</tbody>
+            </table>
+          </div>
+
+          <!-- 5. PARAGRAF PARTISIPASI -->
+          <div style="width:88%;margin:0 auto auto auto;padding-top:8px;">
+            <div style="font-size:${orientation === 'portrait' ? '14px' : '12.5px'};text-align:justify;line-height:1.6;color:#000;">${paragraphText}</div>
+          </div>
+
+          <!-- 6. BLOK TTE KANAN BAWAH -->
+          <div style="width:88%;margin:0 auto 16px auto;">
+            <div style="display:flex;justify-content:flex-end;">
+              <div style="width:52%;display:flex;flex-direction:column;align-items:flex-start;">
+                <div style="font-size:${orientation === 'portrait' ? '14px' : '12.5px'};color:#000;margin-bottom:8px;">${sigDateText}</div>
+                ${sigDataUri ? `<div style="width:${orientation === 'portrait' ? '230px' : '180px'};height:${orientation === 'portrait' ? '100px' : '75px'};"><img src="${sigDataUri}" alt="TTE" style="width:100%;height:100%;object-fit:contain;object-position:left;" /></div>` : ''}
+              </div>
+            </div>
+          </div>
+
+          <!-- 7. FOOTER BSRE -->
+          <div style="text-align:center;padding-top:8px;">
+            <div style="font-size:${orientation === 'portrait' ? '8.5px' : '7.5px'};color:#5ca0ff;line-height:1.4;">${footerText}</div>
+          </div>
+        </div>
+      `;
+    };
+
     const [elementsHtml, page2ElementsHtml, bgDataUri, page2BgDataUri] = await Promise.all([
-      renderElements(elements),
-      renderElements(page2Elements),
+      templateUrl ? renderElements(elements) : renderStructuredNaskahDinasHtml(elements),
+      page2Enabled ? (page2TemplateUrl ? renderElements(page2Elements) : renderStructuredNaskahDinasHtml(page2Elements)) : Promise.resolve(''),
       toDataUri(templateUrl),
       toDataUri(page2TemplateUrl),
     ]);
@@ -360,7 +454,7 @@ export async function POST(req: Request) {
     }
 
     const renderCertificatePage = (content: string, background: string | null, verification: boolean) =>
-      `<section class="certificate" style="background-image:${background ? `url(&quot;${background}&quot;)` : 'none'}">${content}${verification ? `<div class="verification">Nomor: ${escapeHtml(certificate.certificateNumber)} · Verifikasi: ${escapeHtml(verificationUrl)}</div>` : ''}</section>`;
+      `<section class="certificate" style="background-image:${background ? `url(&quot;${background}&quot;)` : 'none'}">${content}${verification && background ? `<div class="verification">Nomor: ${escapeHtml(certificate.certificateNumber)} · Verifikasi: ${escapeHtml(verificationUrl)}</div>` : ''}</section>`;
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>Sertifikat ${webinarCertificate ? 'Webinar' : 'Kursus'}</title>
       <style>
         ${fontFaceCss}

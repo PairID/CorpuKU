@@ -1389,7 +1389,7 @@ export default function CertificateAdminClient({
           <div className="absolute inset-0 origin-top-left font-sans text-oxford-400 flex items-center justify-center">
             Memuat Render Real-Time...
           </div>
-          <div className="absolute inset-0 z-10 bg-white dark:bg-[#161B2A] overflow-y-auto">
+          <div className={`absolute inset-0 z-10 bg-white dark:bg-[#161B2A] ${isPage2Enabled() ? 'overflow-y-auto' : 'overflow-hidden'}`}>
             <CertificateView data={previewData} config={settings[activeTab]} />
           </div>
         </div>

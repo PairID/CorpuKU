@@ -219,29 +219,212 @@ export const CertificateView: React.FC<Props> = ({ data, config = DEFAULT_CONFIG
         })
     );
 
-    const renderPage = (bgImage: string | null | undefined, hasCustomBg: boolean, elements: TextElement[]) => (
-        <div 
-            className="w-full bg-white dark:bg-[#161B2A] relative overflow-hidden flex flex-col"
-            style={{
-                aspectRatio,
-                containerType: 'inline-size',
-                backgroundImage: bgImage ? `url(${bgImage})` : 'none',
-                backgroundSize: '100% 100%',
-                backgroundPosition: 'center',
-                backgroundRepeat: 'no-repeat',
-                boxShadow: 'none',
-            }}
-        >
-            {/* If no custom template, render default decorative borders */}
-            {/* Standard white background with no decorations as default */}
+    const renderStructuredNaskahDinas = (elements: TextElement[]) => {
+        const logoEl = elements.find(el => el.type === 'image' && (el.id?.includes('logo') || el.text?.toLowerCase().includes('logo') || (el.imageUrl && !el.imageUrl.includes('pab59388nfffraedyngo'))));
+        const kopEl = elements.find(el => el.id === 'kop_1' || el.text?.includes('KEPALA BADAN'));
+        const titleEl = elements.find(el => el.id === 'title_1' || el.text?.includes('SERTIFIKAT'));
+        const nomorEl = elements.find(el => el.id === 'nomor_1' || el.text?.includes('Nomor'));
+        const labelToEl = elements.find(el => el.id === 'label_to_1' || el.text?.includes('Diberikan'));
+        const tableEl = elements.find(el => el.id === 'table_identitas_1' || el.text?.includes('Nama :'));
+        const paragraphEl = elements.find(el => el.id === 'paragraph_1' || el.text?.includes('Atas partisipasinya'));
+        const sigDateEl = elements.find(el => el.id === 'sig_date' || el.text?.includes('Tanjung Selor'));
+        const sigImgEl = elements.find(el => el.type === 'image' && (el.id?.includes('sig') || el.text?.toLowerCase().includes('tanda tangan') || el.imageUrl?.includes('pab59388nfffraedyngo')));
+        const footerEl = elements.find(el => el.id === 'footer_1' || el.text?.includes('BSrE'));
 
-            {/* Elements */}
-            {renderElements(elements)}
-        </div>
-    );
+        const logoUrl = logoEl?.imageUrl || 'https://res.cloudinary.com/dxtbmu2ui/image/upload/v1778986621/corpuku-academy/tjvwh182kf3vlmctmsan.png';
+        const kopText = parseText(kopEl?.text || 'KEPALA BADAN PENGEMBANGAN SUMBER DAYA MANUSIA\nPROVINSI KALIMANTAN UTARA');
+        const titleText = parseText(titleEl?.text || 'SERTIFIKAT');
+        const nomorText = parseText(nomorEl?.text || 'Nomor : {{nomor}}');
+        const labelToText = parseText(labelToEl?.text || 'Diberikan kepada:');
+        const paragraphText = parseText(paragraphEl?.text || 'Atas partisipasinya dalam {{kursus}} yang diselenggarakan oleh Badan Pengembangan Sumber Daya Manusia Provinsi Kalimantan Utara pada tanggal {{tanggal}} secara daring yang meliputi {{jp}} Jam Pelajaran.');
+        const sigDateText = parseText(sigDateEl?.text || 'Tanjung Selor, {{tanggal_terbit}}');
+        const sigUrl = sigImgEl?.imageUrl || 'https://res.cloudinary.com/dxtbmu2ui/image/upload/v1791857983/corpuku-academy/pab59388nfffraedyngo.png';
+        const footerText = parseText(footerEl?.text || 'Dokumen ini ditandatangani secara elektronik menggunakan sertifikat elektronik yang diterbitkan oleh Balai Sertifikat Elektronik (BSrE) BSSN');
+
+        const rawTableText = parseText(tableEl?.text || 'Nama : {{nama}}\nNIP/NIK : {{nip}}\nInstansi : {{instansi}}');
+        const tableLines = rawTableText.split('\n').map(l => l.trim()).filter(Boolean);
+        const identityRows = tableLines.map(line => {
+            const colonIdx = line.indexOf(':');
+            if (colonIdx === -1) return { label: line, value: '' };
+            return {
+                label: line.slice(0, colonIdx).trim(),
+                value: line.slice(colonIdx + 1).trim(),
+            };
+        });
+
+        const fontBookman = '"Bookman Old Style", "Bookman", "URW Bookman L", "Palatino", serif';
+
+        return (
+            <div 
+                className="w-full h-full bg-white text-black flex flex-col justify-between"
+                style={{
+                    aspectRatio,
+                    containerType: 'inline-size',
+                    fontFamily: fontBookman,
+                    padding: isPortrait ? '7cqi 8cqi 5cqi 8cqi' : '4cqi 7cqi 3cqi 7cqi',
+                    boxSizing: 'border-box',
+                    overflow: 'hidden',
+                }}
+            >
+                {/* 1. KOP & LOGO */}
+                <div className="flex flex-col items-center text-center">
+                    {logoUrl && (
+                        <div 
+                            className="relative mb-2"
+                            style={{ 
+                                width: isPortrait ? '12cqi' : '8cqi', 
+                                height: isPortrait ? '14cqi' : '10cqi' 
+                            }}
+                        >
+                            <Image 
+                                src={logoUrl} 
+                                alt="Logo Pemprov" 
+                                fill 
+                                sizes="100vw"
+                                unoptimized 
+                                className="object-contain" 
+                            />
+                        </div>
+                    )}
+                    <h1 
+                        className="font-bold leading-tight uppercase whitespace-pre-line text-black"
+                        style={{ fontSize: isPortrait ? '2.1cqi' : '1.7cqi' }}
+                    >
+                        {kopText}
+                    </h1>
+                </div>
+
+                {/* 2. JUDUL DOKUMEN & NOMOR */}
+                <div className="text-center my-auto py-2">
+                    <h2 
+                        className="font-bold tracking-wider text-black mb-1"
+                        style={{ fontSize: isPortrait ? '3.8cqi' : '3.2cqi' }}
+                    >
+                        {titleText}
+                    </h2>
+                    <p 
+                        className="text-black"
+                        style={{ fontSize: isPortrait ? '1.8cqi' : '1.5cqi' }}
+                    >
+                        {nomorText}
+                    </p>
+                </div>
+
+                {/* 3. PENGANTAR */}
+                <div className="text-center mb-1">
+                    <p 
+                        className="text-black"
+                        style={{ fontSize: isPortrait ? '1.8cqi' : '1.5cqi' }}
+                    >
+                        {labelToText}
+                    </p>
+                </div>
+
+                {/* 4. TABEL IDENTITAS PESERTA (RATA TITIK DUA) */}
+                <div className="mx-auto w-[88%] mb-2">
+                    <table className="w-full border-collapse" style={{ fontSize: isPortrait ? '1.8cqi' : '1.5cqi' }}>
+                        <tbody>
+                            {identityRows.map((row, idx) => {
+                                const isName = row.label.toLowerCase().includes('nama');
+                                return (
+                                    <tr key={idx} className="align-top">
+                                        <td className="w-1 whitespace-nowrap pr-4 py-1 text-left text-black">
+                                            {row.label}
+                                        </td>
+                                        <td className="w-1 whitespace-nowrap pr-4 py-1 text-center text-black">
+                                            :
+                                        </td>
+                                        <td className={`w-auto text-left py-1 text-black ${isName ? 'font-bold' : ''}`}>
+                                            {row.value}
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+
+                {/* 5. PARAGRAF PARTISIPASI */}
+                <div className="mx-auto w-[88%] mb-auto pt-2">
+                    <p 
+                        className="text-justify leading-relaxed text-black"
+                        style={{ fontSize: isPortrait ? '1.8cqi' : '1.5cqi' }}
+                    >
+                        {paragraphText}
+                    </p>
+                </div>
+
+                {/* 6. BLOK TANDA TANGAN ELEKTRONIK (KANAN BAWAH) */}
+                <div className="mx-auto w-[88%] mb-4">
+                    <div className="flex justify-end">
+                        <div className="w-[50%] flex flex-col items-start">
+                            <p 
+                                className="text-black mb-1.5"
+                                style={{ fontSize: isPortrait ? '1.8cqi' : '1.5cqi' }}
+                            >
+                                {sigDateText}
+                            </p>
+                            {sigUrl && (
+                                <div 
+                                    className="relative"
+                                    style={{ 
+                                        width: isPortrait ? '30cqi' : '22cqi', 
+                                        height: isPortrait ? '13cqi' : '10cqi' 
+                                    }}
+                                >
+                                    <Image 
+                                        src={sigUrl} 
+                                        alt="TTE Pejabat" 
+                                        fill 
+                                        sizes="100vw"
+                                        unoptimized 
+                                        className="object-contain object-left" 
+                                    />
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+
+                {/* 7. FOOTER BSRE */}
+                <div className="text-center pt-2">
+                    <p 
+                        className="text-[#5ca0ff] leading-normal"
+                        style={{ fontSize: isPortrait ? '1.1cqi' : '0.9cqi' }}
+                    >
+                        {footerText}
+                    </p>
+                </div>
+            </div>
+        );
+    };
+
+    const renderPage = (bgImage: string | null | undefined, hasCustomBg: boolean, elements: TextElement[]) => {
+        if (!hasCustomBg) {
+            return renderStructuredNaskahDinas(elements);
+        }
+
+        return (
+            <div 
+                className="w-full bg-white dark:bg-[#161B2A] relative overflow-hidden flex flex-col"
+                style={{
+                    aspectRatio,
+                    containerType: 'inline-size',
+                    backgroundImage: bgImage ? `url(${bgImage})` : 'none',
+                    backgroundSize: '100% 100%',
+                    backgroundPosition: 'center',
+                    backgroundRepeat: 'no-repeat',
+                    boxShadow: 'none',
+                }}
+            >
+                {/* Elements */}
+                {renderElements(elements)}
+            </div>
+        );
+    };
 
     return (
-        <div className="w-full">
+        <div className="w-full h-full">
             {/* Page 1 */}
             {renderPage(bgUrl, hasCustomTemplate, config.elements)}
 
