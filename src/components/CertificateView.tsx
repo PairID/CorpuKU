@@ -220,7 +220,6 @@ export const CertificateView: React.FC<Props> = ({ data, config = DEFAULT_CONFIG
     );
 
     const renderStructuredNaskahDinas = (elements: TextElement[]) => {
-        const logoEl = elements.find(el => el.type === 'image' && (el.id?.includes('logo') || el.text?.toLowerCase().includes('logo') || (el.imageUrl && !el.imageUrl.includes('pab59388nfffraedyngo'))));
         const kopEl = elements.find(el => el.id === 'kop_1' || el.text?.includes('KEPALA BADAN'));
         const titleEl = elements.find(el => el.id === 'title_1' || el.text?.includes('SERTIFIKAT'));
         const nomorEl = elements.find(el => el.id === 'nomor_1' || el.text?.includes('Nomor'));
@@ -229,9 +228,7 @@ export const CertificateView: React.FC<Props> = ({ data, config = DEFAULT_CONFIG
         const paragraphEl = elements.find(el => el.id === 'paragraph_1' || el.text?.includes('Atas partisipasinya'));
         const sigDateEl = elements.find(el => el.id === 'sig_date' || el.text?.includes('Tanjung Selor'));
         const sigImgEl = elements.find(el => el.type === 'image' && (el.id?.includes('sig') || el.text?.toLowerCase().includes('tanda tangan') || el.imageUrl?.includes('pab59388nfffraedyngo')));
-        const footerEl = elements.find(el => el.id === 'footer_1' || el.text?.includes('BSrE'));
 
-        const logoUrl = logoEl?.imageUrl || 'https://res.cloudinary.com/dxtbmu2ui/image/upload/v1778986621/corpuku-academy/tjvwh182kf3vlmctmsan.png';
         const kopText = parseText(kopEl?.text || 'KEPALA BADAN PENGEMBANGAN SUMBER DAYA MANUSIA\nPROVINSI KALIMANTAN UTARA');
         const titleText = parseText(titleEl?.text || 'SERTIFIKAT');
         const nomorText = parseText(nomorEl?.text || 'Nomor : {{nomor}}');
@@ -239,7 +236,6 @@ export const CertificateView: React.FC<Props> = ({ data, config = DEFAULT_CONFIG
         const paragraphText = parseText(paragraphEl?.text || 'Atas partisipasinya dalam {{kursus}} yang diselenggarakan oleh Badan Pengembangan Sumber Daya Manusia Provinsi Kalimantan Utara pada tanggal {{tanggal}} secara daring yang meliputi {{jp}} Jam Pelajaran.');
         const sigDateText = parseText(sigDateEl?.text || 'Tanjung Selor, {{tanggal_terbit}}');
         const sigUrl = sigImgEl?.imageUrl || 'https://res.cloudinary.com/dxtbmu2ui/image/upload/v1791857983/corpuku-academy/pab59388nfffraedyngo.png';
-        const footerText = parseText(footerEl?.text || 'Dokumen ini ditandatangani secara elektronik menggunakan sertifikat elektronik yang diterbitkan oleh Balai Sertifikat Elektronik (BSrE) BSSN');
 
         const rawTableText = parseText(tableEl?.text || 'Nama : {{nama}}\nNIP/NIK : {{nip}}\nInstansi : {{instansi}}');
         const tableLines = rawTableText.split('\n').map(l => l.trim()).filter(Boolean);
@@ -256,145 +252,130 @@ export const CertificateView: React.FC<Props> = ({ data, config = DEFAULT_CONFIG
 
         return (
             <div 
-                className="w-full h-full bg-white text-black flex flex-col justify-between"
+                className="w-full h-full bg-white text-black"
                 style={{
                     aspectRatio,
                     containerType: 'inline-size',
                     fontFamily: fontBookman,
-                    padding: isPortrait ? '7cqi 8cqi 5cqi 8cqi' : '4cqi 7cqi 3cqi 7cqi',
+                    padding: isPortrait ? '6.5cqi 10.5cqi 5cqi 10.5cqi' : '4cqi 8cqi 3cqi 8cqi',
                     boxSizing: 'border-box',
                     overflow: 'hidden',
                 }}
             >
-                {/* 1. KOP & LOGO */}
-                <div className="flex flex-col items-center text-center">
-                    {logoUrl && (
-                        <div 
-                            className="relative mb-2"
-                            style={{ 
-                                width: isPortrait ? '12cqi' : '8cqi', 
-                                height: isPortrait ? '14cqi' : '10cqi' 
-                            }}
-                        >
-                            <Image 
-                                src={logoUrl} 
-                                alt="Logo Pemprov" 
-                                fill 
-                                sizes="100vw"
-                                unoptimized 
-                                className="object-contain" 
-                            />
-                        </div>
-                    )}
-                    <h1 
-                        className="font-bold leading-tight uppercase whitespace-pre-line text-black"
-                        style={{ fontSize: isPortrait ? '2.1cqi' : '1.7cqi' }}
-                    >
-                        {kopText}
-                    </h1>
-                </div>
-
-                {/* 2. JUDUL DOKUMEN & NOMOR */}
-                <div className="text-center my-auto py-2">
-                    <h2 
-                        className="font-bold tracking-wider text-black mb-1"
-                        style={{ fontSize: isPortrait ? '3.8cqi' : '3.2cqi' }}
-                    >
-                        {titleText}
-                    </h2>
-                    <p 
-                        className="text-black"
-                        style={{ fontSize: isPortrait ? '1.8cqi' : '1.5cqi' }}
-                    >
-                        {nomorText}
-                    </p>
-                </div>
-
-                {/* 3. PENGANTAR */}
-                <div className="text-center mb-1">
-                    <p 
-                        className="text-black"
-                        style={{ fontSize: isPortrait ? '1.8cqi' : '1.5cqi' }}
-                    >
-                        {labelToText}
-                    </p>
-                </div>
-
-                {/* 4. TABEL IDENTITAS PESERTA (RATA TITIK DUA) */}
-                <div className="mx-auto w-[88%] mb-2">
-                    <table className="w-full border-collapse" style={{ fontSize: isPortrait ? '1.8cqi' : '1.5cqi' }}>
-                        <tbody>
-                            {identityRows.map((row, idx) => {
-                                const isName = row.label.toLowerCase().includes('nama');
-                                return (
-                                    <tr key={idx} className="align-top">
-                                        <td className="w-1 whitespace-nowrap pr-4 py-1 text-left text-black">
-                                            {row.label}
-                                        </td>
-                                        <td className="w-1 whitespace-nowrap pr-4 py-1 text-center text-black">
-                                            :
-                                        </td>
-                                        <td className={`w-auto text-left py-1 text-black ${isName ? 'font-bold' : ''}`}>
-                                            {row.value}
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
-                </div>
-
-                {/* 5. PARAGRAF PARTISIPASI */}
-                <div className="mx-auto w-[88%] mb-auto pt-2">
-                    <p 
-                        className="text-justify leading-relaxed text-black"
-                        style={{ fontSize: isPortrait ? '1.8cqi' : '1.5cqi' }}
-                    >
-                        {paragraphText}
-                    </p>
-                </div>
-
-                {/* 6. BLOK TANDA TANGAN ELEKTRONIK (KANAN BAWAH) */}
-                <div className="mx-auto w-[88%] mb-4">
-                    <div className="flex justify-end">
-                        <div className="w-[50%] flex flex-col items-start">
-                            <p 
-                                className="text-black mb-1.5"
-                                style={{ fontSize: isPortrait ? '1.8cqi' : '1.5cqi' }}
-                            >
-                                {sigDateText}
-                            </p>
-                            {sigUrl && (
-                                <div 
-                                    className="relative"
-                                    style={{ 
-                                        width: isPortrait ? '30cqi' : '22cqi', 
-                                        height: isPortrait ? '13cqi' : '10cqi' 
-                                    }}
+                <table className="w-full border-collapse" style={{ tableLayout: 'fixed' }}>
+                    <tbody>
+                        {/* 1. KOP SURAT (TANPA LOGO SESUAI NASKAH DINAS RESMI) */}
+                        <tr>
+                            <td className="text-center pb-[4.2cqi]">
+                                <h1 
+                                    className="font-bold uppercase whitespace-pre-line text-black leading-snug"
+                                    style={{ fontSize: isPortrait ? '2.0cqi' : '1.6cqi' }}
                                 >
-                                    <Image 
-                                        src={sigUrl} 
-                                        alt="TTE Pejabat" 
-                                        fill 
-                                        sizes="100vw"
-                                        unoptimized 
-                                        className="object-contain object-left" 
-                                    />
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </div>
+                                    {kopText}
+                                </h1>
+                            </td>
+                        </tr>
 
-                {/* 7. FOOTER BSRE */}
-                <div className="text-center pt-2">
-                    <p 
-                        className="text-[#5ca0ff] leading-normal"
-                        style={{ fontSize: isPortrait ? '1.1cqi' : '0.9cqi' }}
-                    >
-                        {footerText}
-                    </p>
-                </div>
+                        {/* 2. JUDUL DOKUMEN & NOMOR */}
+                        <tr>
+                            <td className="text-center pb-[3.8cqi]">
+                                <h2 
+                                    className="font-bold tracking-wider text-black mb-[1cqi]"
+                                    style={{ fontSize: isPortrait ? '3.5cqi' : '2.8cqi' }}
+                                >
+                                    {titleText}
+                                </h2>
+                                <p 
+                                    className="text-black"
+                                    style={{ fontSize: isPortrait ? '1.8cqi' : '1.4cqi' }}
+                                >
+                                    {nomorText}
+                                </p>
+                            </td>
+                        </tr>
+
+                        {/* 3. PENGANTAR */}
+                        <tr>
+                            <td className="text-center pb-[2.5cqi]">
+                                <p 
+                                    className="text-black"
+                                    style={{ fontSize: isPortrait ? '1.8cqi' : '1.4cqi' }}
+                                >
+                                    {labelToText}
+                                </p>
+                            </td>
+                        </tr>
+
+                        {/* 4. TABEL IDENTITAS PESERTA (RATA TITIK DUA) */}
+                        <tr>
+                            <td className="pb-[3.2cqi]">
+                                <table className="w-[75%] mx-auto border-collapse" style={{ fontSize: isPortrait ? '1.8cqi' : '1.4cqi' }}>
+                                    <tbody>
+                                        {identityRows.map((row, idx) => (
+                                            <tr key={idx} className="align-top">
+                                                <td className="w-1 whitespace-nowrap pr-[2.5cqi] py-[0.4cqi] text-left text-black">
+                                                    {row.label}
+                                                </td>
+                                                <td className="w-1 whitespace-nowrap pr-[2.5cqi] py-[0.4cqi] text-center text-black">
+                                                    :
+                                                </td>
+                                                <td className="w-auto text-left py-[0.4cqi] text-black">
+                                                    {row.value}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </td>
+                        </tr>
+
+                        {/* 5. PARAGRAF PARTISIPASI */}
+                        <tr>
+                            <td className="pb-[4.2cqi]">
+                                <p 
+                                    className="text-justify leading-relaxed text-black"
+                                    style={{ fontSize: isPortrait ? '1.8cqi' : '1.4cqi' }}
+                                >
+                                    {paragraphText}
+                                </p>
+                            </td>
+                        </tr>
+
+                        {/* 6. BLOK TANDA TANGAN (KANAN) */}
+                        <tr>
+                            <td>
+                                <div className="flex justify-end">
+                                    <div className="w-[35cqi] flex flex-col items-start">
+                                        <p 
+                                            className="text-black mb-[1.2cqi]"
+                                            style={{ fontSize: isPortrait ? '1.8cqi' : '1.4cqi' }}
+                                        >
+                                            {sigDateText}
+                                        </p>
+                                        {sigUrl && (
+                                            <div 
+                                                className="relative"
+                                                style={{ 
+                                                    width: isPortrait ? '32cqi' : '24cqi', 
+                                                    height: isPortrait ? '13cqi' : '10cqi' 
+                                                }}
+                                            >
+                                                <Image 
+                                                    src={sigUrl} 
+                                                    alt="TTE Pejabat" 
+                                                    fill 
+                                                    sizes="100vw"
+                                                    unoptimized 
+                                                    className="object-contain object-left" 
+                                                />
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
         );
     };
