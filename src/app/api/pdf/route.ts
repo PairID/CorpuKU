@@ -328,31 +328,36 @@ export async function POST(req: Request) {
 
     let fontFaceCss = '';
     try {
-      if (process.platform === 'win32') {
+      const publicFontDir = path.join(process.cwd(), 'public', 'fonts', 'bookman');
+      let regPath = path.join(publicFontDir, 'BOOKOS.TTF');
+      let bldPath = path.join(publicFontDir, 'BOOKOSB.TTF');
+
+      if (!fs.existsSync(regPath) && process.platform === 'win32') {
         const windir = process.env.WINDIR || 'C:\\Windows';
-        const regPath = path.join(windir, 'Fonts', 'BOOKOS.TTF');
-        const bldPath = path.join(windir, 'Fonts', 'BOOKOSB.TTF');
-        if (fs.existsSync(regPath) && fs.existsSync(bldPath)) {
-          const regB64 = fs.readFileSync(regPath).toString('base64');
-          const bldB64 = fs.readFileSync(bldPath).toString('base64');
-          fontFaceCss = `
-            @font-face {
-              font-family: 'Bookman Old Style';
-              src: url(data:font/truetype;charset=utf-8;base64,${regB64}) format('truetype');
-              font-weight: normal;
-              font-style: normal;
-            }
-            @font-face {
-              font-family: 'Bookman Old Style';
-              src: url(data:font/truetype;charset=utf-8;base64,${bldB64}) format('truetype');
-              font-weight: bold;
-              font-style: normal;
-            }
-          `;
-        }
+        regPath = path.join(windir, 'Fonts', 'BOOKOS.TTF');
+        bldPath = path.join(windir, 'Fonts', 'BOOKOSB.TTF');
       }
-    } catch {
-      // Fallback to system fonts
+
+      if (fs.existsSync(regPath) && fs.existsSync(bldPath)) {
+        const regB64 = fs.readFileSync(regPath).toString('base64');
+        const bldB64 = fs.readFileSync(bldPath).toString('base64');
+        fontFaceCss = `
+          @font-face {
+            font-family: 'Bookman Old Style';
+            src: url(data:font/truetype;charset=utf-8;base64,${regB64}) format('truetype');
+            font-weight: normal;
+            font-style: normal;
+          }
+          @font-face {
+            font-family: 'Bookman Old Style';
+            src: url(data:font/truetype;charset=utf-8;base64,${bldB64}) format('truetype');
+            font-weight: bold;
+            font-style: normal;
+          }
+        `;
+      }
+    } catch (fontErr) {
+      console.warn('Gagal memuat font Bookman Old Style:', fontErr);
     }
 
     const renderCertificatePage = (content: string, background: string | null, verification: boolean) =>
@@ -360,9 +365,10 @@ export async function POST(req: Request) {
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>Sertifikat ${webinarCertificate ? 'Webinar' : 'Kursus'}</title>
       <style>
         ${fontFaceCss}
-        @page{size:${width}px ${height}px;margin:0}
-        html,body{margin:0;padding:0;width:${width}px;height:${height}px;font-family:'Bookman Old Style','Bookman',serif;background:#fff}
-        .certificate{position:relative;width:${width}px;height:${height}px;background-size:100% 100%;background-repeat:no-repeat;break-after:page;page-break-after:always}
+        @page{size:A4 ${orientation};margin:0}
+        *,*::before,*::after{box-sizing:border-box}
+        html,body{margin:0;padding:0;width:${orientation === 'landscape' ? '297mm' : '210mm'};height:${orientation === 'landscape' ? '210mm' : '297mm'};font-family:'Bookman Old Style','Bookman',serif;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+        .certificate{position:relative;width:${orientation === 'landscape' ? '297mm' : '210mm'};height:${orientation === 'landscape' ? '210mm' : '297mm'};background-size:100% 100%;background-repeat:no-repeat;break-after:page;page-break-after:always;overflow:hidden}
         .certificate:last-child{break-after:auto;page-break-after:auto}
         .verification{position:absolute;left:4%;right:4%;bottom:2%;font:10px Arial,sans-serif;color:#374151;text-align:center;overflow-wrap:anywhere}
       </style>
@@ -380,7 +386,7 @@ export async function POST(req: Request) {
       '--no-first-run',
       '--no-zygote',
       '--single-process',
-      '--font-render-hinting=none',
+      '--font-render-hinting=medium',
     ];
 
     browser = await puppeteer.launch({
@@ -390,8 +396,15 @@ export async function POST(req: Request) {
     });
     const page = await browser.newPage();
     await page.setViewport({ width, height, deviceScaleFactor: 2 });
-    await page.setContent(html, { waitUntil: 'load', timeout: 20_000 });
-    const pdf = await page.pdf({ width: `${width}px`, height: `${height}px`, landscape: orientation === 'landscape', printBackground: true, margin: { top: 0, right: 0, bottom: 0, left: 0 } });
+    await page.setContent(html, { waitUntil: ['load', 'networkidle0'], timeout: 20_000 });
+    await page.evaluateHandle('document.fonts.ready');
+    const pdf = await page.pdf({
+      format: 'A4',
+      landscape: orientation === 'landscape',
+      printBackground: true,
+      preferCSSPageSize: true,
+      margin: { top: 0, right: 0, bottom: 0, left: 0 },
+    });
 
     // Simpan hasil cetak ke disk server agar pemanggilan berikutnya 0% beban CPU (kecuali sesi uji coba)
     if (!isTest) {

@@ -1,5 +1,21 @@
 @import "tailwindcss";
 
+@font-face {
+  font-family: 'Bookman Old Style';
+  src: url('/fonts/bookman/BOOKOS.TTF') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Bookman Old Style';
+  src: url('/fonts/bookman/BOOKOSB.TTF') format('truetype');
+  font-weight: bold;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   --background: #f9f8f6; /* rgb(249, 248, 246) */
   --foreground: #374151; /* rgb(55, 65, 81) */
