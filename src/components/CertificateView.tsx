@@ -220,6 +220,7 @@ export const CertificateView: React.FC<Props> = ({ data, config = DEFAULT_CONFIG
     );
 
     const renderStructuredNaskahDinas = (elements: TextElement[]) => {
+        const logoEl = elements.find(el => el.type === 'image' && (el.id?.includes('logo') || el.text?.toLowerCase().includes('logo') || (el.imageUrl && !el.imageUrl.includes('pab59388nfffraedyngo'))));
         const kopEl = elements.find(el => el.id === 'kop_1' || el.text?.includes('KEPALA BADAN'));
         const titleEl = elements.find(el => el.id === 'title_1' || el.text?.includes('SERTIFIKAT'));
         const nomorEl = elements.find(el => el.id === 'nomor_1' || el.text?.includes('Nomor'));
@@ -229,6 +230,7 @@ export const CertificateView: React.FC<Props> = ({ data, config = DEFAULT_CONFIG
         const sigDateEl = elements.find(el => el.id === 'sig_date' || el.text?.includes('Tanjung Selor'));
         const sigImgEl = elements.find(el => el.type === 'image' && (el.id?.includes('sig') || el.text?.toLowerCase().includes('tanda tangan') || el.imageUrl?.includes('pab59388nfffraedyngo')));
 
+        const logoUrl = logoEl?.imageUrl || 'https://res.cloudinary.com/dxtbmu2ui/image/upload/v1778986621/corpuku-academy/tjvwh182kf3vlmctmsan.png';
         const kopText = parseText(kopEl?.text || 'KEPALA BADAN PENGEMBANGAN SUMBER DAYA MANUSIA\nPROVINSI KALIMANTAN UTARA');
         const titleText = parseText(titleEl?.text || 'SERTIFIKAT');
         const nomorText = parseText(nomorEl?.text || 'Nomor : {{nomor}}');
@@ -257,28 +259,52 @@ export const CertificateView: React.FC<Props> = ({ data, config = DEFAULT_CONFIG
                     aspectRatio,
                     containerType: 'inline-size',
                     fontFamily: fontBookman,
-                    padding: isPortrait ? '6.5cqi 10.5cqi 5cqi 10.5cqi' : '4cqi 8cqi 3cqi 8cqi',
+                    padding: isPortrait ? '5.5cqi 10.0cqi 5cqi 10.0cqi' : '4cqi 8cqi 3cqi 8cqi',
                     boxSizing: 'border-box',
                     overflow: 'hidden',
                 }}
             >
                 <table className="w-full border-collapse" style={{ tableLayout: 'fixed' }}>
                     <tbody>
-                        {/* 1. KOP SURAT (TANPA LOGO SESUAI NASKAH DINAS RESMI) */}
+                        {/* 1. LOGO PEMPROV DI ATAS KOP SURAT */}
                         <tr>
-                            <td className="text-center pb-[4.2cqi]">
+                            <td className="text-center pb-[1.5cqi]">
+                                {logoUrl && (
+                                    <div 
+                                        className="relative mx-auto"
+                                        style={{ 
+                                            width: isPortrait ? '9.8cqi' : '7.5cqi', 
+                                            height: isPortrait ? '11.8cqi' : '9.0cqi' 
+                                        }}
+                                    >
+                                        <Image 
+                                            src={logoUrl} 
+                                            alt="Logo Pemprov Kaltara" 
+                                            fill 
+                                            sizes="100vw"
+                                            unoptimized 
+                                            className="object-contain" 
+                                        />
+                                    </div>
+                                )}
+                            </td>
+                        </tr>
+
+                        {/* 2. KOP SURAT RESMI */}
+                        <tr>
+                            <td className="text-center pb-[3.8cqi]">
                                 <h1 
                                     className="font-bold uppercase whitespace-pre-line text-black leading-snug"
-                                    style={{ fontSize: isPortrait ? '2.0cqi' : '1.6cqi' }}
+                                    style={{ fontSize: isPortrait ? '1.95cqi' : '1.6cqi' }}
                                 >
                                     {kopText}
                                 </h1>
                             </td>
                         </tr>
 
-                        {/* 2. JUDUL DOKUMEN & NOMOR */}
+                        {/* 3. JUDUL DOKUMEN & NOMOR */}
                         <tr>
-                            <td className="text-center pb-[3.8cqi]">
+                            <td className="text-center pb-[3.2cqi]">
                                 <h2 
                                     className="font-bold tracking-wider text-black mb-[1cqi]"
                                     style={{ fontSize: isPortrait ? '3.5cqi' : '2.8cqi' }}
@@ -294,9 +320,9 @@ export const CertificateView: React.FC<Props> = ({ data, config = DEFAULT_CONFIG
                             </td>
                         </tr>
 
-                        {/* 3. PENGANTAR */}
+                        {/* 4. PENGANTAR */}
                         <tr>
-                            <td className="text-center pb-[2.5cqi]">
+                            <td className="text-center pb-[2.2cqi]">
                                 <p 
                                     className="text-black"
                                     style={{ fontSize: isPortrait ? '1.8cqi' : '1.4cqi' }}
@@ -306,20 +332,20 @@ export const CertificateView: React.FC<Props> = ({ data, config = DEFAULT_CONFIG
                             </td>
                         </tr>
 
-                        {/* 4. TABEL IDENTITAS PESERTA (RATA TITIK DUA) */}
+                        {/* 5. TABEL IDENTITAS PESERTA (RATA KIRI SEGARIS DENGAN KATA "ATAS") */}
                         <tr>
-                            <td className="pb-[3.2cqi]">
-                                <table className="w-[75%] mx-auto border-collapse" style={{ fontSize: isPortrait ? '1.8cqi' : '1.4cqi' }}>
+                            <td className="pb-[2.8cqi] text-left">
+                                <table className="border-collapse m-0 text-left" style={{ fontSize: isPortrait ? '1.8cqi' : '1.4cqi' }}>
                                     <tbody>
                                         {identityRows.map((row, idx) => (
                                             <tr key={idx} className="align-top">
-                                                <td className="w-1 whitespace-nowrap pr-[2.5cqi] py-[0.4cqi] text-left text-black">
+                                                <td className="whitespace-nowrap pr-[1.2cqi] py-[0.35cqi] text-left text-black" style={{ width: '12.5cqi' }}>
                                                     {row.label}
                                                 </td>
-                                                <td className="w-1 whitespace-nowrap pr-[2.5cqi] py-[0.4cqi] text-center text-black">
+                                                <td className="whitespace-nowrap pr-[1.2cqi] py-[0.35cqi] text-center text-black" style={{ width: '3cqi' }}>
                                                     :
                                                 </td>
-                                                <td className="w-auto text-left py-[0.4cqi] text-black">
+                                                <td className="text-left py-[0.35cqi] text-black">
                                                     {row.value}
                                                 </td>
                                             </tr>
@@ -329,11 +355,11 @@ export const CertificateView: React.FC<Props> = ({ data, config = DEFAULT_CONFIG
                             </td>
                         </tr>
 
-                        {/* 5. PARAGRAF PARTISIPASI */}
+                        {/* 6. PARAGRAF PARTISIPASI (TEPI KIRI SEGARIS PERSIS DENGAN TABEL IDENTITAS) */}
                         <tr>
-                            <td className="pb-[4.2cqi]">
+                            <td className="pb-[4.0cqi]">
                                 <p 
-                                    className="text-justify leading-relaxed text-black"
+                                    className="text-justify leading-relaxed text-black m-0"
                                     style={{ fontSize: isPortrait ? '1.8cqi' : '1.4cqi' }}
                                 >
                                     {paragraphText}
@@ -341,13 +367,13 @@ export const CertificateView: React.FC<Props> = ({ data, config = DEFAULT_CONFIG
                             </td>
                         </tr>
 
-                        {/* 6. BLOK TANDA TANGAN (KANAN) */}
+                        {/* 7. BLOK TTE KANAN (TANJUNG SELOR SEGARIS VERTIKAL DENGAN KOTAK TTE) */}
                         <tr>
                             <td>
                                 <div className="flex justify-end">
-                                    <div className="w-[35cqi] flex flex-col items-start">
+                                    <div className="w-[33cqi] flex flex-col items-start text-left">
                                         <p 
-                                            className="text-black mb-[1.2cqi]"
+                                            className="text-black mb-[1.0cqi] text-left w-full"
                                             style={{ fontSize: isPortrait ? '1.8cqi' : '1.4cqi' }}
                                         >
                                             {sigDateText}
@@ -356,7 +382,7 @@ export const CertificateView: React.FC<Props> = ({ data, config = DEFAULT_CONFIG
                                             <div 
                                                 className="relative"
                                                 style={{ 
-                                                    width: isPortrait ? '32cqi' : '24cqi', 
+                                                    width: isPortrait ? '33cqi' : '25cqi', 
                                                     height: isPortrait ? '13cqi' : '10cqi' 
                                                 }}
                                             >

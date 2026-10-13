@@ -320,6 +320,7 @@ export async function POST(req: Request) {
     };
 
     const renderStructuredNaskahDinasHtml = async (source: TemplateElement[]) => {
+      const logoEl = source.find(el => el.type === 'image' && (String(el.id || '').includes('logo') || String(el.text || '').toLowerCase().includes('logo') || (typeof el.imageUrl === 'string' && !el.imageUrl.includes('pab59388nfffraedyngo'))));
       const kopEl = source.find(el => String(el.id || '') === 'kop_1' || String(el.text || '').includes('KEPALA BADAN'));
       const titleEl = source.find(el => String(el.id || '') === 'title_1' || String(el.text || '').includes('SERTIFIKAT'));
       const nomorEl = source.find(el => String(el.id || '') === 'nomor_1' || String(el.text || '').includes('Nomor'));
@@ -329,8 +330,13 @@ export async function POST(req: Request) {
       const sigDateEl = source.find(el => String(el.id || '') === 'sig_date' || String(el.text || '').includes('Tanjung Selor'));
       const sigImgEl = source.find(el => el.type === 'image' && (String(el.id || '').includes('sig') || String(el.text || '').toLowerCase().includes('tanda tangan') || (typeof el.imageUrl === 'string' && el.imageUrl.includes('pab59388nfffraedyngo'))));
 
+      const rawLogoUrl = allowedAssetUrl(logoEl?.imageUrl) || 'https://res.cloudinary.com/dxtbmu2ui/image/upload/v1778986621/corpuku-academy/tjvwh182kf3vlmctmsan.png';
       const rawSigUrl = allowedAssetUrl(sigImgEl?.imageUrl) || 'https://res.cloudinary.com/dxtbmu2ui/image/upload/v1791857983/corpuku-academy/pab59388nfffraedyngo.png';
-      const sigDataUri = await toDataUri(rawSigUrl);
+
+      const [logoDataUri, sigDataUri] = await Promise.all([
+        toDataUri(rawLogoUrl),
+        toDataUri(rawSigUrl),
+      ]);
 
       const kopText = parseText(kopEl?.text || 'KEPALA BADAN PENGEMBANGAN SUMBER DAYA MANUSIA\nPROVINSI KALIMANTAN UTARA');
       const titleText = parseText(titleEl?.text || 'SERTIFIKAT');
@@ -347,62 +353,71 @@ export async function POST(req: Request) {
         const value = colonIdx === -1 ? '' : line.slice(colonIdx + 1).trim();
         return `
           <tr style="vertical-align: top;">
-            <td style="width: 1%; white-space: nowrap; padding: 3px 20px 3px 0; text-align: left; color: #000;">${label}</td>
-            <td style="width: 1%; white-space: nowrap; padding: 3px 20px 3px 0; text-align: center; color: #000;">:</td>
-            <td style="width: auto; text-align: left; padding: 3px 0; color: #000;">${value}</td>
+            <td style="width: 100px; white-space: nowrap; padding: 3px 0; text-align: left; color: #000;">${label}</td>
+            <td style="width: 24px; white-space: nowrap; text-align: center; color: #000;">:</td>
+            <td style="text-align: left; padding: 3px 0; color: #000;">${value}</td>
           </tr>
         `;
       }).join('');
 
       return `
-        <div style="width:100%;min-height:100%;box-sizing:border-box;padding:52px 85px 40px 85px;font-family:'Bookman Old Style','Bookman',serif;color:#000;">
+        <div style="width:100%;min-height:100%;box-sizing:border-box;padding:45px 80px 40px 80px;font-family:'Bookman Old Style','Bookman',serif;color:#000;">
           <table style="width:100%;border-collapse:collapse;table-layout:fixed;">
             <tbody>
-              <!-- 1. KOP SURAT (TANPA LOGO SESUAI NASKAH DINAS RESMI) -->
+              <!-- 1. LOGO PEMPROV DI ATAS KOP SURAT -->
               <tr>
-                <td style="text-align:center;padding-bottom:34px;">
+                <td style="text-align:center;padding-bottom:12px;">
+                  <div style="width:78px;height:94px;margin:0 auto;">
+                    ${logoDataUri ? `<img src="${logoDataUri}" alt="Logo Pemprov Kaltara" style="width:100%;height:100%;object-fit:contain;" />` : ''}
+                  </div>
+                </td>
+              </tr>
+
+              <!-- 2. KOP SURAT RESMI -->
+              <tr>
+                <td style="text-align:center;padding-bottom:30px;">
                   <div style="font-size:15.5px;font-weight:bold;line-height:1.35;text-transform:uppercase;white-space:pre-line;color:#000;">${kopText}</div>
                 </td>
               </tr>
 
-              <!-- 2. JUDUL DOKUMEN & NOMOR -->
+              <!-- 3. JUDUL DOKUMEN & NOMOR -->
               <tr>
-                <td style="text-align:center;padding-bottom:30px;">
+                <td style="text-align:center;padding-bottom:26px;">
                   <div style="font-size:28px;font-weight:bold;letter-spacing:1px;color:#000;margin-bottom:8px;">${titleText}</div>
                   <div style="font-size:14px;color:#000;">${nomorText}</div>
                 </td>
               </tr>
 
-              <!-- 3. PENGANTAR -->
+              <!-- 4. PENGANTAR -->
               <tr>
-                <td style="text-align:center;padding-bottom:20px;">
+                <td style="text-align:center;padding-bottom:18px;">
                   <div style="font-size:14px;color:#000;">${labelToText}</div>
                 </td>
               </tr>
 
-              <!-- 4. TABEL IDENTITAS PESERTA (RATA TITIK DUA) -->
+              <!-- 5. TABEL IDENTITAS PESERTA (RATA KIRI SEGARIS DENGAN KATA "ATAS") -->
               <tr>
-                <td style="padding-bottom:26px;">
-                  <table style="width:75%;margin:0 auto;border-collapse:collapse;font-size:14px;">
+                <td style="padding-bottom:22px;text-align:left;">
+                  <table style="border-collapse:collapse;margin:0;font-size:14px;">
                     <tbody>${identityRowsHtml}</tbody>
                   </table>
                 </td>
               </tr>
 
-              <!-- 5. PARAGRAF PARTISIPASI -->
+              <!-- 6. PARAGRAF PARTISIPASI (TEPI KIRI SEGARIS PERSIS DENGAN TABEL IDENTITAS) -->
               <tr>
-                <td style="padding-bottom:34px;">
-                  <div style="font-size:14px;text-align:justify;line-height:1.65;color:#000;">${paragraphText}</div>
+                <td style="padding-bottom:32px;">
+                  <div style="font-size:14px;text-align:justify;line-height:1.65;color:#000;margin:0;">${paragraphText}</div>
                 </td>
               </tr>
 
-              <!-- 6. BLOK TANDA TANGAN (KANAN) -->
+              <!-- 7. BLOK TTE KANAN (TANJUNG SELOR SEGARIS VERTIKAL DENGAN KOTAK TTE) -->
               <tr>
                 <td>
                   <div style="display:flex;justify-content:flex-end;">
-                    <div style="width:280px;display:flex;flex-direction:column;align-items:flex-start;">
-                      <div style="font-size:14px;color:#000;margin-bottom:10px;">${sigDateText}</div>
-                      ${sigDataUri ? `<div style="width:260px;height:105px;"><img src="${sigDataUri}" alt="TTE" style="width:100%;height:100%;object-fit:contain;object-position:left;" /></div>` : ''}
+                    <div style="width:265px;display:flex;flex-direction:column;align-items:flex-start;text-align:left;">
+                      <div style="font-size:14px;color:#000;margin-bottom:8px;text-align:left;width:100%;">${sigDateText}</div>
+                      ${sigDataUri ? `<div style="width:265px;height:102px;"><img src="${sigDataUri}" alt="TTE Resmi" style="width:100%;height:100%;object-fit:contain;object-position:left;" /></div>` : ''}
                     </div>
                   </div>
                 </td>
