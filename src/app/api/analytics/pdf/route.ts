@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAuthSession } from '@/app/actions/auth';
 import { generateReportHTML } from '@/lib/report-template';
-import puppeteer from 'puppeteer';
-import fs from 'fs';
+import { withBrowserPage } from '@/lib/puppeteer';
 
 export async function GET() {
     try {
@@ -13,46 +12,25 @@ export async function GET() {
 
         const htmlContent = await generateReportHTML();
 
-        const defaultLinuxChromium = ['/usr/bin/chromium-browser', '/usr/bin/chromium', '/usr/bin/google-chrome-stable']
-            .find(path => fs.existsSync(path));
-        const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || defaultLinuxChromium || undefined;
+        const pdfBuffer = await withBrowserPage(async (page) => {
+            await page.setContent(htmlContent, { 
+                waitUntil: ['load', 'networkidle0'],
+                timeout: 20_000,
+            });
+            await page.evaluateHandle('document.fonts.ready');
 
-        // Launch puppeteer
-        const browser = await puppeteer.launch({
-            headless: true,
-            executablePath,
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-gpu',
-                '--no-first-run',
-                '--no-zygote',
-                '--single-process',
-                '--font-render-hinting=none',
-            ]
+            return await page.pdf({
+                format: 'A4',
+                printBackground: true,
+                preferCSSPageSize: true,
+                margin: {
+                    top: '20px',
+                    right: '20px',
+                    bottom: '20px',
+                    left: '20px'
+                }
+            });
         });
-        
-        const page = await browser.newPage();
-        
-        // Wait for fonts to load
-        await page.setContent(htmlContent, { 
-            waitUntil: ['load', 'networkidle0'] 
-        });
-
-        // Generate PDF
-        const pdfBuffer = await page.pdf({
-            format: 'A4',
-            printBackground: true,
-            margin: {
-                top: '20px',
-                right: '20px',
-                bottom: '20px',
-                left: '20px'
-            }
-        });
-
-        await browser.close();
 
         // Return PDF response
         return new NextResponse(new Uint8Array(pdfBuffer), {

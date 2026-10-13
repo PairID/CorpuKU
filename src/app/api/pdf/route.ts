@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { NextResponse } from 'next/server';
-import puppeteer, { type Browser } from 'puppeteer';
+import { withBrowserPage } from '@/lib/puppeteer';
 import { sql } from '@/lib/db';
 import { getAuthSession } from '@/app/actions/auth';
 import { getWebinarCertificateForDownload, reserveCertificateDownload, getCertificateByVerificationToken, formatWebinarCertificateFilename } from '@/lib/webinar-certificates';
@@ -72,7 +72,6 @@ function safeColor(value: unknown) {
 }
 
 export async function POST(req: Request) {
-  let browser: Browser | null = null;
   try {
     if (!requestOriginIsAllowed(req)) {
       return NextResponse.json({ error: 'Origin tidak diizinkan.' }, { status: 403 });
@@ -374,36 +373,17 @@ export async function POST(req: Request) {
       </style>
       </head><body>${renderCertificatePage(elementsHtml, bgDataUri, true)}${page2Enabled ? renderCertificatePage(page2ElementsHtml, page2BgDataUri, false) : ''}</body></html>`;
 
-    const defaultLinuxChromium = ['/usr/bin/chromium-browser', '/usr/bin/chromium', '/usr/bin/google-chrome-stable']
-      .find(path => fs.existsSync(path));
-    const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || defaultLinuxChromium || undefined;
-
-    const baseArgs = [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-gpu',
-      '--no-first-run',
-      '--no-zygote',
-      '--single-process',
-      '--font-render-hinting=medium',
-    ];
-
-    browser = await puppeteer.launch({
-      headless: true,
-      executablePath,
-      args: baseArgs,
-    });
-    const page = await browser.newPage();
-    await page.setViewport({ width, height, deviceScaleFactor: 2 });
-    await page.setContent(html, { waitUntil: ['load', 'networkidle0'], timeout: 20_000 });
-    await page.evaluateHandle('document.fonts.ready');
-    const pdf = await page.pdf({
-      format: 'A4',
-      landscape: orientation === 'landscape',
-      printBackground: true,
-      preferCSSPageSize: true,
-      margin: { top: 0, right: 0, bottom: 0, left: 0 },
+    const pdf = await withBrowserPage(async (page) => {
+      await page.setViewport({ width, height, deviceScaleFactor: 2 });
+      await page.setContent(html, { waitUntil: ['load', 'networkidle0'], timeout: 20_000 });
+      await page.evaluateHandle('document.fonts.ready');
+      return await page.pdf({
+        format: 'A4',
+        landscape: orientation === 'landscape',
+        printBackground: true,
+        preferCSSPageSize: true,
+        margin: { top: 0, right: 0, bottom: 0, left: 0 },
+      });
     });
 
     // Simpan hasil cetak ke disk server agar pemanggilan berikutnya 0% beban CPU (kecuali sesi uji coba)
@@ -430,7 +410,5 @@ export async function POST(req: Request) {
   } catch (error) {
     console.error('PDF Generation Error:', error);
     return NextResponse.json({ error: 'Gagal memproses sertifikat PDF.' }, { status: 500 });
-  } finally {
-    await browser?.close().catch(() => undefined);
   }
 }
