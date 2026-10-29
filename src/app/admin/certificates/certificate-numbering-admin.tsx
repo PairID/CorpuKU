@@ -34,7 +34,7 @@ export function CertificateNumberingAdmin() {
   // Integrasi Satu Pintu state
   const [passportForm, setPassportForm] = useState({
     enabled: true,
-    apiUrl: "https://learningpassport.kaltaraprov.go.id",
+    apiUrl: "https://api.learningpassport.space",
     apiKey: "",
     maskedApiKey: "",
     source: "none" as "database" | "env" | "none",

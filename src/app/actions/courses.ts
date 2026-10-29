@@ -1101,7 +1101,7 @@ export async function getPassportIntegrationSettings() {
         return {
             success: true,
             enabled: false,
-            apiUrl: 'https://learningpassport.kaltaraprov.go.id',
+            apiUrl: 'https://api.learningpassport.space',
             maskedApiKey: '',
             hasApiKey: false,
             source: 'none' as const,
