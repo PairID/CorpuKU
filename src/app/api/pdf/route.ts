@@ -2,7 +2,6 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { NextResponse } from 'next/server';
-import QRCode from 'qrcode';
 import { withBrowserPage } from '@/lib/puppeteer';
 import { sql } from '@/lib/db';
 import { getAuthSession } from '@/app/actions/auth';
@@ -241,16 +240,6 @@ export async function POST(req: Request) {
       : new URL(req.url).origin;
     const verificationUrl = `${publicOrigin}/verify/certificates/${certificate.verificationToken}`;
 
-    let qrDataUri = '';
-    try {
-      qrDataUri = await QRCode.toDataURL(verificationUrl, {
-        margin: 1,
-        width: 110,
-      });
-    } catch (qrErr) {
-      console.warn('Gagal membuat QR Code:', qrErr);
-    }
-
     const replacements: Record<string, string> = {
       '{{nama}}': certificate.participantName,
       '{{kursus}}': certificate.activityTitle,
@@ -408,52 +397,55 @@ export async function POST(req: Request) {
       }).join('');
 
       const isLandscape = orientation === 'landscape';
+      const sigDateY = typeof sigDateEl?.y === 'number' ? sigDateEl.y : (Number(sigDateEl?.y) || 0);
+      const sigMarginTop = sigDateY > 45 
+        ? `${Math.max(12, (sigDateY - 42) * 1.5)}mm` 
+        : (isLandscape ? '10px' : '36px');
+      
+      const kopFontSize = kopEl?.fontSize ? `${Number(kopEl.fontSize) * 0.9}pt` : (isLandscape ? '12pt' : '14pt');
+      const titleFontSize = titleEl?.fontSize ? `${Number(titleEl.fontSize) * 0.8}pt` : (isLandscape ? '22pt' : '25pt');
+      const nomorFontSize = nomorEl?.fontSize ? `${Number(nomorEl.fontSize) * 0.85}pt` : (isLandscape ? '11pt' : '12pt');
+      const labelToFontSize = labelToEl?.fontSize ? `${Number(labelToEl.fontSize) * 0.85}pt` : (isLandscape ? '11pt' : '12pt');
+      const tableFontSize = tableEl?.fontSize ? `${Number(tableEl.fontSize) * 0.85}pt` : (isLandscape ? '11pt' : '12pt');
+      const paragraphFontSize = paragraphEl?.fontSize ? `${Number(paragraphEl.fontSize) * 0.85}pt` : (isLandscape ? '11pt' : '12pt');
+      const sigDateFontSize = sigDateEl?.fontSize ? `${Number(sigDateEl.fontSize) * 0.85}pt` : (isLandscape ? '11pt' : '12pt');
+
       return `
         <div style="width:${isLandscape ? '297mm' : '210mm'};height:${isLandscape ? '210mm' : '297mm'};box-sizing:border-box;padding:${isLandscape ? '16mm 25.4mm 16mm 25.4mm' : '23.4mm 25.4mm 18mm 25.4mm'};position:relative;font-family:'Bookman Old Style','Bookman','URW Bookman L','Palatino',Georgia,serif;color:#000000;background:#ffffff;">
           <img src="${logoDataUri}" alt="Logo Pemprov Kaltara" style="width:${isLandscape ? '20mm' : '23mm'};height:${isLandscape ? '20mm' : '23mm'};display:block;margin:0 auto ${isLandscape ? '8px' : '12px'} auto;object-fit:contain;" />
           
-          <div style="font-size:${isLandscape ? '12pt' : '14pt'};font-weight:bold;text-align:center;line-height:1.25;margin:0 0 ${isLandscape ? '14px' : '24px'} 0;text-transform:uppercase;letter-spacing:0.2px;color:#000000;white-space:pre-line;">
+          <div style="font-size:${kopFontSize};font-weight:bold;text-align:center;line-height:1.25;margin:0 0 ${isLandscape ? '14px' : '24px'} 0;text-transform:uppercase;letter-spacing:0.2px;color:#000000;white-space:pre-line;">
             ${kopText}
           </div>
 
-          <div style="font-size:${isLandscape ? '22pt' : '25pt'};font-weight:bold;text-align:center;margin:0 0 ${isLandscape ? '4px' : '6px'} 0;letter-spacing:0.5px;color:#000000;">
+          <div style="font-size:${titleFontSize};font-weight:bold;text-align:center;margin:0 0 ${isLandscape ? '4px' : '6px'} 0;letter-spacing:0.5px;color:#000000;">
             ${titleText}
           </div>
 
-          <div style="font-size:${isLandscape ? '11pt' : '12pt'};text-align:center;margin:0 0 ${isLandscape ? '16px' : '28px'} 0;color:#000000;">
+          <div style="font-size:${nomorFontSize};text-align:center;margin:0 0 ${isLandscape ? '16px' : '28px'} 0;color:#000000;">
             ${nomorText}
           </div>
 
-          <div style="font-size:${isLandscape ? '11pt' : '12pt'};text-align:center;margin:0 0 ${isLandscape ? '12px' : '20px'} 0;color:#000000;">
+          <div style="font-size:${labelToFontSize};text-align:center;margin:0 0 ${isLandscape ? '12px' : '20px'} 0;color:#000000;">
             ${labelToText}
           </div>
 
-          <table style="width:100%;border-collapse:collapse;font-size:${isLandscape ? '11pt' : '12pt'};margin-bottom:${isLandscape ? '14px' : '24px'};">
+          <table style="width:100%;border-collapse:collapse;font-size:${tableFontSize};margin-bottom:${isLandscape ? '14px' : '24px'};">
             <tbody>
               ${identityRowsHtml}
             </tbody>
           </table>
 
-          <div style="font-size:${isLandscape ? '11pt' : '12pt'};line-height:1.45;text-align:justify;margin-bottom:${isLandscape ? '18px' : '30px'};color:#000000;">
+          <div style="font-size:${paragraphFontSize};line-height:1.45;text-align:justify;margin-bottom:${isLandscape ? '18px' : '30px'};color:#000000;">
             ${paragraphText}
           </div>
 
-          <div style="width:100%;display:flex;justify-content:flex-end;margin-top:${isLandscape ? '6px' : '10px'};">
+          <div style="width:100%;display:flex;justify-content:flex-end;margin-top:${sigMarginTop};">
             <div style="width:${isLandscape ? '70mm' : '74mm'};display:flex;flex-direction:column;align-items:flex-start;text-align:left;">
-              <div style="font-size:${isLandscape ? '11pt' : '12pt'};margin-bottom:6px;text-align:left;width:100%;color:#000000;">${sigDateText}</div>
+              <div style="font-size:${sigDateFontSize};margin-bottom:6px;text-align:left;width:100%;color:#000000;">${sigDateText}</div>
               <img src="${sigDataUri}" alt="TTE Resmi BPSDM" style="width:${isLandscape ? '70mm' : '73.8mm'};height:${isLandscape ? '24mm' : '25.4mm'};display:block;object-fit:contain;object-position:left;" />
             </div>
           </div>
-
-          ${qrDataUri ? `
-          <div style="position:absolute;bottom:${isLandscape ? '18mm' : '28mm'};left:25.4mm;display:flex;align-items:center;gap:8px;">
-            <img src="${qrDataUri}" alt="QR Verifikasi" style="width:55px;height:55px;display:block;" />
-            <div style="font-size:7.5pt;color:#475569;line-height:1.3;font-family:'Bookman Old Style','Bookman',Georgia,serif;">
-              <strong style="color:#0f172a;">Verifikasi Keaslian</strong><br/>
-              Pindai untuk verifikasi dokumen resmi
-            </div>
-          </div>
-          ` : ''}
 
           <div style="position:absolute;bottom:${isLandscape ? '10mm' : '16mm'};left:0;right:0;text-align:center;">
             <img src="${BSRE_FOOTER_DATA_URI}" alt="BSrE BSSN" style="height:9.8mm;max-width:114mm;display:inline-block;" />

@@ -282,6 +282,20 @@ export const CertificateView: React.FC<Props> = ({ data, config = DEFAULT_CONFIG
 
         const fontBookman = '"Bookman Old Style", "Bookman", "URW Bookman L", "Palatino", serif';
 
+        // Responsive element font-sizes based on editor config
+        const kopFontSize = kopEl?.fontSize ? `${(kopEl.fontSize / 800) * 100 * 1.15}cqi` : (isPortrait ? '2.35cqi' : '1.42cqi');
+        const titleFontSize = titleEl?.fontSize ? `${(titleEl.fontSize / 800) * 100 * 1.05}cqi` : (isPortrait ? '4.2cqi' : '2.61cqi');
+        const nomorFontSize = nomorEl?.fontSize ? `${(nomorEl.fontSize / 800) * 100 * 1.15}cqi` : (isPortrait ? '2.01cqi' : '1.3cqi');
+        const labelToFontSize = labelToEl?.fontSize ? `${(labelToEl.fontSize / 800) * 100 * 1.15}cqi` : (isPortrait ? '2.01cqi' : '1.3cqi');
+        const tableFontSize = tableEl?.fontSize ? `${(tableEl.fontSize / 800) * 100 * 1.15}cqi` : (isPortrait ? '2.01cqi' : '1.3cqi');
+        const paragraphFontSize = paragraphEl?.fontSize ? `${(paragraphEl.fontSize / 800) * 100 * 1.15}cqi` : (isPortrait ? '2.01cqi' : '1.3cqi');
+        const sigDateFontSize = sigDateEl?.fontSize ? `${(sigDateEl.fontSize / 800) * 100 * 1.15}cqi` : (isPortrait ? '2.01cqi' : '1.3cqi');
+
+        // Elegant spacing for official signature block
+        const sigMarginTop = sigDateEl?.y && sigDateEl.y > 45 
+            ? `${Math.max(2.5, (sigDateEl.y - 42) * 0.55)}cqi` 
+            : (isPortrait ? '5.5cqi' : '1.5cqi');
+
         return (
             <div 
                 className="w-full h-full bg-white text-black relative select-none"
@@ -317,7 +331,7 @@ export const CertificateView: React.FC<Props> = ({ data, config = DEFAULT_CONFIG
                 <div 
                     className="font-bold text-center uppercase whitespace-pre-line text-black leading-tight tracking-[0.2px]"
                     style={{ 
-                        fontSize: isPortrait ? '2.35cqi' : '1.42cqi',
+                        fontSize: kopFontSize,
                         marginBottom: isPortrait ? '3.0cqi' : '1.25cqi'
                     }}
                 >
@@ -328,7 +342,7 @@ export const CertificateView: React.FC<Props> = ({ data, config = DEFAULT_CONFIG
                 <div 
                     className="font-bold text-center tracking-[0.5px] text-black"
                     style={{ 
-                        fontSize: isPortrait ? '4.2cqi' : '2.61cqi',
+                        fontSize: titleFontSize,
                         marginBottom: isPortrait ? '0.75cqi' : '0.35cqi'
                     }}
                 >
@@ -337,7 +351,7 @@ export const CertificateView: React.FC<Props> = ({ data, config = DEFAULT_CONFIG
                 <div 
                     className="text-center text-black"
                     style={{ 
-                        fontSize: isPortrait ? '2.01cqi' : '1.3cqi',
+                        fontSize: nomorFontSize,
                         marginBottom: isPortrait ? '3.5cqi' : '1.4cqi'
                     }}
                 >
@@ -348,7 +362,7 @@ export const CertificateView: React.FC<Props> = ({ data, config = DEFAULT_CONFIG
                 <div 
                     className="text-center text-black"
                     style={{ 
-                        fontSize: isPortrait ? '2.01cqi' : '1.3cqi',
+                        fontSize: labelToFontSize,
                         marginBottom: isPortrait ? '2.5cqi' : '1.07cqi'
                     }}
                 >
@@ -359,7 +373,7 @@ export const CertificateView: React.FC<Props> = ({ data, config = DEFAULT_CONFIG
                 <table 
                     className="w-full border-collapse"
                     style={{ 
-                        fontSize: isPortrait ? '2.01cqi' : '1.3cqi',
+                        fontSize: tableFontSize,
                         marginBottom: isPortrait ? '3.0cqi' : '1.25cqi'
                     }}
                 >
@@ -402,7 +416,7 @@ export const CertificateView: React.FC<Props> = ({ data, config = DEFAULT_CONFIG
                 <div 
                     className="text-justify leading-[1.45] text-black"
                     style={{ 
-                        fontSize: isPortrait ? '2.01cqi' : '1.3cqi',
+                        fontSize: paragraphFontSize,
                         marginBottom: isPortrait ? '3.78cqi' : '1.6cqi'
                     }}
                 >
@@ -412,7 +426,7 @@ export const CertificateView: React.FC<Props> = ({ data, config = DEFAULT_CONFIG
                 {/* 7. BLOK TTE KANAN */}
                 <div 
                     className="w-full flex justify-end"
-                    style={{ marginTop: isPortrait ? '1.25cqi' : '0.6cqi' }}
+                    style={{ marginTop: sigMarginTop }}
                 >
                     <div 
                         className="flex flex-col items-start text-left"
@@ -421,7 +435,7 @@ export const CertificateView: React.FC<Props> = ({ data, config = DEFAULT_CONFIG
                         <div 
                             className="text-black text-left w-full"
                             style={{ 
-                                fontSize: isPortrait ? '2.01cqi' : '1.3cqi',
+                                fontSize: sigDateFontSize,
                                 marginBottom: isPortrait ? '0.75cqi' : '0.35cqi'
                             }}
                         >
@@ -446,38 +460,7 @@ export const CertificateView: React.FC<Props> = ({ data, config = DEFAULT_CONFIG
                     </div>
                 </div>
 
-                {/* 8. QR CODE VERIFIKASI */}
-                <div 
-                    className="absolute flex items-center gap-[1cqi]"
-                    style={{ 
-                        bottom: isPortrait ? '9.42cqi' : '6.06cqi', 
-                        left: isPortrait ? '12.1cqi' : '8.55cqi'
-                    }}
-                >
-                    <div 
-                        className="relative bg-white border border-slate-300 p-[0.3cqi] flex items-center justify-center"
-                        style={{ width: isPortrait ? '6.9cqi' : '4.8cqi', height: isPortrait ? '6.9cqi' : '4.8cqi' }}
-                    >
-                        <svg className="w-full h-full text-slate-800" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                            <rect x="3" y="3" width="7" height="7" stroke="currentColor" strokeWidth="1.5" />
-                            <rect x="14" y="3" width="7" height="7" stroke="currentColor" strokeWidth="1.5" />
-                            <rect x="3" y="14" width="7" height="7" stroke="currentColor" strokeWidth="1.5" />
-                            <rect x="6" y="6" width="1" height="1" fill="currentColor" />
-                            <rect x="17" y="6" width="1" height="1" fill="currentColor" />
-                            <rect x="6" y="17" width="1" height="1" fill="currentColor" />
-                            <path d="M14 14h3v3h-3zM17 17h3v3h-3zM14 20h3v1h-3zM20 14h1v3h-1z" fill="currentColor" />
-                        </svg>
-                    </div>
-                    <div 
-                        className="text-slate-600 leading-tight"
-                        style={{ fontSize: isPortrait ? '1.26cqi' : '0.85cqi' }}
-                    >
-                        <strong className="text-slate-900 block">Verifikasi Keaslian</strong>
-                        Pindai untuk verifikasi dokumen resmi
-                    </div>
-                </div>
-
-                {/* 9. BSrE FOOTER BANNER */}
+                {/* 8. BSrE FOOTER BANNER */}
                 <div 
                     className="absolute left-0 right-0 text-center pointer-events-none"
                     style={{ bottom: isPortrait ? '5.38cqi' : '3.37cqi' }}

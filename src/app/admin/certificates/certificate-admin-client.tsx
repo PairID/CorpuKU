@@ -600,11 +600,13 @@ export default function CertificateAdminClient({
     }
   };
 
+  const todayFormatted = new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date());
+
   const previewData = {
     certificateNumber: "800.2.5/12331/BPSDM/AKJ-27/X/2026",
-    date: "8 April 2026",
-    issueDate: "8 April 2026",
-    activityDate: "1 - 5 April 2026",
+    date: todayFormatted,
+    issueDate: todayFormatted,
+    activityDate: todayFormatted,
     studentName: "Budi Santoso, S.STP.",
     nip: "199501012020011001",
     grade: "Penata Muda / III/a",

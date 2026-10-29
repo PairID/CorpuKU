@@ -69,6 +69,7 @@ export const showToast = {
     return toast(title, {
       description,
       duration: 10000,
+      actionButtonStyle: variant === "danger" ? { backgroundColor: "#dc2626", color: "#ffffff" } : undefined,
       action: {
         label: confirmText,
         onClick: async () => {
