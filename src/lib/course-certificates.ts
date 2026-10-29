@@ -1,5 +1,6 @@
 import crypto from "crypto";
-import { sql } from "@/lib/db";
+import { sql } from "./db";
+import { reserveOfficialCertificateNumber } from "./passport-certificate-service";
 
 type CertificateRow = Record<string, unknown>;
 
@@ -61,71 +62,113 @@ export async function issueCourseCertificate(userId: string, courseId: string, o
     `;
     return existing[0] ? mapCourseCertificate(existing[0]) : null;
   }
-  const certificateId = crypto.randomUUID();
-  const verificationToken = crypto.randomUUID();
-  const rows = await sql`
-    WITH eligible AS (
-      SELECT enrollment.id AS enrollment_id, enrollment.user_id, enrollment.course_id,
-             enrollment.completed_at, user_account.name, user_account.nip,
-             user_account.pangkat, user_account.jabatan, user_account.instansi_asal,
-             course.title, course.jp, course.certificate_type,
-             course.certificate_number_prefix, course.certificate_start_number,
-             COALESCE(NULLIF(settings.settings -> course.certificate_type, 'null'::jsonb),
-                      NULLIF(settings.settings -> 'sertifikat', 'null'::jsonb),
-                      NULLIF(settings.settings, 'null'::jsonb), '{}'::jsonb) AS template_settings
-      FROM enrollments enrollment
-      JOIN users user_account ON user_account.id = enrollment.user_id
-      JOIN courses course ON course.id = enrollment.course_id
-      LEFT JOIN certificate_settings settings ON settings.type = 'sertifikat'
-      WHERE enrollment.user_id = ${userId} AND enrollment.course_id = ${courseId}
-        AND enrollment.status = 'completed' AND enrollment.progress = 100
-        AND enrollment.completed_at IS NOT NULL AND course.certificate_enabled = TRUE
-    ), inserted AS (
-      INSERT INTO issued_course_certificates (
-        id, enrollment_id, user_id, course_id, certificate_number, verification_token,
-        participant_name, participant_nip, participant_rank, participant_position,
-        participant_institution, course_title, completed_at, certificate_jp,
-        template_version, template_settings
-      )
-      SELECT ${certificateId}, enrollment_id, user_id, course_id,
-             CASE
-               WHEN certificate_start_number IS NOT NULL THEN
-                 certificate_number_prefix || '/' || EXTRACT(YEAR FROM CURRENT_TIMESTAMP)::INTEGER || '/' ||
-                   LPAD((certificate_start_number + (
-                     SELECT COUNT(*)::INTEGER FROM issued_course_certificates existing WHERE existing.course_id = eligible.course_id
-                   ))::TEXT, 6, '0')
-               ELSE
-                 certificate_number_prefix || '/' || EXTRACT(YEAR FROM CURRENT_TIMESTAMP)::INTEGER || '/' ||
-                   LPAD(nextval('course_certificate_number_seq')::TEXT, 6, '0')
-             END,
-             ${verificationToken}, name, nip, pangkat, jabatan, instansi_asal,
-             title, completed_at, COALESCE(jp, 0), COALESCE(certificate_type, 'sertifikat'),
-             template_settings
-      FROM eligible
-      ON CONFLICT (enrollment_id) DO NOTHING
-      RETURNING *, TRUE AS _newly_issued
-    )
-    SELECT * FROM inserted
-    UNION ALL
-    SELECT certificate.*, FALSE AS _newly_issued
-    FROM issued_course_certificates certificate
-    JOIN eligible ON eligible.enrollment_id = certificate.enrollment_id
-    WHERE NOT EXISTS (SELECT 1 FROM inserted)
+
+  // 1. Cek apakah sertifikat sudah pernah terbit dan masih aktif
+  const existingCert = await sql`
+    SELECT * FROM issued_course_certificates
+    WHERE user_id = ${userId} AND course_id = ${courseId} AND revoked_at IS NULL LIMIT 1
+  `;
+  if (existingCert[0]) {
+    return mapCourseCertificate(existingCert[0]);
+  }
+
+  // 2. Ambil data eligibilitas dan detail peserta
+  const eligibleRows = await sql`
+    SELECT enrollment.id AS enrollment_id, enrollment.user_id, enrollment.course_id,
+           enrollment.completed_at, user_account.name, user_account.nip,
+           user_account.pangkat, user_account.jabatan, user_account.instansi_asal,
+           user_account.phone, user_account.email,
+           course.title, course.jp, course.certificate_type,
+           course.certificate_number_prefix, course.certificate_start_number,
+           COALESCE(NULLIF(settings.settings -> course.certificate_type, 'null'::jsonb),
+                    NULLIF(settings.settings -> 'sertifikat', 'null'::jsonb),
+                    NULLIF(settings.settings, 'null'::jsonb), '{}'::jsonb) AS template_settings
+    FROM enrollments enrollment
+    JOIN users user_account ON user_account.id = enrollment.user_id
+    JOIN courses course ON course.id = enrollment.course_id
+    LEFT JOIN certificate_settings settings ON settings.type = 'sertifikat'
+    WHERE enrollment.user_id = ${userId} AND enrollment.course_id = ${courseId}
+      AND enrollment.status = 'completed' AND enrollment.progress = 100
+      AND enrollment.completed_at IS NOT NULL AND course.certificate_enabled = TRUE
     LIMIT 1
   `;
+
+  const el = eligibleRows[0];
+  if (!el) return null;
+
+  // 3. Pesan nomor resmi standar BPSDM Kaltara (Master Register Passport atau Fallback Local Counter)
+  let officialCertNumber = '';
+  if (el.certificate_start_number != null) {
+    const countRes = await sql`SELECT COUNT(*)::INTEGER AS cnt FROM issued_course_certificates WHERE course_id = ${courseId}`;
+    const seq = Number(el.certificate_start_number) + Number(countRes[0]?.cnt || 0);
+    const yr = new Date(String(el.completed_at || Date.now())).getFullYear();
+    officialCertNumber = `${el.certificate_number_prefix || 'CRS'}/${yr}/${String(seq).padStart(6, '0')}`;
+  } else {
+    const reserved = await reserveOfficialCertificateNumber({
+      trainingName: String(el.title),
+      batchCode: String(el.certificate_number_prefix || 'CRS'),
+      category: 'Teknis',
+      trainingType: 'E-Learning',
+      jp: Number(el.jp || 0),
+      activityDate: el.completed_at ? new Date(String(el.completed_at)) : new Date(),
+      participant: {
+        name: String(el.name),
+        nip: el.nip ? String(el.nip) : null,
+        rank: el.pangkat ? String(el.pangkat) : null,
+        position: el.jabatan ? String(el.jabatan) : null,
+        institution: el.instansi_asal ? String(el.instansi_asal) : null,
+        phone: el.phone ? String(el.phone) : null,
+        email: el.email ? String(el.email) : null,
+      },
+    });
+    officialCertNumber = reserved.certificateNumber;
+  }
+
+  const certificateId = crypto.randomUUID();
+  const verificationToken = crypto.randomUUID();
+
+  // 4. Simpan ke issued_course_certificates
+  const rows = await sql`
+    INSERT INTO issued_course_certificates (
+      id, enrollment_id, user_id, course_id, certificate_number, verification_token,
+      participant_name, participant_nip, participant_rank, participant_position,
+      participant_institution, course_title, completed_at, certificate_jp,
+      template_version, template_settings
+    )
+    VALUES (
+      ${certificateId}, ${el.enrollment_id}, ${userId}, ${courseId}, ${officialCertNumber},
+      ${verificationToken}, ${el.name}, ${el.nip},
+      ${el.pangkat}, ${el.jabatan}, ${el.instansi_asal},
+      ${el.title}, ${el.completed_at}, ${COALESCE_JP(el.jp)},
+      ${el.certificate_type || 'sertifikat'}, ${el.template_settings}
+    )
+    ON CONFLICT (enrollment_id) DO UPDATE
+      SET certificate_number = EXCLUDED.certificate_number
+    RETURNING *, TRUE AS _newly_issued
+  `;
+
   const row = rows[0];
   if (!row) return null;
   const certificate = mapCourseCertificate(row);
   if (certificate.revokedAt) return null;
-  if (row._newly_issued === true) {
+
+  try {
     await sql`
       INSERT INTO notifications (id, user_id, title, message, type, is_read, link, created_at)
       VALUES (${`notification_${crypto.randomUUID()}`}, ${userId}, 'Sertifikat kursus diterbitkan',
               ${`Sertifikat untuk kursus "${certificate.courseTitle}" telah tersedia.`},
               'success', FALSE, '/dashboard/certificates', CURRENT_TIMESTAMP)
     `;
+  } catch (notifyErr) {
+    console.warn('Gagal membuat notifikasi kursus:', notifyErr);
   }
+
   return certificate;
+}
+
+function COALESCE_JP(val: unknown): number {
+  const n = Number(val);
+  return Number.isNaN(n) ? 0 : n;
 }
 
 export async function getCourseCertificateForDownload(userId: string, courseId: string) {

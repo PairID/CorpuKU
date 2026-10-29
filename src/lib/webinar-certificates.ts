@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { sql } from './db';
+import { reserveOfficialCertificateNumber } from './passport-certificate-service';
 import type { IssuedWebinarCertificate } from './types';
 
 type CertificateRow = Record<string, unknown>;
@@ -38,131 +39,134 @@ export async function issueWebinarCertificate(
     participantInstitution?: string;
   }
 ) {
-  const certificateId = crypto.randomUUID();
-  const verificationToken = crypto.randomUUID();
+  // 1. Cek jika sertifikat sudah pernah terbit dan masih valid
+  const existingRows = await sql`
+    SELECT certificate.*
+    FROM issued_webinar_certificates certificate
+    JOIN webinar_registrations registration ON registration.id = certificate.registration_id
+    WHERE registration.user_id = ${userId} AND registration.webinar_id = ${webinarId}
+      AND certificate.revoked_at IS NULL
+    LIMIT 1
+  `;
+  if (existingRows[0]) {
+    return mapCertificate(existingRows[0]);
+  }
 
   const customName = participantDetails?.participantName ? participantDetails.participantName.trim() : null;
   const customPosition = participantDetails?.participantPosition ? participantDetails.participantPosition.trim() : null;
   const customInstitution = participantDetails?.participantInstitution ? participantDetails.participantInstitution.trim() : null;
 
-  const rows = await sql`
-    WITH eligible AS (
-      SELECT wr.id AS registration_id, wr.user_id, wr.webinar_id,
-             COALESCE(${customName}, u.name) AS resolved_name,
-             u.nip, u.pangkat,
-             COALESCE(${customPosition}, NULLIF(wr.position_title, ''), u.jabatan) AS resolved_jabatan,
-             COALESCE(${customInstitution}, NULLIF(wr.agency_name, ''), u.instansi_asal) AS resolved_instansi,
-             w.title, w.scheduled_at, w.certificate_number_prefix,
-             w.certificate_template_type, w.certificate_jp,
-             w.certificate_start_number,
-             COALESCE(
-               NULLIF(cs.settings -> w.certificate_template_type, 'null'::jsonb),
-               NULLIF(cs.settings -> 'sertifikat', 'null'::jsonb),
-               NULLIF(cs.settings, 'null'::jsonb),
-               '{}'::jsonb
-             ) AS template_settings
-      FROM webinar_registrations wr
-      JOIN users u ON u.id = wr.user_id
-      JOIN webinars w ON w.id = wr.webinar_id
-      LEFT JOIN certificate_settings cs ON cs.type = 'sertifikat'
-      WHERE wr.user_id = ${userId}
-        AND wr.webinar_id = ${webinarId}
-        AND wr.attended = TRUE
-        AND wr.evaluation_completed = TRUE
-        AND wr.evaluation_score IS NOT NULL
-        AND w.certificate_enabled = TRUE
-    ), inserted AS (
-      INSERT INTO issued_webinar_certificates (
-        id, registration_id, user_id, webinar_id, certificate_number,
-        verification_token, participant_name, participant_nip,
-        participant_rank, participant_position, participant_institution,
-        webinar_title, webinar_scheduled_at, template_version,
-        certificate_jp, template_settings
-      )
-      SELECT ${certificateId}, registration_id, user_id, webinar_id,
-             CASE
-               WHEN certificate_start_number IS NOT NULL THEN
-                 '800.2.5/' ||
-                 LPAD((certificate_start_number + (
-                   SELECT COUNT(*)::INTEGER FROM issued_webinar_certificates existing WHERE existing.webinar_id = sub.webinar_id
-                 ))::TEXT, 5, '0') ||
-                 '/BPSDM/' ||
-                 certificate_number_prefix || '/' ||
-                 (ARRAY['I','II','III','IV','V','VI','VII','VIII','IX','X','XI','XII'])[EXTRACT(MONTH FROM COALESCE(scheduled_at, CURRENT_TIMESTAMP))::INTEGER] || '/' ||
-                 EXTRACT(YEAR FROM COALESCE(scheduled_at, CURRENT_TIMESTAMP))::INTEGER
-               WHEN certificate_number_prefix ~ '^800\.2\.5[/_]' THEN
-                 REPLACE(certificate_number_prefix, '_', '/') || '/' || LPAD(nextval('webinar_certificate_number_seq')::TEXT, 5, '0')
-               ELSE
-                 '800.2.5/' ||
-                 LPAD(nextval('webinar_certificate_number_seq')::TEXT, 5, '0') ||
-                 '/BPSDM/' ||
-                 certificate_number_prefix || '/' ||
-                 (ARRAY['I','II','III','IV','V','VI','VII','VIII','IX','X','XI','XII'])[EXTRACT(MONTH FROM COALESCE(scheduled_at, CURRENT_TIMESTAMP))::INTEGER] || '/' ||
-                 EXTRACT(YEAR FROM COALESCE(scheduled_at, CURRENT_TIMESTAMP))::INTEGER
-             END,
-             ${verificationToken},
-             COALESCE(NULLIF(resolved_name, ''), u_name),
-             nip, pangkat, resolved_jabatan, resolved_instansi,
-             title, scheduled_at, certificate_template_type,
-             certificate_jp, template_settings
-      FROM (
-        SELECT eligible.*, u.name AS u_name
-        FROM eligible
-        JOIN users u ON u.id = eligible.user_id
-      ) sub
-      ON CONFLICT (registration_id) DO NOTHING
-      RETURNING *, TRUE AS _newly_issued
-    )
-    SELECT * FROM inserted
-    UNION ALL
-    SELECT certificate.*, FALSE AS _newly_issued
-    FROM issued_webinar_certificates certificate
-    JOIN eligible ON eligible.registration_id = certificate.registration_id
-    WHERE NOT EXISTS (SELECT 1 FROM inserted)
+  // 2. Ambil data eligibilitas dan detail peserta
+  const eligibleRows = await sql`
+    SELECT wr.id AS registration_id, wr.user_id, wr.webinar_id,
+           COALESCE(${customName}, u.name) AS resolved_name,
+           u.nip, u.pangkat,
+           COALESCE(${customPosition}, NULLIF(wr.position_title, ''), u.jabatan) AS resolved_jabatan,
+           COALESCE(${customInstitution}, NULLIF(wr.agency_name, ''), u.instansi_asal) AS resolved_instansi,
+           u.phone, u.email,
+           w.title, w.scheduled_at, w.certificate_number_prefix,
+           w.certificate_template_type, w.certificate_jp,
+           w.certificate_start_number,
+           COALESCE(
+             NULLIF(cs.settings -> w.certificate_template_type, 'null'::jsonb),
+             NULLIF(cs.settings -> 'sertifikat', 'null'::jsonb),
+             NULLIF(cs.settings, 'null'::jsonb),
+             '{}'::jsonb
+           ) AS template_settings
+    FROM webinar_registrations wr
+    JOIN users u ON u.id = wr.user_id
+    JOIN webinars w ON w.id = wr.webinar_id
+    LEFT JOIN certificate_settings cs ON cs.type = 'sertifikat'
+    WHERE wr.user_id = ${userId}
+      AND wr.webinar_id = ${webinarId}
+      AND wr.attended = TRUE
+      AND wr.evaluation_completed = TRUE
+      AND wr.evaluation_score IS NOT NULL
+      AND w.certificate_enabled = TRUE
     LIMIT 1
   `;
 
-  let row = rows[0];
-  if (!row) {
-    const existing = await sql`
-      SELECT certificate.*
-      FROM issued_webinar_certificates certificate
-      JOIN webinar_registrations registration ON registration.id = certificate.registration_id
-      WHERE registration.user_id = ${userId} AND registration.webinar_id = ${webinarId}
-        AND registration.attended = TRUE AND registration.evaluation_completed = TRUE
-        AND registration.evaluation_score IS NOT NULL
-        AND EXISTS (
-          SELECT 1 FROM webinars webinar
-          WHERE webinar.id = registration.webinar_id AND webinar.certificate_enabled = TRUE
-        )
-      LIMIT 1
-    `;
-    row = existing[0];
+  const el = eligibleRows[0];
+  if (!el) return null;
+
+  // 3. Pesan nomor resmi standar BPSDM Kaltara (Master Register Passport atau Fallback Local Counter)
+  let officialCertNumber = '';
+  if (el.certificate_start_number != null) {
+    const countRes = await sql`SELECT COUNT(*)::INTEGER AS cnt FROM issued_webinar_certificates WHERE webinar_id = ${webinarId}`;
+    const seq = Number(el.certificate_start_number) + Number(countRes[0]?.cnt || 0);
+    const roman = (['I','II','III','IV','V','VI','VII','VIII','IX','X','XI','XII'])[new Date(String(el.scheduled_at || Date.now())).getMonth()];
+    const yr = new Date(String(el.scheduled_at || Date.now())).getFullYear();
+    officialCertNumber = `800.2.5/${String(seq).padStart(5, '0')}/BPSDM/${el.certificate_number_prefix || 'AKJ-26'}/${roman}/${yr}`;
+  } else {
+    const reserved = await reserveOfficialCertificateNumber({
+      trainingName: String(el.title),
+      batchCode: String(el.certificate_number_prefix || 'AKJ-26'),
+      category: 'Teknis',
+      trainingType: 'Webinar',
+      jp: Number(el.certificate_jp || 2),
+      activityDate: el.scheduled_at ? new Date(String(el.scheduled_at)) : new Date(),
+      participant: {
+        name: String(el.resolved_name),
+        nip: el.nip ? String(el.nip) : null,
+        rank: el.pangkat ? String(el.pangkat) : null,
+        position: el.resolved_jabatan ? String(el.resolved_jabatan) : null,
+        institution: el.resolved_instansi ? String(el.resolved_instansi) : null,
+        phone: el.phone ? String(el.phone) : null,
+        email: el.email ? String(el.email) : null,
+      },
+    });
+    officialCertNumber = reserved.certificateNumber;
   }
+
+  const certificateId = crypto.randomUUID();
+  const verificationToken = crypto.randomUUID();
+
+  // 4. Masukkan ke database issued_webinar_certificates
+  const rows = await sql`
+    INSERT INTO issued_webinar_certificates (
+      id, registration_id, user_id, webinar_id, certificate_number,
+      verification_token, participant_name, participant_nip,
+      participant_rank, participant_position, participant_institution,
+      webinar_title, webinar_scheduled_at, template_version,
+      certificate_jp, template_settings
+    )
+    VALUES (
+      ${certificateId}, ${el.registration_id}, ${userId}, ${webinarId}, ${officialCertNumber},
+      ${verificationToken}, ${el.resolved_name}, ${el.nip},
+      ${el.pangkat}, ${el.resolved_jabatan}, ${el.resolved_instansi},
+      ${el.title}, ${el.scheduled_at}, ${el.certificate_template_type},
+      ${el.certificate_jp}, ${el.template_settings}
+    )
+    ON CONFLICT (registration_id) DO UPDATE
+      SET certificate_number = EXCLUDED.certificate_number
+    RETURNING *, TRUE AS _newly_issued
+  `;
+
+  const row = rows[0];
   if (!row) return null;
-  const newlyIssued = row._newly_issued === true;
   const certificate = mapCertificate(row);
   if (certificate.revokedAt) return null;
+
   await sql`
     UPDATE webinar_registrations
     SET certificate_generated = TRUE,
         certificate_generated_at = COALESCE(certificate_generated_at, CURRENT_TIMESTAMP)
     WHERE user_id = ${userId} AND webinar_id = ${webinarId}
   `;
-  if (newlyIssued) {
-    try {
-      await sql`
-        INSERT INTO notifications (id, user_id, title, message, type, is_read, link, created_at)
-        VALUES (
-          ${`notification_${crypto.randomUUID()}`}, ${userId}, 'Sertifikat webinar diterbitkan',
-          ${`Sertifikat untuk webinar "${certificate.webinarTitle}" telah tersedia.`},
-          'success', FALSE, ${`/dashboard/webinars/${webinarId}`}, CURRENT_TIMESTAMP
-        )
-      `;
-    } catch (error) {
-      console.error('Failed to create certificate notification:', error);
-    }
+
+  try {
+    await sql`
+      INSERT INTO notifications (id, user_id, title, message, type, is_read, link, created_at)
+      VALUES (
+        ${`notification_${crypto.randomUUID()}`}, ${userId}, 'Sertifikat webinar diterbitkan',
+        ${`Sertifikat untuk webinar "${certificate.webinarTitle}" telah tersedia.`},
+        'success', FALSE, ${`/dashboard/webinars/${webinarId}`}, CURRENT_TIMESTAMP
+      )
+    `;
+  } catch (error) {
+    console.error('Failed to create certificate notification:', error);
   }
+
   return certificate;
 }
 
