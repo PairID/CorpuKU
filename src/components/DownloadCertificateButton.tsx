@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Download, Loader2 } from "lucide-react";
+import { showToast } from "@/lib/toast";
 
 interface DownloadCertificateButtonProps {
   verificationToken: string;
@@ -62,9 +63,10 @@ export function DownloadCertificateButton({
       a.click();
       document.body.removeChild(a);
       setTimeout(() => window.URL.revokeObjectURL(blobUrl), 3000);
+      showToast.success("Sertifikat Berhasil Diunduh", safeFilename);
     } catch (err: unknown) {
       console.error(err);
-      alert(err instanceof Error ? err.message : "Terjadi kesalahan saat mengunduh sertifikat.");
+      showToast.error("Gagal Mengunduh Sertifikat", err instanceof Error ? err.message : "Terjadi kesalahan saat mengunduh sertifikat.");
     } finally {
       setIsDownloading(false);
     }

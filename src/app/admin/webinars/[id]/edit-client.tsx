@@ -8,6 +8,7 @@ import Link from "next/link";
 import { Video, ArrowLeft, Save, RefreshCw, Plus, Trash2, PlusCircle, CheckCircle2, Award, ExternalLink } from "lucide-react";
 import { Webinar } from "@/lib/types";
 import WebinarFileUpload from "@/components/WebinarFileUpload";
+import { showToast } from "@/lib/toast";
 
 export default function EditWebinarClient({ webinar }: { webinar: Webinar }) {
     const router = useRouter();
@@ -120,12 +121,14 @@ export default function EditWebinarClient({ webinar }: { webinar: Webinar }) {
                 scheduledAt: new Date(formData.scheduledAt).toISOString()
             });
             if (res.success) {
+                showToast.success("Webinar Berhasil Diperbarui", formData.title);
                 router.push('/admin/webinars');
             } else {
-                alert("Gagal menyimpan webinar: " + res.error);
+                showToast.error("Gagal Menyimpan Webinar", res.error || "Terjadi kesalahan.");
             }
         } catch (error) {
             console.error(error);
+            showToast.error("Kesalahan Jaringan", "Gagal menghubungi server.");
         } finally {
             setIsSubmitting(false);
         }

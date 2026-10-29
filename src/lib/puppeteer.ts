@@ -10,6 +10,15 @@ function getExecutablePath(): string | undefined {
   if (process.env.PUPPETEER_EXECUTABLE_PATH) {
     return process.env.PUPPETEER_EXECUTABLE_PATH;
   }
+  if (process.platform === 'win32') {
+    const winChromeCandidates = [
+      'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+      'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+      process.env.LOCALAPPDATA ? `${process.env.LOCALAPPDATA}\\Google\\Chrome\\Application\\chrome.exe` : '',
+    ].filter(Boolean);
+    const systemWinChrome = winChromeCandidates.find((p) => fs.existsSync(p));
+    if (systemWinChrome) return systemWinChrome;
+  }
   const defaultLinuxPaths = [
     '/usr/bin/chromium-browser',
     '/usr/bin/chromium',

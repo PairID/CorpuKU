@@ -1,9 +1,10 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { Trash2 } from "lucide-react";
 import { deleteWebinar, toggleWebinarAttendance } from "@/app/actions/webinars";
-import { toast } from "sonner";
+import { showToast } from "@/lib/toast";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
 export function AttendanceToggleButton({
   webinarId,
@@ -19,12 +20,15 @@ export function AttendanceToggleButton({
       try {
         const res = await toggleWebinarAttendance(webinarId, !isAttendanceOpen);
         if (res?.success === false) {
-          toast.error(res.error || "Gagal mengubah status presensi.");
+          showToast.error("Gagal Mengubah Presensi", res.error || "Gagal mengubah status presensi.");
         } else {
-          toast.success(isAttendanceOpen ? "Presensi webinar ditutup." : "Presensi webinar dibuka (Live)!");
+          showToast.success(
+            isAttendanceOpen ? "Presensi Ditutup" : "Presensi Dibuka",
+            isAttendanceOpen ? "Presensi peserta webinar telah ditutup." : "Presensi webinar sekarang aktif dan dibuka untuk peserta."
+          );
         }
       } catch {
-        toast.error("Terjadi kesalahan koneksi.");
+        showToast.error("Terjadi Kesalahan", "Gagal menghubungi server untuk mengubah status presensi.");
       }
     });
   };
@@ -34,7 +38,7 @@ export function AttendanceToggleButton({
       type="button"
       onClick={handleToggle}
       disabled={isPending}
-      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 disabled:opacity-60 ${
+      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 disabled:opacity-60 cursor-pointer ${
         isAttendanceOpen
           ? "bg-emerald-500 text-white shadow-sm hover:bg-emerald-600"
           : "bg-oxford-100 dark:bg-oxford-800 text-oxford-600 dark:text-oxford-400 hover:bg-oxford-200"
@@ -54,36 +58,49 @@ export function DeleteWebinarButton({
   webinarTitle: string;
 }) {
   const [isPending, startTransition] = useTransition();
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
 
-  const handleDelete = () => {
-    const confirmed = window.confirm(
-      `Apakah Anda yakin ingin menghapus webinar "${webinarTitle}"?\n\nPERINGATAN: Tindakan ini permanen. Semua data pendaftaran dan presensi terkait akan ikut terhapus.`
-    );
-    if (!confirmed) return;
-
+  const handleConfirmDelete = async () => {
     startTransition(async () => {
       try {
         const res = await deleteWebinar(webinarId);
         if (res?.success === false) {
-          toast.error(res.error || "Gagal menghapus webinar.");
+          showToast.error("Gagal Menghapus Webinar", res.error || "Terjadi kesalahan saat menghapus data.");
         } else {
-          toast.success("Webinar berhasil dihapus.");
+          showToast.success("Webinar Berhasil Dihapus", `"${webinarTitle}" telah dihapus secara permanen dari sistem.`);
+          setShowConfirmModal(false);
         }
       } catch {
-        toast.error("Terjadi kesalahan sistem saat menghapus webinar.");
+        showToast.error("Kesalahan Sistem", "Terjadi kesalahan saat memproses penghapusan webinar.");
       }
     });
   };
 
   return (
-    <button
-      type="button"
-      onClick={handleDelete}
-      disabled={isPending}
-      className="p-2 text-oxford-500 dark:text-oxford-400 hover:text-crimson-600 hover:bg-crimson-50 rounded-lg transition-colors disabled:opacity-50"
-      title="Hapus Webinar"
-    >
-      <Trash2 size={18} className={isPending ? "animate-pulse" : ""} />
-    </button>
+    <>
+      <button
+        type="button"
+        onClick={() => setShowConfirmModal(true)}
+        disabled={isPending}
+        className="p-2 text-oxford-500 dark:text-oxford-400 hover:text-crimson-600 hover:bg-crimson-50 dark:hover:bg-crimson-950/40 rounded-lg transition-colors disabled:opacity-50 cursor-pointer"
+        title="Hapus Webinar"
+      >
+        <Trash2 size={18} className={isPending ? "animate-pulse" : ""} />
+      </button>
+
+      <ConfirmDialog
+        isOpen={showConfirmModal}
+        onClose={() => setShowConfirmModal(false)}
+        onConfirm={handleConfirmDelete}
+        title="Hapus Webinar?"
+        description="Apakah Anda yakin ingin menghapus webinar berikut dari sistem?"
+        itemName={webinarTitle}
+        warningText="PERINGATAN: Tindakan ini permanen. Semua data pendaftaran dan presensi terkait akan ikut terhapus."
+        confirmText="Hapus Webinar"
+        cancelText="Batal"
+        variant="danger"
+        isLoading={isPending}
+      />
+    </>
   );
 }

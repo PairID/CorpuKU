@@ -5,6 +5,7 @@ import { Edit, Trash2, Layers, Award } from "lucide-react";
 import { deleteCourse } from "@/app/actions/courses";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { showToast } from "@/lib/toast";
 
 interface AdminCourse {
     id: string;
@@ -46,9 +47,10 @@ export default function AdminCourseTable({ courses, searchQuery, statusFilter, b
         const result = await deleteCourse(courseId);
         if (result.success) {
             setConfirmDeleteId(null);
+            showToast.success("Kursus Berhasil Dihapus", "Data kursus telah dihapus dari sistem.");
             router.refresh();
         } else {
-            alert(result.error || "Gagal menghapus kursus.");
+            showToast.error("Gagal Menghapus Kursus", result.error || "Gagal menghapus kursus.");
         }
         setDeletingId(null);
     };

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { saveAboutUsData, AboutUsData } from "@/app/actions/about";
 import { Save, Plus, Trash2, Upload } from "lucide-react";
+import { showToast } from "@/lib/toast";
 
 type OrganizationMember = {
   [key: string]: string | undefined;
@@ -25,10 +26,10 @@ export default function AboutEditor({ initialData }: { initialData: AboutUsData 
     const res = await saveAboutUsData(data);
     setIsSaving(false);
     if (res.success) {
-      alert("Profil berhasil diperbarui!");
+      showToast.success("Profil Berhasil Diperbarui", "Perubahan profil BPSDM telah disimpan.");
       router.refresh();
     } else {
-      alert("Gagal merubah profil: " + res.error);
+      showToast.error("Gagal Menyimpan Profil", res.error || "Gagal merubah profil.");
     }
   };
 
@@ -73,11 +74,12 @@ export default function AboutEditor({ initialData }: { initialData: AboutUsData 
         const result = await res.json();
         if (result.url) {
           handleUpdateItem(idx, field, result.url);
+          showToast.success("Foto Berhasil Diunggah");
         } else {
-          alert("Gagal mengunggah file: " + (result.error || "Pesan tidak diketahui"));
+          showToast.error("Gagal Mengunggah Foto", result.error || "Pesan tidak diketahui");
         }
       } catch {
-        alert("Kesalahan jaringan saat mengunggah.");
+        showToast.error("Kesalahan Jaringan", "Terjadi kesalahan saat mengunggah foto.");
       }
     };
 

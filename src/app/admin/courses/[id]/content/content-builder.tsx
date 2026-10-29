@@ -7,6 +7,7 @@ import { saveCourseContent } from "@/app/actions/builder";
 import { generateAIQuiz } from "@/app/actions/ai";
 import { useRouter } from "next/navigation";
 import { MediaPicker } from "@/components/MediaPicker";
+import { showToast } from "@/lib/toast";
 
 interface QuizOption {
     id?: string;
@@ -187,9 +188,9 @@ export default function ContentBuilder({ courseId, initialData }: { courseId: st
         const res = await saveCourseContent(courseId, modules, deletions);
         setIsSaving(false);
         if (res.error) {
-            alert(res.error);
+            showToast.error("Gagal Menyimpan Materi", res.error);
         } else {
-            alert("Materi berhasil disimpan!");
+            showToast.success("Materi Berhasil Disimpan", "Seluruh kurikulum kursus telah diperbarui.");
             setDeletions({ modules: [], lessons: [], questions: [], options: [] });
             router.refresh();
         }
@@ -309,11 +310,12 @@ export default function ContentBuilder({ courseId, initialData }: { courseId: st
                                                                         const result = JSON.parse(xhr.responseText);
                                                                         if (result.success) {
                                                                             updateLesson(mIndex, lIndex, 'content', result.url);
+                                                                            showToast.success("File Berhasil Diunggah");
                                                                         } else if (result.error) {
-                                                                            alert(result.error);
+                                                                            showToast.error("Gagal Mengunggah File", result.error);
                                                                         }
                                                                     } catch {
-                                                                        alert("Gagal memproses respon upload.");
+                                                                        showToast.error("Format Respon Tidak Valid", "Gagal memproses respon upload.");
                                                                     }
                                                                     setUploadProgress(prev => {
                                                                         const newP = { ...prev };
@@ -323,7 +325,7 @@ export default function ContentBuilder({ courseId, initialData }: { courseId: st
                                                                 };
 
                                                                 xhr.onerror = () => {
-                                                                    alert("Gagal upload file.");
+                                                                    showToast.error("Kesalahan Jaringan", "Gagal upload file.");
                                                                     setUploadProgress(prev => {
                                                                         const newP = { ...prev };
                                                                         delete newP[key];
@@ -410,7 +412,7 @@ export default function ContentBuilder({ courseId, initialData }: { courseId: st
                                                     }
 
                                                     if (!sourceText) {
-                                                        alert("Silakan masukkan teks materi kustom atau pastikan modul ini memiliki materi bacaan.");
+                                                        showToast.warning("Materi Diperlukan", "Silakan masukkan teks materi kustom atau pastikan modul ini memiliki materi bacaan.");
                                                         return;
                                                     }
 
@@ -434,8 +436,9 @@ export default function ContentBuilder({ courseId, initialData }: { courseId: st
                                                         setModules(newModules);
                                                         // Close custom input after success if it was open
                                                         if (customAITexts[key]) setShowCustomAIInput(prev => ({ ...prev, [key]: false }));
+                                                        showToast.success("Kuis Berhasil Dibuat", `${mappedQuestions.length} pertanyaan berhasil digenerate.`);
                                                     } else {
-                                                        alert(res.error || "Gagal generate kuis.");
+                                                        showToast.error("Gagal Membuat Kuis", res.error || "Gagal generate kuis.");
                                                     }
                                                     setIsGeneratingAI(prev => ({ ...prev, [key]: false }));
                                                 }}

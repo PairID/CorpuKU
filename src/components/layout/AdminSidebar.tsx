@@ -2,12 +2,12 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { LayoutDashboard, BookOpen, Users, Activity, Settings, LogOut, Heart, Image as ImageIcon, Video, GitBranch } from "lucide-react";
+import { LayoutDashboard, BookOpen, Users, Activity, Settings, LogOut, Heart, Image as ImageIcon, Video, GitBranch, Sparkles, Database } from "lucide-react";
 import { useState } from "react";
 import { authClient } from "@/lib/auth-client";
 
 interface AdminSidebarProps {
-    activePage: "dashboard" | "courses" | "webinars" | "paths" | "users" | "analytics" | "about" | "news" | "certificates" | "media" | "bangkom";
+    activePage: "dashboard" | "courses" | "webinars" | "paths" | "users" | "analytics" | "about" | "news" | "certificates" | "media" | "bangkom" | "creator" | "regulations";
     isOpen?: boolean;
     onClose?: () => void;
 }
@@ -35,6 +35,18 @@ export function AdminSidebar({ activePage, isOpen, onClose }: AdminSidebarProps)
             label: "Kursus", 
             icon: <BookOpen size={20} />, 
             active: activePage === "courses" 
+        },
+        { 
+            href: "/admin/courses/creator", 
+            label: "Course Creator (AI)", 
+            icon: <Sparkles size={20} className="text-gold-400" />, 
+            active: activePage === "creator" 
+        },
+        { 
+            href: "/admin/regulations", 
+            label: "Bank Data Regulasi", 
+            icon: <Database size={20} className="text-cyan-400" />, 
+            active: activePage === "regulations" 
         },
         { 
             href: "/admin/webinars", 

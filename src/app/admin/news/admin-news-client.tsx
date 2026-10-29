@@ -5,6 +5,8 @@ import Image from "next/image";
 import { getAdminNews, createNews, updateNews, deleteNews } from "@/app/actions/news";
 import type { NewsArticle } from "@/lib/types";
 import { Plus, Edit2, Trash2, Search, Loader2 } from "lucide-react";
+import { showToast } from "@/lib/toast";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
 export default function AdminNewsClient() {
     const [news, setNews] = useState<NewsArticle[]>([]);
@@ -14,6 +16,8 @@ export default function AdminNewsClient() {
     // Modal states
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingItem, setEditingItem] = useState<NewsArticle | null>(null);
+    const [deletingItem, setDeletingItem] = useState<NewsArticle | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
     const [formData, setFormData] = useState({
         title: "",
         summary: "",
@@ -94,16 +98,25 @@ export default function AdminNewsClient() {
         if (result.success) {
             await fetchData();
             setIsModalOpen(false);
+            showToast.success(editingItem ? "Artikel Diperbarui" : "Artikel Dibuat", "Data artikel berhasil disimpan ke sistem.");
         } else {
-            alert(result.error || "Terjadi kesalahan saat menyimpan berita.");
+            showToast.error("Gagal Menyimpan Artikel", result.error || "Terjadi kesalahan saat menyimpan berita.");
         }
         setSaving(false);
     };
 
-    const handleDelete = async (id: string) => {
-        if (window.confirm("Apakah Anda yakin ingin menghapus artikel ini?")) {
-            await deleteNews(id);
+    const handleConfirmDelete = async () => {
+        if (!deletingItem) return;
+        setIsDeleting(true);
+        try {
+            await deleteNews(deletingItem.id);
+            showToast.success("Artikel Dihapus", `"${deletingItem.title}" telah dihapus secara permanen.`);
+            setDeletingItem(null);
             await fetchData();
+        } catch {
+            showToast.error("Kesalahan Sistem", "Gagal memproses penghapusan artikel.");
+        } finally {
+            setIsDeleting(false);
         }
     };
 
@@ -192,7 +205,7 @@ export default function AdminNewsClient() {
                                                     <Edit2 size={16} />
                                                 </button>
                                                 <button 
-                                                    onClick={() => handleDelete(item.id)}
+                                                    onClick={() => setDeletingItem(item)}
                                                     className="p-1.5 text-oxford-400 hover:text-crimson-600 hover:bg-crimson-50 rounded transition-colors"
                                                     title="Hapus"
                                                 >
@@ -316,7 +329,7 @@ export default function AdminNewsClient() {
                                                                     setFormData({...formData, imageUrl: result.url});
                                                                 }
                                                             } catch {
-                                                                alert("Gagal upload gambar.");
+                                                                showToast.error("Gagal Upload Gambar", "Terjadi kesalahan saat mengunggah gambar artikel.");
                                                             } finally {
                                                                 setSaving(false);
                                                             }
@@ -371,6 +384,20 @@ export default function AdminNewsClient() {
                     </div>
                 </div>
             )}
+
+            <ConfirmDialog
+                isOpen={Boolean(deletingItem)}
+                onClose={() => setDeletingItem(null)}
+                onConfirm={handleConfirmDelete}
+                title="Hapus Artikel Berita?"
+                description="Apakah Anda yakin ingin menghapus artikel berita berikut?"
+                itemName={deletingItem?.title}
+                warningText="Tindakan ini permanen. Artikel akan dihapus dari portal berita publik dan pusat pengetahuan."
+                confirmText="Hapus Artikel"
+                cancelText="Batal"
+                variant="danger"
+                isLoading={isDeleting}
+            />
         </div>
     );
 }

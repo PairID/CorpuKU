@@ -2,11 +2,19 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { NextResponse } from 'next/server';
+import QRCode from 'qrcode';
 import { withBrowserPage } from '@/lib/puppeteer';
 import { sql } from '@/lib/db';
 import { getAuthSession } from '@/app/actions/auth';
 import { getWebinarCertificateForDownload, reserveCertificateDownload, getCertificateByVerificationToken, formatWebinarCertificateFilename } from '@/lib/webinar-certificates';
 import { getCourseCertificateForDownload, reserveCourseCertificateDownload, getCourseCertificateByVerificationToken } from '@/lib/course-certificates';
+import {
+  KALTARA_LOGO_DATA_URI,
+  BSRE_FOOTER_DATA_URI,
+  BOOKMAN_REGULAR_BASE64,
+  BOOKMAN_BOLD_BASE64,
+  OFFICIAL_TTE_BOX_DATA_URI,
+} from '@/lib/certificate-assets';
 
 export const runtime = 'nodejs';
 
@@ -233,6 +241,16 @@ export async function POST(req: Request) {
       : new URL(req.url).origin;
     const verificationUrl = `${publicOrigin}/verify/certificates/${certificate.verificationToken}`;
 
+    let qrDataUri = '';
+    try {
+      qrDataUri = await QRCode.toDataURL(verificationUrl, {
+        margin: 1,
+        width: 110,
+      });
+    } catch (qrErr) {
+      console.warn('Gagal membuat QR Code:', qrErr);
+    }
+
     const replacements: Record<string, string> = {
       '{{nama}}': certificate.participantName,
       '{{kursus}}': certificate.activityTitle,
@@ -320,7 +338,44 @@ export async function POST(req: Request) {
     };
 
     const renderStructuredNaskahDinasHtml = async (source: TemplateElement[]) => {
-      const logoEl = source.find(el => el.type === 'image' && (String(el.id || '').includes('logo') || String(el.text || '').toLowerCase().includes('logo') || (typeof el.imageUrl === 'string' && !el.imageUrl.includes('pab59388nfffraedyngo'))));
+      // Identifikasi elemen tanda tangan & logo secara tepat tanpa benturan penamaan
+      const sigImgEl = source.find(el => {
+        if (el.type !== 'image') return false;
+        const id = String(el.id || '').toLowerCase();
+        const text = String(el.text || '').toLowerCase().trim();
+        const url = String(el.imageUrl || '').toLowerCase();
+        if (url.includes('pab59388nfffraedyngo') || id.includes('sig') || id.includes('tte')) return true;
+        if (url.includes('tjvwh182kf3vlmctmsan') || id.includes('logo')) return false;
+        if (text === 'tanda tangan' || text.startsWith('tte') || text === 'tanda tangan elektronik') return true;
+        return false;
+      });
+
+      const logoEl = source.find(el => {
+        if (el.type !== 'image') return false;
+        if (el === sigImgEl) return false;
+        const id = String(el.id || '').toLowerCase();
+        const text = String(el.text || '').toLowerCase().trim();
+        const url = String(el.imageUrl || '').toLowerCase();
+        if (url.includes('tjvwh182kf3vlmctmsan') || id.includes('logo')) return true;
+        if (url.includes('pab59388nfffraedyngo') || id.includes('sig')) return false;
+        if (text.includes('logo')) return true;
+        return true;
+      });
+
+      const rawLogoUrl = allowedAssetUrl(logoEl?.imageUrl);
+      const rawSigUrl = allowedAssetUrl(sigImgEl?.imageUrl);
+
+      const [customLogoDataUri, customSigDataUri] = await Promise.all([
+        rawLogoUrl ? toDataUri(rawLogoUrl) : Promise.resolve(null),
+        rawSigUrl ? toDataUri(rawSigUrl) : Promise.resolve(null),
+      ]);
+
+      const logoDataUri = customLogoDataUri || KALTARA_LOGO_DATA_URI;
+      // Jaminan tanda tangan resmi BPSDM Kaltara (Sipta Meylina / TTE Box BSrE) tidak tertukar dengan logo tameng
+      const sigDataUri = (customSigDataUri && !customSigDataUri.includes('tjvwh182kf3vlmctmsan'))
+        ? customSigDataUri
+        : OFFICIAL_TTE_BOX_DATA_URI;
+
       const kopEl = source.find(el => String(el.id || '') === 'kop_1' || String(el.text || '').includes('KEPALA BADAN'));
       const titleEl = source.find(el => String(el.id || '') === 'title_1' || String(el.text || '').includes('SERTIFIKAT'));
       const nomorEl = source.find(el => String(el.id || '') === 'nomor_1' || String(el.text || '').includes('Nomor'));
@@ -328,15 +383,6 @@ export async function POST(req: Request) {
       const tableEl = source.find(el => String(el.id || '') === 'table_identitas_1' || String(el.text || '').includes('Nama :'));
       const paragraphEl = source.find(el => String(el.id || '') === 'paragraph_1' || String(el.text || '').includes('Atas partisipasinya'));
       const sigDateEl = source.find(el => String(el.id || '') === 'sig_date' || String(el.text || '').includes('Tanjung Selor'));
-      const sigImgEl = source.find(el => el.type === 'image' && (String(el.id || '').includes('sig') || String(el.text || '').toLowerCase().includes('tanda tangan') || (typeof el.imageUrl === 'string' && el.imageUrl.includes('pab59388nfffraedyngo'))));
-
-      const rawLogoUrl = allowedAssetUrl(logoEl?.imageUrl) || 'https://res.cloudinary.com/dxtbmu2ui/image/upload/v1778986621/corpuku-academy/tjvwh182kf3vlmctmsan.png';
-      const rawSigUrl = allowedAssetUrl(sigImgEl?.imageUrl) || 'https://res.cloudinary.com/dxtbmu2ui/image/upload/v1791857983/corpuku-academy/pab59388nfffraedyngo.png';
-
-      const [logoDataUri, sigDataUri] = await Promise.all([
-        toDataUri(rawLogoUrl),
-        toDataUri(rawSigUrl),
-      ]);
 
       const kopText = parseText(kopEl?.text || 'KEPALA BADAN PENGEMBANGAN SUMBER DAYA MANUSIA\nPROVINSI KALIMANTAN UTARA');
       const titleText = parseText(titleEl?.text || 'SERTIFIKAT');
@@ -351,79 +397,67 @@ export async function POST(req: Request) {
         const colonIdx = line.indexOf(':');
         const label = colonIdx === -1 ? line : line.slice(0, colonIdx).trim();
         const value = colonIdx === -1 ? '' : line.slice(colonIdx + 1).trim();
+        const isName = label.toLowerCase().includes('nama');
         return `
           <tr style="vertical-align: top;">
-            <td style="width: 100px; white-space: nowrap; padding: 3px 0; text-align: left; color: #000;">${label}</td>
-            <td style="width: 24px; white-space: nowrap; text-align: center; color: #000;">:</td>
-            <td style="text-align: left; padding: 3px 0; color: #000;">${value}</td>
+            <td style="width: 170px; white-space: nowrap; padding: 2.5px 0; text-align: left; color: #000000;">${label}</td>
+            <td style="width: 18px; white-space: nowrap; text-align: center; color: #000000;">:</td>
+            <td style="text-align: left; padding: 2.5px 0; color: #000000; ${isName ? 'font-weight: 500;' : ''}">${value}</td>
           </tr>
         `;
       }).join('');
 
+      const isLandscape = orientation === 'landscape';
       return `
-        <div style="width:100%;min-height:100%;box-sizing:border-box;padding:45px 80px 40px 80px;font-family:'Bookman Old Style','Bookman',serif;color:#000;">
-          <table style="width:100%;border-collapse:collapse;table-layout:fixed;">
+        <div style="width:${isLandscape ? '297mm' : '210mm'};height:${isLandscape ? '210mm' : '297mm'};box-sizing:border-box;padding:${isLandscape ? '16mm 25.4mm 16mm 25.4mm' : '23.4mm 25.4mm 18mm 25.4mm'};position:relative;font-family:'Bookman Old Style','Bookman','URW Bookman L','Palatino',Georgia,serif;color:#000000;background:#ffffff;">
+          <img src="${logoDataUri}" alt="Logo Pemprov Kaltara" style="width:${isLandscape ? '20mm' : '23mm'};height:${isLandscape ? '20mm' : '23mm'};display:block;margin:0 auto ${isLandscape ? '8px' : '12px'} auto;object-fit:contain;" />
+          
+          <div style="font-size:${isLandscape ? '12pt' : '14pt'};font-weight:bold;text-align:center;line-height:1.25;margin:0 0 ${isLandscape ? '14px' : '24px'} 0;text-transform:uppercase;letter-spacing:0.2px;color:#000000;white-space:pre-line;">
+            ${kopText}
+          </div>
+
+          <div style="font-size:${isLandscape ? '22pt' : '25pt'};font-weight:bold;text-align:center;margin:0 0 ${isLandscape ? '4px' : '6px'} 0;letter-spacing:0.5px;color:#000000;">
+            ${titleText}
+          </div>
+
+          <div style="font-size:${isLandscape ? '11pt' : '12pt'};text-align:center;margin:0 0 ${isLandscape ? '16px' : '28px'} 0;color:#000000;">
+            ${nomorText}
+          </div>
+
+          <div style="font-size:${isLandscape ? '11pt' : '12pt'};text-align:center;margin:0 0 ${isLandscape ? '12px' : '20px'} 0;color:#000000;">
+            ${labelToText}
+          </div>
+
+          <table style="width:100%;border-collapse:collapse;font-size:${isLandscape ? '11pt' : '12pt'};margin-bottom:${isLandscape ? '14px' : '24px'};">
             <tbody>
-              <!-- 1. LOGO PEMPROV DI ATAS KOP SURAT -->
-              <tr>
-                <td style="text-align:center;padding-bottom:12px;">
-                  <div style="width:78px;height:94px;margin:0 auto;">
-                    ${logoDataUri ? `<img src="${logoDataUri}" alt="Logo Pemprov Kaltara" style="width:100%;height:100%;object-fit:contain;" />` : ''}
-                  </div>
-                </td>
-              </tr>
-
-              <!-- 2. KOP SURAT RESMI -->
-              <tr>
-                <td style="text-align:center;padding-bottom:30px;">
-                  <div style="font-size:15.5px;font-weight:bold;line-height:1.35;text-transform:uppercase;white-space:pre-line;color:#000;">${kopText}</div>
-                </td>
-              </tr>
-
-              <!-- 3. JUDUL DOKUMEN & NOMOR -->
-              <tr>
-                <td style="text-align:center;padding-bottom:26px;">
-                  <div style="font-size:28px;font-weight:bold;letter-spacing:1px;color:#000;margin-bottom:8px;">${titleText}</div>
-                  <div style="font-size:14px;color:#000;">${nomorText}</div>
-                </td>
-              </tr>
-
-              <!-- 4. PENGANTAR -->
-              <tr>
-                <td style="text-align:center;padding-bottom:18px;">
-                  <div style="font-size:14px;color:#000;">${labelToText}</div>
-                </td>
-              </tr>
-
-              <!-- 5. TABEL IDENTITAS PESERTA (RATA KIRI SEGARIS DENGAN KATA "ATAS") -->
-              <tr>
-                <td style="padding-bottom:22px;text-align:left;">
-                  <table style="border-collapse:collapse;margin:0;font-size:14px;">
-                    <tbody>${identityRowsHtml}</tbody>
-                  </table>
-                </td>
-              </tr>
-
-              <!-- 6. PARAGRAF PARTISIPASI (TEPI KIRI SEGARIS PERSIS DENGAN TABEL IDENTITAS) -->
-              <tr>
-                <td style="padding-bottom:32px;">
-                  <div style="font-size:14px;text-align:justify;line-height:1.65;color:#000;margin:0;">${paragraphText}</div>
-                </td>
-              </tr>
-
-              <!-- 7. BLOK TTE KANAN (TANJUNG SELOR SEGARIS VERTIKAL DENGAN KOTAK TTE) -->
-              <tr>
-                <td>
-                  <div style="display:flex;justify-content:flex-end;">
-                    <div style="width:265px;display:flex;flex-direction:column;align-items:flex-start;text-align:left;">
-                      <div style="font-size:14px;color:#000;margin-bottom:8px;text-align:left;width:100%;">${sigDateText}</div>
-                      ${sigDataUri ? `<div style="width:265px;height:102px;"><img src="${sigDataUri}" alt="TTE Resmi" style="width:100%;height:100%;object-fit:contain;object-position:left;" /></div>` : ''}
-                    </div>
-                  </div>
-                </td>
-              </tr>
+              ${identityRowsHtml}
             </tbody>
           </table>
+
+          <div style="font-size:${isLandscape ? '11pt' : '12pt'};line-height:1.45;text-align:justify;margin-bottom:${isLandscape ? '18px' : '30px'};color:#000000;">
+            ${paragraphText}
+          </div>
+
+          <div style="width:100%;display:flex;justify-content:flex-end;margin-top:${isLandscape ? '6px' : '10px'};">
+            <div style="width:${isLandscape ? '70mm' : '74mm'};display:flex;flex-direction:column;align-items:flex-start;text-align:left;">
+              <div style="font-size:${isLandscape ? '11pt' : '12pt'};margin-bottom:6px;text-align:left;width:100%;color:#000000;">${sigDateText}</div>
+              <img src="${sigDataUri}" alt="TTE Resmi BPSDM" style="width:${isLandscape ? '70mm' : '73.8mm'};height:${isLandscape ? '24mm' : '25.4mm'};display:block;object-fit:contain;object-position:left;" />
+            </div>
+          </div>
+
+          ${qrDataUri ? `
+          <div style="position:absolute;bottom:${isLandscape ? '18mm' : '28mm'};left:25.4mm;display:flex;align-items:center;gap:8px;">
+            <img src="${qrDataUri}" alt="QR Verifikasi" style="width:55px;height:55px;display:block;" />
+            <div style="font-size:7.5pt;color:#475569;line-height:1.3;font-family:'Bookman Old Style','Bookman',Georgia,serif;">
+              <strong style="color:#0f172a;">Verifikasi Keaslian</strong><br/>
+              Pindai untuk verifikasi dokumen resmi
+            </div>
+          </div>
+          ` : ''}
+
+          <div style="position:absolute;bottom:${isLandscape ? '10mm' : '16mm'};left:0;right:0;text-align:center;">
+            <img src="${BSRE_FOOTER_DATA_URI}" alt="BSrE BSSN" style="height:9.8mm;max-width:114mm;display:inline-block;" />
+          </div>
         </div>
       `;
     };
@@ -435,39 +469,20 @@ export async function POST(req: Request) {
       toDataUri(page2TemplateUrl),
     ]);
 
-    let fontFaceCss = '';
-    try {
-      const publicFontDir = path.join(process.cwd(), 'public', 'fonts', 'bookman');
-      let regPath = path.join(publicFontDir, 'BOOKOS.TTF');
-      let bldPath = path.join(publicFontDir, 'BOOKOSB.TTF');
-
-      if (!fs.existsSync(regPath) && process.platform === 'win32') {
-        const windir = process.env.WINDIR || 'C:\\Windows';
-        regPath = path.join(windir, 'Fonts', 'BOOKOS.TTF');
-        bldPath = path.join(windir, 'Fonts', 'BOOKOSB.TTF');
+    const fontFaceCss = `
+      @font-face {
+        font-family: 'Bookman Old Style';
+        src: url('data:font/truetype;charset=utf-8;base64,${BOOKMAN_REGULAR_BASE64}') format('truetype');
+        font-weight: normal;
+        font-style: normal;
       }
-
-      if (fs.existsSync(regPath) && fs.existsSync(bldPath)) {
-        const regB64 = fs.readFileSync(regPath).toString('base64');
-        const bldB64 = fs.readFileSync(bldPath).toString('base64');
-        fontFaceCss = `
-          @font-face {
-            font-family: 'Bookman Old Style';
-            src: url(data:font/truetype;charset=utf-8;base64,${regB64}) format('truetype');
-            font-weight: normal;
-            font-style: normal;
-          }
-          @font-face {
-            font-family: 'Bookman Old Style';
-            src: url(data:font/truetype;charset=utf-8;base64,${bldB64}) format('truetype');
-            font-weight: bold;
-            font-style: normal;
-          }
-        `;
+      @font-face {
+        font-family: 'Bookman Old Style';
+        src: url('data:font/truetype;charset=utf-8;base64,${BOOKMAN_BOLD_BASE64}') format('truetype');
+        font-weight: bold;
+        font-style: normal;
       }
-    } catch (fontErr) {
-      console.warn('Gagal memuat font Bookman Old Style:', fontErr);
-    }
+    `;
 
     const renderCertificatePage = (content: string, background: string | null, verification: boolean) =>
       `<section class="certificate" style="background-image:${background ? `url(&quot;${background}&quot;)` : 'none'}">${content}${verification && background ? `<div class="verification">Nomor: ${escapeHtml(certificate.certificateNumber)} · Verifikasi: ${escapeHtml(verificationUrl)}</div>` : ''}</section>`;

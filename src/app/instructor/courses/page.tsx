@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Bell, Menu, BookOpen, Settings, LogOut, LayoutDashboard } from "lucide-react";
+import { Bell, Menu, BookOpen, Settings, LogOut, LayoutDashboard, Sparkles, Database } from "lucide-react";
 import { getCoursesWithStats } from "@/app/actions/courses";
 import AdminCourseControls from "@/app/admin/courses/admin-course-controls";
 
@@ -28,6 +28,12 @@ export default async function InstructorCourses() {
                     </Link>
                     <Link href="/instructor/courses" className="flex items-center justify-between px-4 py-3 bg-gold-500/10 text-gold-400 rounded-xl font-bold border border-gold-500/20 group">
                         <div className="flex items-center gap-3"><BookOpen size={20} /> Kursus Saya</div>
+                    </Link>
+                    <Link href="/instructor/courses/creator" className="flex items-center gap-3 px-4 py-3 text-oxford-300 hover:bg-oxford-900 hover:text-white rounded-xl font-medium transition-colors">
+                        <Sparkles size={20} className="text-gold-400" /> Course Creator (AI)
+                    </Link>
+                    <Link href="/instructor/regulations" className="flex items-center gap-3 px-4 py-3 text-oxford-300 hover:bg-oxford-900 hover:text-white rounded-xl font-medium transition-colors">
+                        <Database size={20} className="text-cyan-400" /> Bank Data Regulasi
                     </Link>
                 </nav>
 

@@ -2,6 +2,7 @@
 
 import { X, FileDown, Loader2 } from "lucide-react";
 import { useState } from "react";
+import { showToast } from "@/lib/toast";
 
 export function ReportPreviewModal({ onClose }: { onClose: () => void }) {
     const [isDownloading, setIsDownloading] = useState(false);
@@ -21,9 +22,10 @@ export function ReportPreviewModal({ onClose }: { onClose: () => void }) {
             a.click();
             a.remove();
             window.URL.revokeObjectURL(url);
+            showToast.success("PDF Berhasil Diunduh", "Laporan analytics telah disimpan.");
         } catch (error) {
             console.error(error);
-            alert("Gagal mengunduh PDF.");
+            showToast.error("Gagal Mengunduh PDF", "Terjadi kesalahan saat memproses laporan PDF.");
         } finally {
             setIsDownloading(false);
             onClose();

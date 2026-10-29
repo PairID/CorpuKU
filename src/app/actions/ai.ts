@@ -1,6 +1,7 @@
 "use server";
 
 import { requireInstructorSession } from "./auth";
+import { GEMINI_MODEL_POOL } from "@/lib/on-demand-learning";
 
 export async function generateAIQuiz(content: string, requestedCount: number = 5) {
     try {
@@ -44,36 +45,46 @@ Schema JSON yang harus diikuti:
 ]
         `;
 
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: {
-                    temperature: 0.7,
-                    topP: 0.8,
-                    topK: 40,
-                    maxOutputTokens: 2048,
-                    responseMimeType: "application/json"
+        let quizData = null;
+        let lastError = "Gagal memproses AI quiz";
+
+        for (const model of GEMINI_MODEL_POOL) {
+            try {
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: prompt }] }],
+                        generationConfig: {
+                            temperature: 0.5,
+                            topP: 0.8,
+                            topK: 40,
+                            maxOutputTokens: 2048,
+                            responseMimeType: "application/json"
+                        }
+                    })
+                });
+
+                const data = await response.json();
+                if (data.error) {
+                    lastError = data.error.message;
+                    continue;
                 }
-            })
-        });
 
-        const data = await response.json();
-        
-        if (data.error) {
-            console.error("Gemini API Error:", data.error);
-            return { success: false, error: data.error.message };
+                const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (!textResponse) continue;
+
+                const cleanedText = textResponse.replace(/```json/gi, '').replace(/```/g, '').trim();
+                quizData = JSON.parse(cleanedText);
+                break;
+            } catch (e: unknown) {
+                lastError = e instanceof Error ? e.message : String(e);
+            }
         }
 
-        const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (!textResponse) {
-            return { success: false, error: "Gagal mendapatkan respon dari AI." };
+        if (!quizData) {
+            return { success: false, error: lastError };
         }
-
-        // Clean up the text response (just in case there are markdown blocks)
-        const cleanedText = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
-        const quizData = JSON.parse(cleanedText);
 
         return { success: true, questions: quizData };
 

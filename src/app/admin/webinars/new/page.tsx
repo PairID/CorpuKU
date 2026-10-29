@@ -7,6 +7,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Video, ArrowLeft, Save, RefreshCw, Award } from "lucide-react";
 import WebinarFileUpload from "@/components/WebinarFileUpload";
+import { showToast } from "@/lib/toast";
 
 export default function NewWebinarPage() {
     const router = useRouter();
@@ -51,12 +52,14 @@ export default function NewWebinarPage() {
                 scheduledAt: new Date(formData.scheduledAt).toISOString()
             });
             if (res.success) {
+                showToast.success("Webinar Berhasil Dibuat", formData.title);
                 router.push('/admin/webinars');
             } else {
-                alert("Gagal membuat webinar: " + res.error);
+                showToast.error("Gagal Membuat Webinar", res.error || "Terjadi kesalahan.");
             }
         } catch (error) {
             console.error(error);
+            showToast.error("Kesalahan Jaringan", "Gagal menghubungi server.");
         } finally {
             setIsSubmitting(false);
         }

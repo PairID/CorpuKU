@@ -5,6 +5,8 @@ import Image from "next/image";
 import { Menu, Image as ImageIcon, Search, Trash2, Copy, Check, ExternalLink, Grid, List, Upload, RefreshCcw, FileText, Film, File, HardDrive, Loader2, X } from "lucide-react";
 import { AdminSidebar } from "@/components/layout/AdminSidebar";
 import { motion, AnimatePresence } from "framer-motion";
+import { showToast } from "@/lib/toast";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
 interface MediaAsset {
     id: string;
@@ -29,6 +31,8 @@ export default function MediaGalleryPage() {
     const [selectedAsset, setSelectedAsset] = useState<MediaAsset | null>(null);
     const [isUploading, setIsUploading] = useState(false);
     const [stats, setStats] = useState({ total: 0, totalSize: 0, images: 0, documents: 0 });
+    const [assetPendingDelete, setAssetPendingDelete] = useState<MediaAsset | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     const fetchAssets = useCallback(async () => {
         setLoading(true);
@@ -41,6 +45,7 @@ export default function MediaGalleryPage() {
             }
         } catch (err) {
             console.error("Failed to fetch media assets:", err);
+            showToast.error("Gagal Memuat Media", "Tidak dapat mengambil daftar media.");
         }
         setLoading(false);
     }, []);
@@ -51,9 +56,14 @@ export default function MediaGalleryPage() {
     }, [fetchAssets]);
 
     const copyToClipboard = async (url: string, id: string) => {
-        await navigator.clipboard.writeText(url);
-        setCopiedId(id);
-        setTimeout(() => setCopiedId(null), 2000);
+        try {
+            await navigator.clipboard.writeText(url);
+            setCopiedId(id);
+            showToast.info("Tautan Disalin", "URL aset berhasil disalin ke papan klip.");
+            setTimeout(() => setCopiedId(null), 2000);
+        } catch {
+            showToast.error("Gagal Menyalin", "Tidak dapat menyalin tautan ke papan klip.");
+        }
     };
 
     const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -66,30 +76,39 @@ export default function MediaGalleryPage() {
             const res = await fetch("/api/upload", { method: "POST", body: formData });
             const result = await res.json();
             if (result.success) {
-                fetchAssets(); // Refresh the list
+                showToast.success("File Berhasil Diunggah", file.name);
+                fetchAssets();
             } else {
-                alert("Upload gagal: " + result.error);
+                showToast.error("Unggah Gagal", result.error || "Gagal mengunggah file.");
             }
         } catch {
-            alert("Error saat mengunggah file.");
+            showToast.error("Kesalahan Jaringan", "Error saat mengunggah file ke server.");
+        } finally {
+            setIsUploading(false);
+            e.target.value = "";
         }
-        setIsUploading(false);
-        e.target.value = ""; // Reset input
     };
 
-    const handleDelete = async (id: string) => {
-        if (!confirm("Hapus aset ini? URL yang sudah digunakan di konten lain akan menjadi broken.")) return;
+    const confirmDelete = async () => {
+        if (!assetPendingDelete) return;
+        setIsDeleting(true);
         try {
-            const res = await fetch(`/api/media?id=${id}`, { method: "DELETE" });
+            const res = await fetch(`/api/media?id=${assetPendingDelete.id}`, { method: "DELETE" });
             const data = await res.json();
             if (data.success) {
-                setAssets(prev => prev.filter(a => a.id !== id));
-                setSelectedAsset(null);
+                setAssets(prev => prev.filter(a => a.id !== assetPendingDelete.id));
+                if (selectedAsset?.id === assetPendingDelete.id) {
+                    setSelectedAsset(null);
+                }
+                showToast.success("Aset Berhasil Dihapus", assetPendingDelete.filename || "Aset media telah dihapus.");
+                setAssetPendingDelete(null);
             } else {
-                alert(data.error || "Gagal menghapus.");
+                showToast.error("Gagal Menghapus", data.error || "Gagal menghapus aset.");
             }
         } catch {
-            alert("Error saat menghapus aset.");
+            showToast.error("Kesalahan Jaringan", "Error saat menghapus aset media.");
+        } finally {
+            setIsDeleting(false);
         }
     };
 
@@ -330,7 +349,7 @@ export default function MediaGalleryPage() {
                                                         {copiedId === asset.id ? <Check size={14} className="text-green-600" /> : <Copy size={14} />}
                                                     </button>
                                                     <button
-                                                        onClick={(e) => { e.stopPropagation(); handleDelete(asset.id); }}
+                                                        onClick={(e) => { e.stopPropagation(); setAssetPendingDelete(asset); }}
                                                         className="p-1.5 rounded-lg border border-oxford-200 dark:border-oxford-700 text-oxford-500 dark:text-oxford-400 hover:text-crimson-500 hover:border-crimson-300 transition-colors"
                                                         title="Hapus"
                                                     >
@@ -435,7 +454,7 @@ export default function MediaGalleryPage() {
                                         <ExternalLink size={14} /> Buka
                                     </a>
                                     <button
-                                        onClick={() => handleDelete(selectedAsset.id)}
+                                        onClick={() => setAssetPendingDelete(selectedAsset)}
                                         className="px-5 py-2.5 border-2 border-crimson-200 text-crimson-600 font-bold text-sm rounded-xl hover:bg-crimson-50 transition-all flex items-center justify-center gap-2"
                                     >
                                         <Trash2 size={14} /> Hapus
@@ -446,6 +465,21 @@ export default function MediaGalleryPage() {
                     </motion.div>
                 )}
             </AnimatePresence>
+
+            {/* Confirm Delete Dialog */}
+            <ConfirmDialog
+                isOpen={!!assetPendingDelete}
+                onClose={() => !isDeleting && setAssetPendingDelete(null)}
+                onConfirm={confirmDelete}
+                title="Hapus Aset Media?"
+                itemName={assetPendingDelete?.filename}
+                description="Aset media ini akan dihapus dari server penyimpanan."
+                warningText="PERINGATAN: URL yang sudah digunakan pada materi kursus atau artikel berita terkait akan menjadi rusak/broken."
+                confirmText="Hapus Aset"
+                cancelText="Batal"
+                variant="danger"
+                isLoading={isDeleting}
+            />
         </div>
     );
 }

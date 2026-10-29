@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 };
 
 import { ThemeProvider } from "@/components/theme-provider";
-import { Toaster } from "sonner";
+import { AppToaster } from "@/components/ui/AppToaster";
 import { SessionIdleTracker } from "@/components/SessionIdleTracker";
 
 export default function RootLayout({
@@ -23,7 +23,7 @@ export default function RootLayout({
         className="font-sans bg-background text-foreground antialiased min-h-screen flex flex-col"
       >
         <ThemeProvider storageKey="corpuku-theme">
-          <Toaster position="top-center" richColors />
+          <AppToaster />
           <SessionIdleTracker />
           <Header />
           <main className="flex-1 flex flex-col pt-0">

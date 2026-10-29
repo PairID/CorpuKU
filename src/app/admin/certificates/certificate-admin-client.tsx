@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
+import { showToast } from "@/lib/toast";
 
 type CertificateKind = NonNullable<CertificateData["certificateType"]>;
 export type CertificateSettings = Partial<Record<CertificateKind, CertificateTypeConfig>>;
@@ -169,12 +170,13 @@ export default function CertificateAdminClient({
             };
           }
         });
+        showToast.success("Template Berhasil Diunggah");
       } else {
-        alert("Upload gagal: " + result.error);
+        showToast.error("Gagal Mengunggah Template", result.error || "Gagal mengunggah template.");
       }
     } catch (err) {
       console.error("Upload error:", err);
-      alert("Gagal mengunggah template.");
+      showToast.error("Kesalahan Jaringan", "Gagal mengunggah template ke server.");
     } finally {
       setIsSaving(false);
     }
@@ -985,7 +987,7 @@ export default function CertificateAdminClient({
                                 const file = e.target.files?.[0];
                                 if (file) {
                                   if (file.size > 5 * 1024 * 1024) {
-                                    alert("Maksimal 5MB");
+                                    showToast.warning("Ukuran File Terlalu Besar", "Ukuran file maksimal 5MB.");
                                     return;
                                   }
 
@@ -1002,11 +1004,12 @@ export default function CertificateAdminClient({
                                       updateElement(el.id, {
                                         imageUrl: result.url,
                                       });
+                                      showToast.success("Gambar Berhasil Diunggah");
                                     } else {
-                                      alert("Gagal upload: " + result.error);
+                                      showToast.error("Gagal Mengunggah", result.error || "Gagal mengunggah gambar.");
                                     }
                                   } catch {
-                                    alert("Error saat mengunggah gambar.");
+                                    showToast.error("Kesalahan Jaringan", "Error saat mengunggah gambar.");
                                   } finally {
                                     setIsSaving(false);
                                   }

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Upload, X, FileText, CheckCircle, Loader2, Link as LinkIcon, FileUp } from "lucide-react";
 import Image from "next/image";
+import { showToast } from "@/lib/toast";
 
 interface WebinarFileUploadProps {
     onUploadComplete: (url: string) => void;
@@ -43,12 +44,13 @@ export default function WebinarFileUpload({ onUploadComplete, label, accept = "i
             if (data.success) {
                 setPreview(data.url);
                 onUploadComplete(data.url);
+                showToast.success("File Berhasil Diunggah");
             } else {
-                alert("Upload gagal: " + data.error);
+                showToast.error("Gagal Mengunggah", data.error || "Gagal mengunggah file.");
             }
         } catch (err) {
             console.error("Upload error:", err);
-            alert("Terjadi kesalahan saat mengunggah file.");
+            showToast.error("Kesalahan Jaringan", "Terjadi kesalahan saat mengunggah file.");
         } finally {
             setUploading(false);
         }

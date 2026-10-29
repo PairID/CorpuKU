@@ -12,6 +12,7 @@ import { useState, useEffect } from "react";
 import { exportExcel, type SpreadsheetRow } from "@/lib/excel-client";
 import { getDetailedStudentReport } from "@/app/actions/reports";
 import { ReportPreviewModal } from "./report-preview-modal";
+import { showToast } from "@/lib/toast";
 
 interface AgencyStats {
     name: string;
@@ -65,7 +66,7 @@ export default function AdminAnalytics() {
         try {
             const data = await getDetailedStudentReport();
             if (data.length === 0) {
-                alert("Tidak ada data untuk diekspor.");
+                showToast.warning("Data Kosong", "Tidak ada data untuk diekspor.");
                 return;
             }
 
@@ -73,9 +74,10 @@ export default function AdminAnalytics() {
                 [{ name: "Laporan Siswa", rows: data as SpreadsheetRow[] }],
                 `Laporan_CorpuKU_${new Date().toISOString().split('T')[0]}.xlsx`,
             );
+            showToast.success("Laporan Berhasil Diekspor", "File Excel telah diunduh.");
         } catch (err) {
             console.error("Export error:", err);
-            alert("Gagal mengekspor laporan.");
+            showToast.error("Gagal Mengekspor", "Gagal mengekspor laporan.");
         } finally {
             setIsExporting(false);
         }

@@ -5,6 +5,7 @@ import { Save, ArrowLeft, Loader2, Upload, X } from "lucide-react";
 import Link from "next/link";
 import { createCourse, updateCourseDetails } from "@/app/actions/courses";
 import { COURSE_CATEGORIES } from "@/lib/constants";
+import { showToast } from "@/lib/toast";
 
 
 export interface CourseInstructor {
@@ -68,7 +69,7 @@ export default function CourseForm({ initialData, instructors, mode, basePath = 
         if (!file) return;
         
         if (file.size > 5 * 1024 * 1024) {
-            alert("Ukuran file maksimal 5MB.");
+            showToast.warning("Ukuran File Terlalu Besar", "Ukuran file maksimal 5MB.");
             return;
         }
 
@@ -86,12 +87,13 @@ export default function CourseForm({ initialData, instructors, mode, basePath = 
             if (result.success) {
                 setThumbnailPreview(result.url);
                 setThumbnailUrl(result.url);
+                showToast.success("Gambar Berhasil Diunggah", file.name);
             } else {
-                alert("Upload gagal: " + result.error);
+                showToast.error("Gagal Mengunggah Gambar", result.error || "Gagal mengunggah gambar.");
             }
         } catch (err) {
             console.error("Upload error:", err);
-            alert("Terjadi kesalahan saat upload gambar.");
+            showToast.error("Kesalahan Jaringan", "Terjadi kesalahan saat upload gambar.");
         } finally {
             setIsLoading(false);
         }
@@ -131,23 +133,25 @@ export default function CourseForm({ initialData, instructors, mode, basePath = 
             if (mode === "create") {
                 const result = await createCourse(data);
                 if (result.success) {
+                    showToast.success("Kursus Berhasil Dibuat", "Mengarahkan ke daftar kursus...");
                     // Use window.location for a clean navigation (avoids render loop)
                     window.location.href = `${basePath}/courses`;
-                    return; // Don't setIsLoading(false) — we're navigating away
+                    return;
                 } else {
-                    alert(result.error);
+                    showToast.error("Gagal Membuat Kursus", result.error || "Gagal membuat kursus.");
                 }
             } else {
                 const result = await updateCourseDetails(initialData!.id, data);
                 if (result.success) {
+                    showToast.success("Kursus Berhasil Diperbarui", "Mengarahkan ke daftar kursus...");
                     window.location.href = `${basePath}/courses`;
                     return;
                 } else {
-                    alert(result.error);
+                    showToast.error("Gagal Memperbarui Kursus", result.error || "Gagal menyimpan perubahan kursus.");
                 }
             }
         } catch {
-            alert("Terjadi kesalahan saat menyimpan.");
+            showToast.error("Kesalahan Jaringan", "Terjadi kesalahan saat menyimpan.");
         }
 
         setIsLoading(false);

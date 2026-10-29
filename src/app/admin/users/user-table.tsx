@@ -44,6 +44,8 @@ import {
 import { useRouter } from "next/navigation";
 import { PANGKAT_GOLONGAN } from "@/lib/constants";
 import { exportExcel, parseSpreadsheet, type SpreadsheetRow } from "@/lib/excel-client";
+import { showToast } from "@/lib/toast";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
 export interface AdminUser {
   id: string;
@@ -152,6 +154,9 @@ export default function UserTable({ users }: { users: AdminUser[] }) {
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [activeModal, setActiveModal] = useState<ModalType>(null);
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
+  const [userPendingDelete, setUserPendingDelete] = useState<AdminUser | null>(null);
+  const [userPendingResetNip, setUserPendingResetNip] = useState<AdminUser | null>(null);
+  const [isActionLoading, setIsActionLoading] = useState(false);
   const [notification, setNotification] = useState<{
     type: "success" | "error";
     message: string;
@@ -184,6 +189,11 @@ export default function UserTable({ users }: { users: AdminUser[] }) {
     (type: "success" | "error", message: string) => {
       setNotification({ type, message });
       setTimeout(() => setNotification(null), 4000);
+      if (type === "success") {
+        showToast.success(message);
+      } else {
+        showToast.error(message);
+      }
     },
     [],
   );
@@ -258,33 +268,38 @@ export default function UserTable({ users }: { users: AdminUser[] }) {
     setUpdatingId(null);
   };
 
-  const handleDeleteUser = async (userId: string, userName: string) => {
-    if (!confirm(`Apakah Anda yakin ingin menghapus pengguna "${userName}"?`))
-      return;
-    setUpdatingId(userId);
-    const result = await deleteUser(userId);
+  const confirmDeleteUser = async () => {
+    if (!userPendingDelete) return;
+    setIsActionLoading(true);
+    setUpdatingId(userPendingDelete.id);
+    const result = await deleteUser(userPendingDelete.id);
     if (result.success) {
-      showNotification("success", `Pengguna "${userName}" berhasil dihapus.`);
+      showNotification("success", `Pengguna "${userPendingDelete.name}" berhasil dihapus.`);
+      setUserPendingDelete(null);
       router.refresh();
     } else {
       showNotification("error", result.error || "Gagal menghapus pengguna.");
     }
     setUpdatingId(null);
+    setIsActionLoading(false);
   };
 
-  const handleResetToNip = async (userId: string, userName: string) => {
-    if (!confirm(`Buat password sementara baru untuk "${userName}" dan hentikan seluruh sesi aktif?`)) return;
-    setUpdatingId(userId);
-    const result = await resetPasswordToNip(userId);
+  const confirmResetToNip = async () => {
+    if (!userPendingResetNip) return;
+    setIsActionLoading(true);
+    setUpdatingId(userPendingResetNip.id);
+    const result = await resetPasswordToNip(userPendingResetNip.id);
     if (result.success) {
       showNotification(
         "success",
-        `Password sementara "${userName}": ${result.temporaryPassword}. Salin sekarang dan kirim melalui kanal aman.`,
+        `Password sementara "${userPendingResetNip.name}": ${result.temporaryPassword}. Salin sekarang dan kirim melalui kanal aman.`,
       );
+      setUserPendingResetNip(null);
     } else {
       showNotification("error", result.error || "Gagal mereset password.");
     }
     setUpdatingId(null);
+    setIsActionLoading(false);
   };
 
   const formatRole = (role: string) => {
@@ -544,14 +559,14 @@ export default function UserTable({ users }: { users: AdminUser[] }) {
                           <KeyRound size={16} />
                         </button>
                         <button
-                          onClick={() => handleResetToNip(user.id, user.name)}
+                          onClick={() => setUserPendingResetNip(user)}
                           className="p-2 text-oxford-400 hover:text-oxford-700 dark:hover:text-oxford-200 hover:bg-oxford-100 dark:hover:bg-[#161B2A] rounded-lg transition-colors"
                           title="Reset Password ke NIP"
                         >
                           <RotateCcw size={16} />
                         </button>
                         <button
-                          onClick={() => handleDeleteUser(user.id, user.name)}
+                          onClick={() => setUserPendingDelete(user)}
                           className="p-2 text-oxford-400 hover:text-crimson-600 hover:bg-crimson-50 rounded-lg transition-colors"
                           title="Hapus Pengguna"
                         >
@@ -685,6 +700,36 @@ export default function UserTable({ users }: { users: AdminUser[] }) {
           onError={(msg) => showNotification("error", msg)}
         />
       )}
+
+      {/* Confirm Delete User */}
+      <ConfirmDialog
+        isOpen={!!userPendingDelete}
+        onClose={() => !isActionLoading && setUserPendingDelete(null)}
+        onConfirm={confirmDeleteUser}
+        title="Hapus Akun Pengguna?"
+        itemName={userPendingDelete?.name}
+        description={`Akun dengan email ${userPendingDelete?.email || ""} dan NIP ${userPendingDelete?.nip || "-"} akan dihapus permanen.`}
+        warningText="PERINGATAN: Tindakan ini permanen. Seluruh riwayat pelatihan, sertifikat, dan progres belajar pengguna ini akan ikut terhapus."
+        confirmText="Hapus Akun"
+        cancelText="Batal"
+        variant="danger"
+        isLoading={isActionLoading}
+      />
+
+      {/* Confirm Reset Password to NIP */}
+      <ConfirmDialog
+        isOpen={!!userPendingResetNip}
+        onClose={() => !isActionLoading && setUserPendingResetNip(null)}
+        onConfirm={confirmResetToNip}
+        title="Reset Password ke NIP?"
+        itemName={userPendingResetNip?.name}
+        description="Password akun akan diatur ulang dan sesi aktif pengguna akan diputus segera."
+        warningText="Informasikan password baru kepada pengguna melalui kanal komunikasi kedinasan yang aman."
+        confirmText="Reset Password"
+        cancelText="Batal"
+        variant="warning"
+        isLoading={isActionLoading}
+      />
     </div>
   );
 }
@@ -1529,7 +1574,7 @@ function ResetPasswordModal({
               Reset Password
             </h2>
             <p className="text-xs text-oxford-500 dark:text-oxford-400">
-              {user.name} — {user.nip}
+              {user.name} ({user.nip})
             </p>
           </div>
         </div>

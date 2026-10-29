@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 import { toast } from "sonner";
-import { LogOut, Clock, ShieldAlert } from "lucide-react";
+import { Clock, ShieldAlert } from "lucide-react";
 
 // Waktu tidak aktif maksimal sebelum auto-logout (detik)
 // Admin / Instruktur: 2 Jam (7200 detik)
@@ -18,7 +18,7 @@ export function SessionIdleTracker() {
   const user = sessionData?.user;
   const isAdminOrInstructor = user && (user.role === "admin" || user.role === "instructor");
 
-  const lastActivityRef = useRef<number>(Date.now());
+  const lastActivityRef = useRef<number>(0);
   const [showWarningModal, setShowWarningModal] = useState(false);
   const [countdownSeconds, setCountdownSeconds] = useState(180);
   const isLoggingOutRef = useRef(false);

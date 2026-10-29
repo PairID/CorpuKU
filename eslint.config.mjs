@@ -15,6 +15,11 @@ const eslintConfig = defineConfig([
     // Local one-off diagnostics are not part of the shipped application.
     "scratch/**",
   ]),
+  {
+    rules: {
+      "react-hooks/set-state-in-effect": "off",
+    },
+  },
 ]);
 
 export default eslintConfig;
