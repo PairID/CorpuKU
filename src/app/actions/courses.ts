@@ -1009,3 +1009,266 @@ export async function updateCertificateGlobalFormat(format: {
         return { success: false, error: "Gagal memperbarui format penomoran sertifikat." };
     }
 }
+
+// ------------------------------------------------------------------------------------------------
+// INTEGRASI SATU PINTU (ASN LEARNING PASSPORT) — ADMIN ACTIONS & SECURITY
+// ------------------------------------------------------------------------------------------------
+
+function maskApiKey(key: string | null | undefined): string {
+    if (!key) return '';
+    const trimmed = key.trim();
+    if (trimmed.length <= 8) return '••••••••';
+    const prefix = trimmed.startsWith('asnlp_live_') ? 'asnlp_live_' : trimmed.slice(0, 4);
+    const suffix = trimmed.slice(-4);
+    return `${prefix}••••••••••••••••${suffix}`;
+}
+
+function validateAndSanitizeUrl(rawUrl: string): { valid: boolean; url?: string; error?: string } {
+    if (!rawUrl || typeof rawUrl !== 'string') {
+        return { valid: false, error: 'URL endpoint wajib diisi.' };
+    }
+    const trimmed = rawUrl.trim();
+    if (trimmed.length > 255) {
+        return { valid: false, error: 'URL terlalu panjang (maksimal 255 karakter).' };
+    }
+
+    try {
+        const parsed = new URL(trimmed);
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+            return { valid: false, error: 'Protokol URL harus HTTP atau HTTPS.' };
+        }
+
+        // Anti-SSRF (Server-Side Request Forgery) protection
+        const host = parsed.hostname.toLowerCase();
+        const isProd = process.env.NODE_ENV === 'production';
+        if (host === '169.254.169.254' || host === '0.0.0.0') {
+            return { valid: false, error: 'Alamat IP internal / cloud metadata tidak diizinkan.' };
+        }
+        if (isProd && (host === 'localhost' || host === '127.0.0.1')) {
+            return { valid: false, error: 'Target localhost tidak diizinkan pada environment produksi.' };
+        }
+
+        return { valid: true, url: `${parsed.protocol}//${parsed.host}` };
+    } catch {
+        return { valid: false, error: 'Format URL tidak valid.' };
+    }
+}
+
+export async function getPassportIntegrationSettings() {
+    try {
+        await requireAdminSession();
+
+        const dbRow = await sql`
+            SELECT settings FROM certificate_settings WHERE type = 'passport_integration' LIMIT 1
+        `;
+        const dbSettings = dbRow[0]?.settings as {
+            apiUrl?: string;
+            apiKey?: string;
+            enabled?: boolean;
+            updatedAt?: string;
+            updatedBy?: string;
+        } | undefined;
+
+        const envUrl = process.env.PASSPORT_API_URL?.trim();
+        const envKey = process.env.PASSPORT_API_KEY?.trim();
+
+        if (dbSettings && typeof dbSettings === 'object' && dbSettings.apiUrl) {
+            return {
+                success: true,
+                enabled: dbSettings.enabled !== false,
+                apiUrl: dbSettings.apiUrl,
+                maskedApiKey: maskApiKey(dbSettings.apiKey),
+                hasApiKey: Boolean(dbSettings.apiKey),
+                source: 'database' as const,
+                updatedAt: dbSettings.updatedAt || null,
+                updatedBy: dbSettings.updatedBy || null,
+            };
+        }
+
+        if (envUrl && envKey) {
+            return {
+                success: true,
+                enabled: true,
+                apiUrl: envUrl,
+                maskedApiKey: maskApiKey(envKey),
+                hasApiKey: true,
+                source: 'env' as const,
+                updatedAt: null,
+                updatedBy: 'Environment Variable (.env)',
+            };
+        }
+
+        return {
+            success: true,
+            enabled: false,
+            apiUrl: 'https://learningpassport.kaltaraprov.go.id',
+            maskedApiKey: '',
+            hasApiKey: false,
+            source: 'none' as const,
+            updatedAt: null,
+            updatedBy: null,
+        };
+    } catch (err) {
+        console.error("Failed to get passport integration settings:", err);
+        return {
+            success: false,
+            error: "Gagal memuat pengaturan integrasi Satu Pintu.",
+        };
+    }
+}
+
+export async function savePassportIntegrationSettings(data: {
+    apiUrl: string;
+    apiKey?: string;
+    enabled: boolean;
+}) {
+    try {
+        const session = await requireAdminSession();
+
+        const urlValidation = validateAndSanitizeUrl(data.apiUrl);
+        if (!urlValidation.valid || !urlValidation.url) {
+            return { success: false, error: urlValidation.error || 'URL tidak valid.' };
+        }
+
+        // Ambil existing settings dari database
+        const existingRow = await sql`
+            SELECT settings FROM certificate_settings WHERE type = 'passport_integration' LIMIT 1
+        `;
+        const existing = (existingRow[0]?.settings as Record<string, unknown>) || {};
+        let finalApiKey = (existing.apiKey as string) || process.env.PASSPORT_API_KEY || '';
+
+        // Jika user menginputkan API Key baru (bukan string mask '••••')
+        if (data.apiKey && !data.apiKey.includes('•')) {
+            const cleanKey = data.apiKey.trim();
+            if (cleanKey.length < 20 || cleanKey.length > 128) {
+                return { success: false, error: 'Panjang API Key tidak valid (harus 20-128 karakter).' };
+            }
+            if (!cleanKey.startsWith('asnlp_')) {
+                return { success: false, error: 'API Key harus diawali dengan awalan resmi "asnlp_".' };
+            }
+            finalApiKey = cleanKey;
+        }
+
+        if (data.enabled && !finalApiKey) {
+            return { success: false, error: 'API Key wajib diisi jika integrasi diaktifkan.' };
+        }
+
+        const newSettings = {
+            apiUrl: urlValidation.url,
+            apiKey: finalApiKey,
+            enabled: Boolean(data.enabled),
+            updatedAt: new Date().toISOString(),
+            updatedBy: session.user.email || session.user.name || 'Admin',
+        };
+
+        await sql`
+            INSERT INTO certificate_settings (type, settings)
+            VALUES ('passport_integration', ${JSON.stringify(newSettings)}::jsonb)
+            ON CONFLICT (type) DO UPDATE SET settings = EXCLUDED.settings
+        `;
+
+        revalidatePath('/admin/certificates');
+        return {
+            success: true,
+            maskedApiKey: maskApiKey(finalApiKey),
+        };
+    } catch (err) {
+        console.error("Failed to save passport integration settings:", err);
+        return { success: false, error: "Gagal menyimpan konfigurasi integrasi." };
+    }
+}
+
+export async function testPassportIntegrationConnection(data: {
+    apiUrl?: string;
+    apiKey?: string;
+}) {
+    try {
+        await requireAdminSession();
+
+        // 1. Dapatkan URL target
+        let targetUrl = data.apiUrl?.trim();
+        let targetKey = data.apiKey?.trim();
+
+        if (!targetUrl || !targetKey || targetKey.includes('•')) {
+            const current = await sql`
+                SELECT settings FROM certificate_settings WHERE type = 'passport_integration' LIMIT 1
+            `;
+            const currentSettings = current[0]?.settings as { apiUrl?: string; apiKey?: string } | undefined;
+            if (!targetUrl) targetUrl = currentSettings?.apiUrl || process.env.PASSPORT_API_URL || '';
+            if (!targetKey || targetKey.includes('•')) {
+                targetKey = currentSettings?.apiKey || process.env.PASSPORT_API_KEY || '';
+            }
+        }
+
+        const urlValidation = validateAndSanitizeUrl(targetUrl);
+        if (!urlValidation.valid || !urlValidation.url) {
+            return { success: false, error: urlValidation.error || 'URL server tidak valid.' };
+        }
+        if (!targetKey) {
+            return { success: false, error: 'API Key belum diisi.' };
+        }
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 4000); // 4s timeout
+
+        const endpoint = `${urlValidation.url}/api/alumni/external/issue-number`;
+
+        const testPayload = {
+            trainingName: "Uji Koneksi Healthcheck CorpuKU",
+            batchCode: "PING",
+            category: "Teknis",
+            trainingType: "Webinar",
+            jp: 2,
+            startDate: new Date().toISOString().slice(0, 10),
+            endDate: new Date().toISOString().slice(0, 10),
+            participants: [],
+        };
+
+        const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-api-key': targetKey,
+            },
+            body: JSON.stringify(testPayload),
+            signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+
+        if (res.ok) {
+            return {
+                success: true,
+                message: "Koneksi berhasil! Server ASN Learning Passport online dan API Key terverifikasi valid.",
+                status: res.status,
+            };
+        } else if (res.status === 401 || res.status === 403) {
+            return {
+                success: false,
+                error: `Autentikasi ditolak (HTTP ${res.status}): API Key tidak valid atau scope izin kurang.`,
+                status: res.status,
+            };
+        } else if (res.status === 404) {
+            return {
+                success: false,
+                error: `Endpoint tidak ditemukan (HTTP 404) di: ${endpoint}. Pastikan URL mengarah ke backend Passport yang benar.`,
+                status: res.status,
+            };
+        } else {
+            const text = await res.text().catch(() => '');
+            return {
+                success: false,
+                error: `Server merespons kode HTTP ${res.status}: ${text.slice(0, 150)}`,
+                status: res.status,
+            };
+        }
+    } catch (err: any) {
+        if (err?.name === 'AbortError') {
+            return { success: false, error: "Koneksi timeout (server tidak merespons dalam 4 detik)." };
+        }
+        return {
+            success: false,
+            error: `Tidak dapat menghubungi server: ${err?.message || 'Network unreachable'}.`,
+        };
+    }
+}

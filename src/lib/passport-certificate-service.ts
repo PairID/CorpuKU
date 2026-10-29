@@ -29,6 +29,57 @@ export interface ReservedCertificateResult {
   verificationUrl?: string;
 }
 
+export interface PassportIntegrationConfig {
+  apiUrl: string;
+  apiKey: string;
+  enabled: boolean;
+  source: 'database' | 'env';
+}
+
+/**
+ * Mengambil konfigurasi integrasi aktif:
+ * Prioritas 1: Database (`certificate_settings` WHERE type = 'passport_integration')
+ * Prioritas 2: Fallback ke environment variable `PASSPORT_API_URL` & `PASSPORT_API_KEY`
+ */
+export async function getActivePassportConfig(): Promise<PassportIntegrationConfig | null> {
+  // 1. Cek dari database (Prioritas Utama — Dinamis tanpa restart server)
+  try {
+    const row = await sql`
+      SELECT settings FROM certificate_settings WHERE type = 'passport_integration' LIMIT 1
+    `;
+    const settings = row[0]?.settings as { apiUrl?: string; apiKey?: string; enabled?: boolean } | undefined;
+    if (settings && typeof settings === 'object') {
+      if (settings.enabled === false) {
+        return null; // Dinonaktifkan secara eksplisit oleh admin
+      }
+      if (settings.apiUrl && settings.apiKey) {
+        return {
+          apiUrl: settings.apiUrl.trim(),
+          apiKey: settings.apiKey.trim(),
+          enabled: true,
+          source: 'database',
+        };
+      }
+    }
+  } catch (err) {
+    console.warn('[PassportConfig] Gagal membaca konfigurasi DB, mencoba env fallback:', err);
+  }
+
+  // 2. Fallback ke environment variable
+  const envUrl = process.env.PASSPORT_API_URL?.trim();
+  const envKey = process.env.PASSPORT_API_KEY?.trim();
+  if (envUrl && envKey) {
+    return {
+      apiUrl: envUrl,
+      apiKey: envKey,
+      enabled: true,
+      source: 'env',
+    };
+  }
+
+  return null;
+}
+
 /**
  * Memesan nomor sertifikat resmi standar BPSDM Kaltara (Satu Pintu).
  * 
@@ -50,16 +101,14 @@ export async function reserveOfficialCertificateNumber(
   const rawBatchCode = options.batchCode?.trim() || 'AKJ-26';
   const safeBatchCode = rawBatchCode.toUpperCase().replace(/[^A-Z0-9_.-]/g, '-').slice(0, 30) || 'AKJ-26';
 
-  const passportApiUrl = process.env.PASSPORT_API_URL?.trim();
-  const passportApiKey = process.env.PASSPORT_API_KEY?.trim();
-
-  // 1. Coba hubungi ASN Learning Passport jika konfigurasi API tersedia
-  if (passportApiUrl && passportApiKey) {
+  // 1. Coba hubungi ASN Learning Passport jika konfigurasi API tersedia (DB atau ENV)
+  const activeConfig = await getActivePassportConfig();
+  if (activeConfig) {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 3500); // 3.5s timeout
 
-      const baseUrl = passportApiUrl.replace(/\/+$/, '').replace(/\/api$/, '');
+      const baseUrl = activeConfig.apiUrl.replace(/\/+$/, '').replace(/\/api$/, '');
       const endpoint = `${baseUrl}/api/alumni/external/issue-number`;
       const dateString = activityDate.toISOString().slice(0, 10);
 
@@ -88,7 +137,7 @@ export async function reserveOfficialCertificateNumber(
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': passportApiKey,
+          'x-api-key': activeConfig.apiKey,
         },
         body: JSON.stringify(payload),
         signal: controller.signal,
