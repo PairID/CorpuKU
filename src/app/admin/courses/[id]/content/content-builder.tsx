@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { PlusCircle, Trash2, Edit2, PlayCircle, FileText, CheckCircle2, Save, Loader2, ListPlus, FileUp, Sparkles, Search, QrCode, Copy, Check, HelpCircle, Camera, Link2 } from "lucide-react";
-import { saveCourseContent, generateMaterialAttendanceQr, getMaterialAttendanceQr } from "@/app/actions/builder";
+import { saveCourseContent, generateMaterialAttendanceQr, getMaterialAttendanceQr, getCourseContentForBuilder } from "@/app/actions/builder";
 import { updateCourseDocumentationUrl } from "@/app/actions/courses";
 import { generateAIQuiz } from "@/app/actions/ai";
 import { useRouter } from "next/navigation";
@@ -248,10 +248,13 @@ export default function ContentBuilder({ courseId, initialData, initialDocumenta
     const handleSave = async () => {
         setIsSaving(true);
         const res = await saveCourseContent(courseId, modules, deletions);
-        setIsSaving(false);
         if (res.error) {
+            setIsSaving(false);
             showToast.error("Gagal Menyimpan Materi", res.error);
         } else {
+            const refreshed = await getCourseContentForBuilder(courseId);
+            setModules(refreshed as unknown as CourseContentModule[]);
+            setIsSaving(false);
             showToast.success("Materi Berhasil Disimpan", "Seluruh kurikulum kursus telah diperbarui.");
             setDeletions({ modules: [], lessons: [], questions: [], options: [] });
             router.refresh();

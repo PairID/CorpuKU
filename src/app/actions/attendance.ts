@@ -317,7 +317,7 @@ export async function getCourseAttendanceLive(courseId: string) {
     const [lessonRows, participantRows, attendanceRows] = await Promise.all([
       sql`
         SELECT l.id, l.title, l.jp, l.has_attendance AS "hasAttendance",
-               l.attendance_qr_code AS "attendanceQrCode", l.speaker_name AS "speakerName",
+               l.attendance_qr_code AS "attendanceQrCode", l.narasumber_name AS "speakerName",
                m.title AS "moduleTitle"
         FROM lessons l
         JOIN modules m ON m.id = l.module_id
