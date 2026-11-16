@@ -35,6 +35,7 @@ export interface CourseFormData {
         trainingType?: "elearning" | "classical_facilitation";
         targetOpd?: string | null;
         attendanceThreshold?: number;
+        documentationUrl?: string | null;
 }
 
 interface CourseFormProps {
@@ -68,6 +69,7 @@ export default function CourseForm({ initialData, instructors, mode, basePath = 
     const [trainingType, setTrainingType] = useState<"elearning" | "classical_facilitation">(initialData?.trainingType || "elearning");
     const [targetOpd, setTargetOpd] = useState(initialData?.targetOpd || "");
     const [attendanceThreshold, setAttendanceThreshold] = useState<number>(initialData?.attendanceThreshold ?? 80);
+    const [documentationUrl, setDocumentationUrl] = useState(initialData?.documentationUrl || "");
     const [thumbnailPreview, setThumbnailPreview] = useState<string>(initialData?.thumbnailUrl || "");
 
     const handleThumbnailUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -136,6 +138,7 @@ export default function CourseForm({ initialData, instructors, mode, basePath = 
             trainingType,
             targetOpd: trainingType === "classical_facilitation" ? targetOpd : null,
             attendanceThreshold: Number(attendanceThreshold || 80),
+            documentationUrl: documentationUrl.trim() || "",
         };
 
         try {
@@ -361,6 +364,18 @@ export default function CourseForm({ initialData, instructors, mode, basePath = 
                                 </div>
                             </div>
                         )}
+                    </div>
+
+                    <div className="bg-oxford-50 dark:bg-oxford-950 p-5 rounded-xl border border-oxford-100 dark:border-oxford-800">
+                        <label className="block text-sm font-bold text-oxford-900 dark:text-white mb-2">Link Dokumentasi Kegiatan (Opsional)</label>
+                        <input
+                            type="url"
+                            value={documentationUrl}
+                            onChange={(e) => setDocumentationUrl(e.target.value)}
+                            placeholder="https://drive.google.com/drive/folders/..."
+                            className="w-full px-4 py-2.5 bg-white dark:bg-[#161B2A] border border-oxford-200 dark:border-oxford-700 rounded-lg text-sm focus:outline-none focus:border-gold-500 text-oxford-900 dark:text-white"
+                        />
+                        <p className="text-[11px] text-oxford-500 mt-1">Tautan Google Drive / Album Foto / Rekaman yang ditampilkan di sidebar kelas peserta tanpa membebani server.</p>
                     </div>
 
                     <div className="bg-oxford-50 dark:bg-oxford-950 p-5 rounded-xl border border-oxford-100 dark:border-oxford-800">

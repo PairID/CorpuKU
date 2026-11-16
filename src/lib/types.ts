@@ -32,6 +32,7 @@ export interface Course {
     trainingType?: 'elearning' | 'classical_facilitation';
     targetOpd?: string | null;
     attendanceThreshold?: number;
+    documentationUrl?: string | null;
     createdAt: string;
     updatedAt: string;
 }

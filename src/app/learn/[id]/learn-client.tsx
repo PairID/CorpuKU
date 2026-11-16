@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { PlayCircle, FileText, CheckCircle, ChevronLeft, ChevronDown, ChevronUp, CheckCircle2, ClipboardCheck, Loader2, XCircle, ChevronRight, RotateCcw, AlertCircle, Trophy, FileUp, MessageSquare, Send, Trash2, Award, QrCode, ShieldCheck } from "lucide-react";
+import { PlayCircle, FileText, CheckCircle, ChevronLeft, ChevronDown, ChevronUp, CheckCircle2, ClipboardCheck, Loader2, XCircle, ChevronRight, RotateCcw, AlertCircle, Trophy, FileUp, MessageSquare, Send, Trash2, Award, QrCode, ShieldCheck, Camera, ExternalLink } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { UserSession } from "@/app/dashboard/dashboard-client";
@@ -44,6 +44,7 @@ interface Course {
     trainingType?: string;
     targetOpd?: string | null;
     attendanceThreshold?: number;
+    documentationUrl?: string | null;
 }
 
 interface EnrollmentProps {
@@ -942,6 +943,29 @@ export default function LearnClient({ course, courseContent, session, enrollment
                                 </AnimatePresence>
                             </div>
                         ); })}
+
+                        {/* Link Dokumentasi Kegiatan di Sidebar Kelas */}
+                        {course.documentationUrl && /^https?:\/\//i.test(course.documentationUrl.trim()) && (
+                            <div className="p-4 border-t border-oxford-100 dark:border-oxford-800 bg-oxford-50/60 dark:bg-oxford-950/40">
+                                <a
+                                    href={course.documentationUrl.trim()}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center justify-between gap-3 p-3 rounded-xl bg-white dark:bg-[#161B2A] border border-oxford-200 dark:border-oxford-700 hover:border-gold-500 transition-colors group"
+                                >
+                                    <div className="flex items-center gap-2.5 min-w-0">
+                                        <div className="p-2 rounded-lg bg-gold-50 dark:bg-gold-950/60 text-gold-700 dark:text-gold-300 flex-shrink-0">
+                                            <Camera size={16} />
+                                        </div>
+                                        <div className="min-w-0">
+                                            <p className="text-xs font-bold text-oxford-900 dark:text-white truncate">Dokumentasi Kegiatan</p>
+                                            <p className="text-[11px] text-oxford-500 dark:text-oxford-400 truncate">Buka tautan album / arsip</p>
+                                        </div>
+                                    </div>
+                                    <ExternalLink size={14} className="text-oxford-400 group-hover:text-gold-600 flex-shrink-0" />
+                                </a>
+                            </div>
+                        )}
                     </div>
                 </div>
 

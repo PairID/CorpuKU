@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { PlusCircle, Trash2, Edit2, PlayCircle, FileText, CheckCircle2, Save, Loader2, ListPlus, FileUp, Sparkles, Search, QrCode, Copy, Check, HelpCircle } from "lucide-react";
+import { PlusCircle, Trash2, Edit2, PlayCircle, FileText, CheckCircle2, Save, Loader2, ListPlus, FileUp, Sparkles, Search, QrCode, Copy, Check, HelpCircle, Camera, Link2 } from "lucide-react";
 import { saveCourseContent, generateMaterialAttendanceQr, getMaterialAttendanceQr } from "@/app/actions/builder";
+import { updateCourseDocumentationUrl } from "@/app/actions/courses";
 import { generateAIQuiz } from "@/app/actions/ai";
 import { useRouter } from "next/navigation";
 import { MediaPicker } from "@/components/MediaPicker";
@@ -50,8 +51,10 @@ interface GeneratedQuestion {
     options: Array<{ optionText: string; isCorrect: boolean }>;
 }
 
-export default function ContentBuilder({ courseId, initialData }: { courseId: string; initialData: CourseContentModule[] }) {
+export default function ContentBuilder({ courseId, initialData, initialDocumentationUrl = "" }: { courseId: string; initialData: CourseContentModule[]; initialDocumentationUrl?: string }) {
     const [isSaving, setIsSaving] = useState(false);
+    const [documentationUrl, setDocumentationUrl] = useState(initialDocumentationUrl);
+    const [isSavingDoc, setIsSavingDoc] = useState(false);
     const [isGeneratingAI, setIsGeneratingAI] = useState<{ [key: string]: boolean }>({});
     const [uploadProgress, setUploadProgress] = useState<{ [key: string]: number }>({});
     const [showCustomAIInput, setShowCustomAIInput] = useState<{ [key: string]: boolean }>({});
@@ -269,6 +272,48 @@ export default function ContentBuilder({ courseId, initialData }: { courseId: st
                 </button>
             </div>
 
+            {/* Link Dokumentasi Kegiatan (Sidebar Kelas Peserta) */}
+            <div className="bg-white dark:bg-[#161B2A] p-4 rounded-xl border border-oxford-200 dark:border-oxford-700 shadow-sm flex flex-col sm:flex-row sm:items-center gap-3">
+                <div className="flex items-center gap-2.5 flex-shrink-0">
+                    <div className="p-2 rounded-lg bg-gold-50 dark:bg-gold-950/60 text-gold-700 dark:text-gold-300">
+                        <Camera size={16} />
+                    </div>
+                    <div>
+                        <p className="text-xs font-bold text-oxford-900 dark:text-white">Link Dokumentasi Kelas (Sidebar)</p>
+                        <p className="text-[11px] text-oxford-500 dark:text-oxford-400">Tautan Google Drive / Foto kegiatan tanpa upload file ke server.</p>
+                    </div>
+                </div>
+                <div className="flex-1 flex items-center gap-2">
+                    <div className="relative flex-1">
+                        <Link2 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-oxford-400" />
+                        <input
+                            type="url"
+                            value={documentationUrl}
+                            onChange={(e) => setDocumentationUrl(e.target.value)}
+                            placeholder="https://drive.google.com/drive/folders/..."
+                            className="w-full pl-8 pr-3 py-2 text-xs bg-oxford-50 dark:bg-oxford-950 border border-oxford-200 dark:border-oxford-700 rounded-lg text-oxford-900 dark:text-white focus:outline-none focus:border-gold-500"
+                        />
+                    </div>
+                    <button
+                        type="button"
+                        disabled={isSavingDoc}
+                        onClick={async () => {
+                            setIsSavingDoc(true);
+                            const res = await updateCourseDocumentationUrl(courseId, documentationUrl);
+                            setIsSavingDoc(false);
+                            if (res.success) {
+                                showToast.success("Link Dokumentasi Disimpan", "Tautan dokumentasi tampil di sidebar kelas peserta.");
+                            } else {
+                                showToast.error("Gagal Menyimpan", res.error || "Link tidak valid.");
+                            }
+                        }}
+                        className="px-4 py-2 rounded-lg bg-oxford-900 hover:bg-oxford-800 text-gold-400 text-xs font-bold whitespace-nowrap disabled:opacity-50"
+                    >
+                        {isSavingDoc ? "Menyimpan..." : "Simpan Link"}
+                    </button>
+                </div>
+            </div>
+
             {modules.map((mod, mIndex) => (
                 <div key={mIndex} className="bg-white dark:bg-[#161B2A] rounded-xl border-2 border-oxford-200 dark:border-oxford-700 p-6 flex flex-col shadow-sm">
                     <div className="flex justify-between items-start gap-4 mb-4 pb-4 border-b border-oxford-100 dark:border-oxford-800">
@@ -338,7 +383,7 @@ export default function ContentBuilder({ courseId, initialData }: { courseId: st
                                                     value={less.content || ""}
                                                     onChange={e => updateLesson(mIndex, lIndex, 'content', e.target.value)}
                                                     className="flex-1 text-xs text-oxford-600 dark:text-oxford-300 bg-white dark:bg-[#161B2A] border border-oxford-200 dark:border-oxford-700 rounded px-2 py-1 focus:outline-none"
-                                                    placeholder="URL File (PDF/Doc/Zip)"
+                                                    placeholder="Tempel Link Materi (Google Drive / OneDrive / PDF URL) - tanpa upload ke server"
                                                 />
                                                 <label className="flex flex-col items-end gap-1">
                                                 <div className="flex flex-col gap-1.5">

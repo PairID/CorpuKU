@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BookOpen, ChevronLeft, LayoutDashboard, Users, Activity } from "lucide-react";
+import { BookOpen, ChevronLeft, LayoutDashboard, Users, Activity, Radio } from "lucide-react";
 import { getCourseById } from "@/app/actions/courses";
 import { getCourseContentForBuilder } from "@/app/actions/builder";
 import { notFound } from "next/navigation";
@@ -47,7 +47,7 @@ export default async function CourseContentPage({ params }: { params: Promise<{ 
 
             {/* MAIN CONTENT */}
             <main className="flex-1 flex flex-col min-h-screen max-w-5xl">
-                <header className="h-20 bg-white dark:bg-[#161B2A] border-b border-oxford-200 dark:border-oxford-700 flex items-center px-6 sticky top-0 z-30">
+                <header className="h-20 bg-white dark:bg-[#161B2A] border-b border-oxford-200 dark:border-oxford-700 flex items-center justify-between gap-4 px-6 sticky top-0 z-30">
                     <div className="flex items-center gap-4">
                         <Link href={`/admin/courses`} className="text-oxford-500 dark:text-oxford-400 hover:text-oxford-900 dark:hover:text-white transition-colors">
                             <ChevronLeft size={24} />
@@ -57,10 +57,16 @@ export default async function CourseContentPage({ params }: { params: Promise<{ 
                             <p className="text-xs text-oxford-500 dark:text-oxford-400 font-medium">Kursus: {courseData.title}</p>
                         </div>
                     </div>
+                    <Link
+                        href={`/admin/courses/${id}/attendance`}
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 text-xs font-bold hover:bg-rose-100 dark:hover:bg-rose-900/50 transition-colors"
+                    >
+                        <Radio size={14} className="animate-pulse" /> Monitoring Presensi Live
+                    </Link>
                 </header>
 
                 <div className="p-6 md:p-8 w-full">
-                    <ContentBuilder courseId={id} initialData={contentTree as unknown as CourseContentModule[]} />
+                    <ContentBuilder courseId={id} initialData={contentTree as unknown as CourseContentModule[]} initialDocumentationUrl={courseData.documentationUrl || ""} />
                 </div>
             </main>
         </div>

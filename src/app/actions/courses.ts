@@ -34,6 +34,11 @@ const courseMutationSchema = z.object({
     trainingType: z.enum(["elearning", "classical_facilitation"]).default("elearning"),
     targetOpd: z.string().trim().max(255).nullable().optional(),
     attendanceThreshold: z.number().int().min(1).max(100).default(80),
+    documentationUrl: z.union([
+        z.string().trim().url().max(2048).refine((u) => /^https?:\/\//i.test(u), "URL harus diawali http:// atau https://"),
+        z.literal(""),
+        z.null(),
+    ]).optional(),
 }).superRefine((course, context) => {
     if (course.pacingType === "instructor_paced" && !course.startDate) {
         context.addIssue({ code: "custom", path: ["startDate"], message: "Tanggal mulai wajib untuk instructor-paced." });
@@ -103,6 +108,7 @@ interface CourseRecord {
     trainingType?: "elearning" | "classical_facilitation";
     targetOpd?: string | null;
     attendanceThreshold?: number;
+    documentationUrl?: string | null;
     createdAt: string;
     updatedAt: string;
 }
@@ -251,6 +257,7 @@ export async function getAllCourses() {
                    certificate_start_number as "certificateStartNumber",
                    passing_score as "passingScore", pacing_type as "pacingType", start_date as "startDate", end_date as "endDate",
                    training_type as "trainingType", target_opd as "targetOpd", attendance_threshold as "attendanceThreshold",
+                   documentation_url as "documentationUrl",
                    created_at as "createdAt", 
                    updated_at as "updatedAt"
             FROM courses
@@ -275,6 +282,7 @@ export async function getCourseById(id: string): Promise<CourseRecord | null> {
                    certificate_start_number as "certificateStartNumber",
                    passing_score as "passingScore", pacing_type as "pacingType", start_date as "startDate", end_date as "endDate",
                    training_type as "trainingType", target_opd as "targetOpd", attendance_threshold as "attendanceThreshold",
+                   documentation_url as "documentationUrl",
                    created_at as "createdAt", 
                    updated_at as "updatedAt"
             FROM courses
@@ -851,14 +859,14 @@ export async function createCourse(input: unknown) {
                 id, title, description, category, level, thumbnail_url, status, instructor_id, pacing_type,
                 start_date, end_date, jp, certificate_type, certificate_enabled, certificate_auto_issue,
                 certificate_number_prefix, certificate_start_number, passing_score, training_type, target_opd,
-                attendance_threshold, created_at, updated_at
+                attendance_threshold, documentation_url, created_at, updated_at
             ) VALUES (
                 ${id}, ${sanitizePlainText(data.title)}, ${sanitizePlainText(data.description)}, ${sanitizePlainText(data.category)},
                 ${data.level}, ${data.thumbnailUrl || null}, 'draft', ${instructorId}, ${data.pacingType}, ${data.startDate || null},
                 ${data.endDate || null}, ${data.jp}, ${data.certificateType}, ${data.certificateEnabled},
                 ${data.certificateEnabled && data.certificateAutoIssue}, ${data.certificateNumberPrefix},
                 ${data.certificateStartNumber || null}, ${data.passingScore}, ${data.trainingType}, ${data.targetOpd || null},
-                ${data.attendanceThreshold}, ${now}, ${now}
+                ${data.attendanceThreshold}, ${data.documentationUrl || null}, ${now}, ${now}
             )
         `;
         
@@ -895,6 +903,7 @@ export async function updateCourseDetails(id: string, input: unknown) {
                 training_type = ${data.trainingType},
                 target_opd = ${data.targetOpd || null},
                 attendance_threshold = ${data.attendanceThreshold},
+                documentation_url = CASE WHEN ${data.documentationUrl !== undefined} THEN ${data.documentationUrl || null} ELSE documentation_url END,
                 status = ${data.status},
                 updated_at = ${now}
             WHERE id = ${id}
@@ -903,6 +912,37 @@ export async function updateCourseDetails(id: string, input: unknown) {
     } catch (err) {
         console.error("Failed to update course:", err);
         return { success: false, error: "Gagal memperbarui kursus." };
+    }
+}
+
+export async function updateCourseDocumentationUrl(courseId: string, rawUrl: string) {
+    try {
+        await requireCourseEditor(courseId);
+        const trimmed = String(rawUrl || "").trim();
+        if (trimmed) {
+            let valid = false;
+            try {
+                const parsed = new URL(trimmed);
+                valid = parsed.protocol === "http:" || parsed.protocol === "https:";
+            } catch {
+                valid = false;
+            }
+            if (!valid || trimmed.length > 2048) {
+                return { success: false, error: "Link dokumentasi harus berupa URL http:// atau https:// yang valid." };
+            }
+        }
+        await sql`
+            UPDATE courses
+            SET documentation_url = ${trimmed || null},
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ${courseId}
+        `;
+        revalidatePath(`/learn/${courseId}`);
+        revalidatePath(`/admin/courses/${courseId}/content`);
+        return { success: true };
+    } catch (err) {
+        console.error("Failed to update documentation URL:", err);
+        return { success: false, error: "Gagal menyimpan link dokumentasi." };
     }
 }
 

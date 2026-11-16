@@ -2,7 +2,7 @@
 
 import crypto from "crypto";
 import { sql } from "@/lib/db";
-import { requireUserSession } from "./auth";
+import { requireUserSession, requireInstructorSession } from "./auth";
 import { revalidatePath } from "next/cache";
 import { calculateAttendancePercentage, sanitizeParticipantNip } from "@/lib/classical-training";
 import { issueCourseCertificate } from "@/lib/course-certificates";
@@ -287,6 +287,114 @@ export async function confirmParticipantData(payload: ConfirmParticipantDataPayl
     return {
       success: false,
       error: err instanceof Error ? err.message : "Gagal mengonfirmasi data profil.",
+    };
+  }
+}
+
+/**
+ * Mengambil data monitoring presensi live untuk menu Admin / Penyelenggara
+ */
+export async function getCourseAttendanceLive(courseId: string) {
+  try {
+    const session = await requireInstructorSession();
+    const isAdmin = session.user.role === "admin";
+
+    const courseRows = await sql`
+      SELECT id, title, instructor_id AS "instructorId", training_type AS "trainingType",
+             target_opd AS "targetOpd", attendance_threshold AS "attendanceThreshold", jp
+      FROM courses
+      WHERE id = ${courseId}
+      LIMIT 1
+    `;
+    const course = courseRows[0];
+    if (!course) {
+      return { success: false, error: "Kelas tidak ditemukan." };
+    }
+    if (!isAdmin && String(course.instructorId || "") !== session.user.id) {
+      return { success: false, error: "Anda tidak memiliki akses ke kelas ini." };
+    }
+
+    const [lessonRows, participantRows, attendanceRows] = await Promise.all([
+      sql`
+        SELECT l.id, l.title, l.jp, l.has_attendance AS "hasAttendance",
+               l.attendance_qr_code AS "attendanceQrCode", l.speaker_name AS "speakerName",
+               m.title AS "moduleTitle"
+        FROM lessons l
+        JOIN modules m ON m.id = l.module_id
+        WHERE m.course_id = ${courseId}
+        ORDER BY m."order" ASC, l."order" ASC
+      `,
+      sql`
+        SELECT e.id AS "enrollmentId", e.user_id AS "userId", e.attended_jp AS "attendedJp",
+               e.attendance_percentage AS "attendancePercentage",
+               e.statement_accepted AS "statementAccepted",
+               e.all_evaluations_completed AS "allEvaluationsCompleted",
+               e.status, e.enrolled_at AS "enrolledAt",
+               u.name, u.nip, u.instansi_asal AS "instansiAsal"
+        FROM enrollments e
+        JOIN users u ON u.id = e.user_id
+        WHERE e.course_id = ${courseId}
+        ORDER BY u.name ASC
+      `,
+      sql`
+        SELECT user_id AS "userId", lesson_id AS "lessonId", jp, attended_at AS "attendedAt"
+        FROM material_attendances
+        WHERE course_id = ${courseId}
+        ORDER BY attended_at DESC
+      `,
+    ]);
+
+    const attendanceLessons = lessonRows.filter((l) => l.hasAttendance !== false);
+    const computedJp = attendanceLessons.reduce((acc, l) => acc + Math.max(0, Number(l.jp || 0)), 0);
+    const totalClassJp = computedJp > 0 ? computedJp : Number(course.jp || 0);
+
+    return {
+      success: true,
+      fetchedAt: new Date().toISOString(),
+      course: {
+        id: String(course.id),
+        title: String(course.title || ""),
+        trainingType: String(course.trainingType || "elearning"),
+        targetOpd: course.targetOpd ? String(course.targetOpd) : null,
+        attendanceThreshold: Number(course.attendanceThreshold ?? 80),
+        totalClassJp,
+      },
+      sessions: attendanceLessons.map((l) => ({
+        id: String(l.id),
+        title: String(l.title || ""),
+        moduleTitle: String(l.moduleTitle || ""),
+        jp: Number(l.jp || 0),
+        qrCode: l.attendanceQrCode ? String(l.attendanceQrCode) : null,
+        speakerName: l.speakerName ? String(l.speakerName) : null,
+      })),
+      participants: participantRows.map((p) => {
+        const userAtts = attendanceRows.filter((a) => String(a.userId) === String(p.userId));
+        const attendedJp = userAtts.reduce((sum, a) => sum + Number(a.jp || 0), 0);
+        const attendancePercentage = calculateAttendancePercentage(attendedJp, totalClassJp);
+        return {
+          enrollmentId: String(p.enrollmentId),
+          userId: String(p.userId),
+          name: String(p.name || ""),
+          nip: p.nip ? String(p.nip) : "-",
+          instansiAsal: p.instansiAsal ? String(p.instansiAsal) : "-",
+          attendedJp,
+          attendancePercentage,
+          statementAccepted: Boolean(p.statementAccepted),
+          allEvaluationsCompleted: Boolean(p.allEvaluationsCompleted),
+          status: String(p.status || "in_progress"),
+          attendances: userAtts.map((a) => ({
+            lessonId: String(a.lessonId),
+            jp: Number(a.jp || 0),
+            attendedAt: new Date(String(a.attendedAt)).toISOString(),
+          })),
+        };
+      }),
+    };
+  } catch (err: unknown) {
+    console.error("getCourseAttendanceLive error:", err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Gagal memuat data presensi live.",
     };
   }
 }

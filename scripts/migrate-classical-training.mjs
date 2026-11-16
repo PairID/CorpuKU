@@ -21,7 +21,8 @@ await sql`
   ALTER TABLE courses
     ADD COLUMN IF NOT EXISTS training_type VARCHAR(50) NOT NULL DEFAULT 'elearning',
     ADD COLUMN IF NOT EXISTS target_opd VARCHAR(255),
-    ADD COLUMN IF NOT EXISTS attendance_threshold INTEGER NOT NULL DEFAULT 80
+    ADD COLUMN IF NOT EXISTS attendance_threshold INTEGER NOT NULL DEFAULT 80,
+    ADD COLUMN IF NOT EXISTS documentation_url TEXT
 `;
 console.log('✅ Kolom courses (training_type, target_opd, attendance_threshold) berhasil dipastikan.');
 

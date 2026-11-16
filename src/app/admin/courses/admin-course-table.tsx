@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { Edit, Trash2, Layers, Award } from "lucide-react";
+import { Edit, Trash2, Layers, Award, Radio } from "lucide-react";
 import { deleteCourse } from "@/app/actions/courses";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -122,6 +122,9 @@ export default function AdminCourseTable({ courses, searchQuery, statusFilter, b
                                         <div className="flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                             <Link href={`${basePath}/courses/${course.id}/content`} className="p-2 text-oxford-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="Kelola Materi/Konten">
                                                 <Layers size={16} />
+                                            </Link>
+                                            <Link href={`/admin/courses/${course.id}/attendance`} className="p-2 text-oxford-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors" title="Monitoring Presensi Live">
+                                                <Radio size={16} />
                                             </Link>
                                             <Link href={`${basePath}/courses/${course.id}/edit`} className="p-2 text-oxford-400 hover:text-gold-600 hover:bg-gold-50 rounded-lg transition-colors" title="Edit Metadata Kursus">
                                                 <Edit size={16} />

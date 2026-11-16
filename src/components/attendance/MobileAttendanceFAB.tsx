@@ -214,17 +214,11 @@ export default function MobileAttendanceFAB({
         <button
           type="button"
           onClick={() => setIsOpen(true)}
-          className="flex items-center gap-2.5 px-6 py-3.5 bg-gradient-to-r from-gold-500 via-gold-400 to-gold-500 hover:from-gold-400 hover:to-gold-300 text-oxford-950 font-bold rounded-full shadow-[0_10px_25px_-5px_rgba(239,177,25,0.45)] border-2 border-white/40 dark:border-oxford-800 backdrop-blur active:scale-95 transition-all text-sm tracking-wide group"
+          className="w-14 h-14 flex items-center justify-center bg-gold-500 hover:bg-gold-400 text-oxford-950 rounded-full shadow-[0_10px_25px_-5px_rgba(239,177,25,0.5)] active:scale-95 transition-all group"
           aria-label="Scan QR Presensi Materi"
+          title="Scan QR Presensi"
         >
-          <div className="p-1 bg-oxford-950 text-gold-400 rounded-full group-hover:scale-110 transition-transform">
-            <QrCode size={18} className="stroke-[2.5]" />
-          </div>
-          <span>Scan Presensi</span>
-          <span className="flex h-2 w-2 relative">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-oxford-950 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-oxford-950"></span>
-          </span>
+          <QrCode size={26} className="stroke-[2.25] group-hover:scale-110 transition-transform" />
         </button>
       </div>
 
