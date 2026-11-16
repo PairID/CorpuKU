@@ -11,6 +11,12 @@ export interface EvaluationCriterion {
   }[];
 }
 
+export interface CourseEvaluationConfig {
+  narasumber?: EvaluationCriterion[];
+  organizer?: EvaluationCriterion[];
+  skm?: EvaluationCriterion[];
+}
+
 /**
  * 9 Unsur Standar Survei Kepuasan Masyarakat (SKM) berdasarkan PermenPANRB No. 14 Tahun 2017
  */
@@ -256,4 +262,24 @@ export function calculateSkmScore(
   else if (score > 0) quality = 'D'; // Tidak Baik
 
   return { score, quality, rawTotal, maxScore };
+}
+
+/**
+ * Mengembalikan salinan default konfigurasi evaluasi 3 tahap (Narasumber, Penyelenggara, SKM)
+ */
+export function getDefaultCourseEvaluationConfig(): Required<CourseEvaluationConfig> {
+  return {
+    narasumber: NARASUMBER_EVALUATION_QUESTIONS.map((q) => ({
+      ...q,
+      options: q.options.map((o) => ({ ...o })),
+    })),
+    organizer: ORGANIZER_EVALUATION_QUESTIONS.map((q) => ({
+      ...q,
+      options: q.options.map((o) => ({ ...o })),
+    })),
+    skm: SKM_QUESTIONS.map((q) => ({
+      ...q,
+      options: q.options.map((o) => ({ ...o })),
+    })),
+  };
 }

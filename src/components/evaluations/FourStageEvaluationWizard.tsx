@@ -15,6 +15,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import {
+  CourseEvaluationConfig,
   SKM_QUESTIONS,
   NARASUMBER_EVALUATION_QUESTIONS,
   ORGANIZER_EVALUATION_QUESTIONS,
@@ -38,6 +39,7 @@ interface FourStageEvaluationWizardProps {
   courseId: string;
   courseTitle?: string;
   sessions?: SessionInfo[];
+  evaluationConfig?: CourseEvaluationConfig | null;
   onEvaluationsComplete?: () => void;
 }
 
@@ -45,8 +47,21 @@ export default function FourStageEvaluationWizard({
   courseId,
   courseTitle,
   sessions = [],
+  evaluationConfig,
   onEvaluationsComplete,
 }: FourStageEvaluationWizardProps) {
+  const narasumberQuestions =
+    evaluationConfig?.narasumber && evaluationConfig.narasumber.length > 0
+      ? evaluationConfig.narasumber
+      : NARASUMBER_EVALUATION_QUESTIONS;
+  const organizerQuestions =
+    evaluationConfig?.organizer && evaluationConfig.organizer.length > 0
+      ? evaluationConfig.organizer
+      : ORGANIZER_EVALUATION_QUESTIONS;
+  const skmQuestions =
+    evaluationConfig?.skm && evaluationConfig.skm.length > 0
+      ? evaluationConfig.skm
+      : SKM_QUESTIONS;
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [currentStage, setCurrentStage] = useState<EvaluationStage | "completed">("narasumber");
@@ -110,8 +125,8 @@ export default function FourStageEvaluationWizard({
   const handleNarasumberSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const answeredCount = Object.keys(narasumberRatings).length;
-    if (answeredCount < NARASUMBER_EVALUATION_QUESTIONS.length) {
-      showToast.warning("Lengkapi Penilaian", "Harap isi seluruh 4 aspek penilaian narasumber.");
+    if (answeredCount < narasumberQuestions.length) {
+      showToast.warning("Lengkapi Penilaian", `Harap isi seluruh ${narasumberQuestions.length} aspek penilaian narasumber.`);
       return;
     }
 
@@ -150,8 +165,8 @@ export default function FourStageEvaluationWizard({
   const handleOrganizerSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const answeredCount = Object.keys(organizerRatings).length;
-    if (answeredCount < ORGANIZER_EVALUATION_QUESTIONS.length) {
-      showToast.warning("Lengkapi Penilaian", "Harap isi seluruh 5 aspek penilaian penyelenggaraan.");
+    if (answeredCount < organizerQuestions.length) {
+      showToast.warning("Lengkapi Penilaian", `Harap isi seluruh ${organizerQuestions.length} aspek penilaian penyelenggaraan.`);
       return;
     }
 
@@ -267,8 +282,8 @@ export default function FourStageEvaluationWizard({
   // Stage 4 Submit (SKM 9 Unsur)
   const handleSkmSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (Object.keys(skmRatings).length < SKM_QUESTIONS.length) {
-      showToast.warning("Lengkapi Kuesioner SKM", "Harap isi seluruh 9 unsur pelayanan publik.");
+    if (Object.keys(skmRatings).length < skmQuestions.length) {
+      showToast.warning("Lengkapi Kuesioner SKM", `Harap isi seluruh ${skmQuestions.length} unsur pelayanan publik.`);
       return;
     }
 
@@ -276,7 +291,7 @@ export default function FourStageEvaluationWizard({
     try {
       const skmAnswersList = Object.entries(skmRatings).map(([id, val]) => ({
         questionId: Number(id),
-        questionText: SKM_QUESTIONS.find((q) => q.id === Number(id))?.question || "",
+        questionText: skmQuestions.find((q) => q.id === Number(id))?.question || "",
         optionKey: val.key as "A" | "B" | "C" | "D",
         optionText: val.text,
         score: val.score,
@@ -452,6 +467,11 @@ export default function FourStageEvaluationWizard({
             </div>
 
             {/* Session Selector */}
+            {narasumberSessions.length === 1 && (
+              <div className="px-3.5 py-2.5 rounded-xl bg-oxford-50 dark:bg-oxford-900 border border-oxford-200 dark:border-oxford-700 text-xs font-bold text-oxford-900 dark:text-white">
+                Narasumber Sesi: {narasumberSessions[0].narasumberName} ({narasumberSessions[0].title})
+              </div>
+            )}
             {narasumberSessions.length > 1 && (
               <div>
                 <label className="block text-xs font-bold text-oxford-800 dark:text-oxford-200 mb-1">
@@ -473,7 +493,7 @@ export default function FourStageEvaluationWizard({
 
             {/* Questions */}
             <div className="space-y-4">
-              {NARASUMBER_EVALUATION_QUESTIONS.map((q) => (
+              {narasumberQuestions.map((q) => (
                 <div
                   key={q.id}
                   className="p-4 bg-oxford-50/70 dark:bg-oxford-900/40 rounded-2xl border border-oxford-200/80 dark:border-oxford-800"
@@ -551,7 +571,7 @@ export default function FourStageEvaluationWizard({
             </div>
 
             <div className="space-y-4">
-              {ORGANIZER_EVALUATION_QUESTIONS.map((q) => (
+              {organizerQuestions.map((q) => (
                 <div
                   key={q.id}
                   className="p-4 bg-oxford-50/70 dark:bg-oxford-900/40 rounded-2xl border border-oxford-200/80 dark:border-oxford-800"
@@ -700,7 +720,7 @@ export default function FourStageEvaluationWizard({
             </div>
 
             <div className="space-y-4">
-              {SKM_QUESTIONS.map((q) => (
+              {skmQuestions.map((q) => (
                 <div
                   key={q.id}
                   className="p-4 bg-oxford-50/70 dark:bg-oxford-900/40 rounded-2xl border border-oxford-200/80 dark:border-oxford-800"

@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import DataVerificationModal from "@/components/profile/DataVerificationModal";
 import MobileAttendanceFAB from "@/components/attendance/MobileAttendanceFAB";
 import FourStageEvaluationWizard from "@/components/evaluations/FourStageEvaluationWizard";
+import { CourseEvaluationConfig } from "@/lib/skm-constants";
 
 interface Lesson {
     id: string;
@@ -45,6 +46,7 @@ interface Course {
     targetOpd?: string | null;
     attendanceThreshold?: number;
     documentationUrl?: string | null;
+    evaluationConfig?: CourseEvaluationConfig | null;
 }
 
 interface EnrollmentProps {
@@ -1263,6 +1265,7 @@ export default function LearnClient({ course, courseContent, session, enrollment
                         <FourStageEvaluationWizard
                             courseId={course.id}
                             courseTitle={course.title}
+                            evaluationConfig={course.evaluationConfig}
                             sessions={allLessons.map((l) => ({
                                 id: l.id,
                                 title: l.title,

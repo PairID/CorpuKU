@@ -314,7 +314,7 @@ export async function getCourseAttendanceLive(courseId: string) {
       return { success: false, error: "Anda tidak memiliki akses ke kelas ini." };
     }
 
-    const [lessonRows, participantRows, attendanceRows] = await Promise.all([
+    const [lessonRows, participantRows, attendanceRows, evaluationRows] = await Promise.all([
       sql`
         SELECT l.id, l.title, l.jp, l.has_attendance AS "hasAttendance",
                l.attendance_qr_code AS "attendanceQrCode", l.narasumber_name AS "speakerName",
@@ -341,6 +341,12 @@ export async function getCourseAttendanceLive(courseId: string) {
         FROM material_attendances
         WHERE course_id = ${courseId}
         ORDER BY attended_at DESC
+      `,
+      sql`
+        SELECT user_id AS "userId", stage, session_id AS "sessionId", score, answers, created_at AS "createdAt"
+        FROM training_evaluations
+        WHERE course_id = ${courseId}
+        ORDER BY created_at ASC
       `,
     ]);
 
@@ -387,6 +393,18 @@ export async function getCourseAttendanceLive(courseId: string) {
             jp: Number(a.jp || 0),
             attendedAt: new Date(String(a.attendedAt)).toISOString(),
           })),
+          evaluations: evaluationRows
+            .filter((ev) => String(ev.userId) === String(p.userId))
+            .map((ev) => {
+              const ansObj = (ev.answers && typeof ev.answers === "object" ? ev.answers : {}) as Record<string, unknown>;
+              return {
+                stage: String(ev.stage || ""),
+                sessionId: ev.sessionId ? String(ev.sessionId) : null,
+                score: ev.score != null ? Number(ev.score) : null,
+                notes: typeof ansObj.notes === "string" ? ansObj.notes : null,
+                createdAt: new Date(String(ev.createdAt)).toISOString(),
+              };
+            }),
         };
       }),
     };

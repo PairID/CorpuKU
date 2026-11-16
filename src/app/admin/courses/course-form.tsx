@@ -6,6 +6,8 @@ import Link from "next/link";
 import { createCourse, updateCourseDetails } from "@/app/actions/courses";
 import { COURSE_CATEGORIES } from "@/lib/constants";
 import { showToast } from "@/lib/toast";
+import { CourseEvaluationConfig, getDefaultCourseEvaluationConfig } from "@/lib/skm-constants";
+import CourseEvaluationConfigEditor from "@/components/evaluations/CourseEvaluationConfigEditor";
 
 
 export interface CourseInstructor {
@@ -36,6 +38,7 @@ export interface CourseFormData {
         targetOpd?: string | null;
         attendanceThreshold?: number;
         documentationUrl?: string | null;
+        evaluationConfig?: CourseEvaluationConfig | null;
 }
 
 interface CourseFormProps {
@@ -70,6 +73,14 @@ export default function CourseForm({ initialData, instructors, mode, basePath = 
     const [targetOpd, setTargetOpd] = useState(initialData?.targetOpd || "");
     const [attendanceThreshold, setAttendanceThreshold] = useState<number>(initialData?.attendanceThreshold ?? 80);
     const [documentationUrl, setDocumentationUrl] = useState(initialData?.documentationUrl || "");
+    const [evaluationConfig, setEvaluationConfig] = useState<Required<CourseEvaluationConfig>>(() => {
+        const defaults = getDefaultCourseEvaluationConfig();
+        return {
+            narasumber: initialData?.evaluationConfig?.narasumber?.length ? initialData.evaluationConfig.narasumber : defaults.narasumber,
+            organizer: initialData?.evaluationConfig?.organizer?.length ? initialData.evaluationConfig.organizer : defaults.organizer,
+            skm: initialData?.evaluationConfig?.skm?.length ? initialData.evaluationConfig.skm : defaults.skm,
+        };
+    });
     const [thumbnailPreview, setThumbnailPreview] = useState<string>(initialData?.thumbnailUrl || "");
 
     const handleThumbnailUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -139,6 +150,7 @@ export default function CourseForm({ initialData, instructors, mode, basePath = 
             targetOpd: trainingType === "classical_facilitation" ? targetOpd : null,
             attendanceThreshold: Number(attendanceThreshold || 80),
             documentationUrl: documentationUrl.trim() || "",
+            evaluationConfig: trainingType === "classical_facilitation" ? evaluationConfig : undefined,
         };
 
         try {
@@ -493,6 +505,13 @@ export default function CourseForm({ initialData, instructors, mode, basePath = 
                     </div>
                 </div>
             </div>
+
+            {trainingType === "classical_facilitation" && (
+                <CourseEvaluationConfigEditor
+                    value={evaluationConfig}
+                    onChange={setEvaluationConfig}
+                />
+            )}
         </form>
     );
 }

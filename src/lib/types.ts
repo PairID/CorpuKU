@@ -33,6 +33,11 @@ export interface Course {
     targetOpd?: string | null;
     attendanceThreshold?: number;
     documentationUrl?: string | null;
+    evaluationConfig?: {
+        narasumber?: unknown[];
+        organizer?: unknown[];
+        skm?: unknown[];
+    } | null;
     createdAt: string;
     updatedAt: string;
 }

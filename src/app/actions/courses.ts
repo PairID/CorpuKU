@@ -13,6 +13,30 @@ import { syncLearningPathCompletions } from "@/lib/learning-paths";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+const evaluationCriterionSchema = z.object({
+    id: z.number().int().min(1),
+    criterion: z.string().trim().min(1).max(200),
+    question: z.string().trim().min(1).max(1000),
+    options: z.array(z.object({
+        key: z.enum(["A", "B", "C", "D"]),
+        text: z.string().trim().min(1).max(200),
+        score: z.number().int().min(1).max(4),
+    })).min(2).max(4),
+});
+
+const evaluationConfigSchema = z.object({
+    narasumber: z.array(evaluationCriterionSchema).max(30).optional(),
+    organizer: z.array(evaluationCriterionSchema).max(30).optional(),
+    skm: z.array(evaluationCriterionSchema).max(30).optional(),
+}).nullable().optional();
+
+let ensuredEvaluationConfigCol = false;
+async function ensureEvaluationConfigColumn() {
+    if (ensuredEvaluationConfigCol) return;
+    await sql`ALTER TABLE courses ADD COLUMN IF NOT EXISTS evaluation_config JSONB`;
+    ensuredEvaluationConfigCol = true;
+}
+
 const courseMutationSchema = z.object({
     title: z.string().trim().min(5).max(200),
     description: z.string().max(10_000).default(""),
@@ -39,6 +63,7 @@ const courseMutationSchema = z.object({
         z.literal(""),
         z.null(),
     ]).optional(),
+    evaluationConfig: evaluationConfigSchema,
 }).superRefine((course, context) => {
     if (course.pacingType === "instructor_paced" && !course.startDate) {
         context.addIssue({ code: "custom", path: ["startDate"], message: "Tanggal mulai wajib untuk instructor-paced." });
@@ -109,6 +134,7 @@ interface CourseRecord {
     targetOpd?: string | null;
     attendanceThreshold?: number;
     documentationUrl?: string | null;
+    evaluationConfig?: z.infer<typeof evaluationConfigSchema>;
     createdAt: string;
     updatedAt: string;
 }
@@ -248,6 +274,7 @@ function isQuizAnswer(value: unknown): value is QuizAnswer {
 
 export async function getAllCourses() {
     try {
+        await ensureEvaluationConfigColumn();
         const data = await sql`
             SELECT id, title, description, category, level, 
                    thumbnail_url as "thumbnailUrl", status, 
@@ -258,6 +285,7 @@ export async function getAllCourses() {
                    passing_score as "passingScore", pacing_type as "pacingType", start_date as "startDate", end_date as "endDate",
                    training_type as "trainingType", target_opd as "targetOpd", attendance_threshold as "attendanceThreshold",
                    documentation_url as "documentationUrl",
+                   evaluation_config as "evaluationConfig",
                    created_at as "createdAt", 
                    updated_at as "updatedAt"
             FROM courses
@@ -273,6 +301,7 @@ export async function getAllCourses() {
 
 export async function getCourseById(id: string): Promise<CourseRecord | null> {
     try {
+        await ensureEvaluationConfigColumn();
         const data = await sql`
             SELECT id, title, description, category, level, 
                    thumbnail_url as "thumbnailUrl", status, 
@@ -283,6 +312,7 @@ export async function getCourseById(id: string): Promise<CourseRecord | null> {
                    passing_score as "passingScore", pacing_type as "pacingType", start_date as "startDate", end_date as "endDate",
                    training_type as "trainingType", target_opd as "targetOpd", attendance_threshold as "attendanceThreshold",
                    documentation_url as "documentationUrl",
+                   evaluation_config as "evaluationConfig",
                    created_at as "createdAt", 
                    updated_at as "updatedAt"
             FROM courses
@@ -854,19 +884,22 @@ export async function createCourse(input: unknown) {
             ? String(data.instructorId)
             : session.user.id;
         
+        await ensureEvaluationConfigColumn();
+        const evalConfigJson = data.evaluationConfig ? JSON.stringify(data.evaluationConfig) : null;
+
         await sql`
             INSERT INTO courses (
                 id, title, description, category, level, thumbnail_url, status, instructor_id, pacing_type,
                 start_date, end_date, jp, certificate_type, certificate_enabled, certificate_auto_issue,
                 certificate_number_prefix, certificate_start_number, passing_score, training_type, target_opd,
-                attendance_threshold, documentation_url, created_at, updated_at
+                attendance_threshold, documentation_url, evaluation_config, created_at, updated_at
             ) VALUES (
                 ${id}, ${sanitizePlainText(data.title)}, ${sanitizePlainText(data.description)}, ${sanitizePlainText(data.category)},
                 ${data.level}, ${data.thumbnailUrl || null}, 'draft', ${instructorId}, ${data.pacingType}, ${data.startDate || null},
                 ${data.endDate || null}, ${data.jp}, ${data.certificateType}, ${data.certificateEnabled},
                 ${data.certificateEnabled && data.certificateAutoIssue}, ${data.certificateNumberPrefix},
                 ${data.certificateStartNumber || null}, ${data.passingScore}, ${data.trainingType}, ${data.targetOpd || null},
-                ${data.attendanceThreshold}, ${data.documentationUrl || null}, ${now}, ${now}
+                ${data.attendanceThreshold}, ${data.documentationUrl || null}, ${evalConfigJson}::jsonb, ${now}, ${now}
             )
         `;
         
@@ -883,6 +916,10 @@ export async function updateCourseDetails(id: string, input: unknown) {
         const parsed = courseMutationSchema.safeParse(input);
         if (!parsed.success) return { success: false, error: "Data kursus tidak valid." };
         const data = parsed.data;
+
+        await ensureEvaluationConfigColumn();
+        const hasEvalConfig = data.evaluationConfig !== undefined;
+        const evalConfigJson = data.evaluationConfig ? JSON.stringify(data.evaluationConfig) : null;
 
         const now = new Date().toISOString();
         await sql`
@@ -904,6 +941,7 @@ export async function updateCourseDetails(id: string, input: unknown) {
                 target_opd = ${data.targetOpd || null},
                 attendance_threshold = ${data.attendanceThreshold},
                 documentation_url = CASE WHEN ${data.documentationUrl !== undefined} THEN ${data.documentationUrl || null} ELSE documentation_url END,
+                evaluation_config = CASE WHEN ${hasEvalConfig} THEN ${evalConfigJson}::jsonb ELSE evaluation_config END,
                 status = ${data.status},
                 updated_at = ${now}
             WHERE id = ${id}

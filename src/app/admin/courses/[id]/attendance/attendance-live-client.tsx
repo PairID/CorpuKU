@@ -14,9 +14,11 @@ import {
   Clock,
   Award,
   Layers,
+  Download,
 } from "lucide-react";
 import { getCourseAttendanceLive } from "@/app/actions/attendance";
 import { AdminSidebar } from "@/components/layout/AdminSidebar";
+import { exportExcel, type SpreadsheetRow } from "@/lib/excel-client";
 
 interface AttendanceSessionItem {
   id: string;
@@ -33,6 +35,14 @@ interface ParticipantAttendanceItem {
   attendedAt: string;
 }
 
+interface ParticipantEvaluationItem {
+  stage: string;
+  sessionId: string | null;
+  score: number | null;
+  notes: string | null;
+  createdAt: string;
+}
+
 interface ParticipantRow {
   enrollmentId: string;
   userId: string;
@@ -45,6 +55,7 @@ interface ParticipantRow {
   allEvaluationsCompleted: boolean;
   status: string;
   attendances: ParticipantAttendanceItem[];
+  evaluations?: ParticipantEvaluationItem[];
 }
 
 export interface AttendanceLiveData {
@@ -76,6 +87,87 @@ export default function AttendanceLiveClient({
   const [selectedSessionId, setSelectedSessionId] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExportExcel = async () => {
+    setIsExporting(true);
+    try {
+      const stageAvg = (evals: ParticipantEvaluationItem[] | undefined, stage: string) => {
+        const list = (evals || []).filter((e) => e.stage === stage && e.score != null);
+        if (list.length === 0) return "-";
+        const avg = list.reduce((acc, e) => acc + Number(e.score || 0), 0) / list.length;
+        return Math.round(avg * 100) / 100;
+      };
+
+      const summaryRows: SpreadsheetRow[] = data.participants.map((p, idx) => {
+        const row: SpreadsheetRow = {
+          No: idx + 1,
+          "Nama Peserta": p.name,
+          NIP: p.nip,
+          "Instansi / OPD": p.instansiAsal,
+        };
+        data.sessions.forEach((s, sIdx) => {
+          const att = p.attendances.find((a) => a.lessonId === s.id);
+          row[`Sesi ${sIdx + 1}: ${s.title}`] = att
+            ? `Hadir (${new Date(att.attendedAt).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })})`
+            : "Belum Hadir";
+        });
+        row["Total JP Hadir"] = p.attendedJp;
+        row["Total JP Kelas"] = data.course.totalClassJp;
+        row["Kehadiran (%)"] = p.attendancePercentage;
+        row["Syarat Kehadiran"] =
+          p.attendancePercentage >= data.course.attendanceThreshold ? "Memenuhi" : "Belum Memenuhi";
+        row["Nilai Narasumber"] = stageAvg(p.evaluations, "narasumber");
+        row["Nilai Penyelenggara"] = stageAvg(p.evaluations, "organizer");
+        row["Nilai Pemahaman Materi"] = stageAvg(p.evaluations, "understanding");
+        row["Nilai SKM"] = stageAvg(p.evaluations, "skm");
+        row["Status Evaluasi"] = p.allEvaluationsCompleted ? "Tuntas" : "Belum Tuntas";
+        row["Status Kelas"] = p.status === "completed" ? "Selesai" : "Berlangsung";
+        return row;
+      });
+
+      const stageLabel: Record<string, string> = {
+        narasumber: "1. Evaluasi Narasumber",
+        organizer: "2. Evaluasi Penyelenggara",
+        understanding: "3. Pemahaman Materi",
+        skm: "4. Survei SKM (9 Unsur)",
+      };
+
+      const evalDetailRows: SpreadsheetRow[] = [];
+      let evalIdx = 1;
+      for (const p of data.participants) {
+        for (const ev of p.evaluations || []) {
+          const sess = data.sessions.find((s) => s.id === ev.sessionId);
+          evalDetailRows.push({
+            No: evalIdx++,
+            "Nama Peserta": p.name,
+            NIP: p.nip,
+            "Instansi / OPD": p.instansiAsal,
+            "Tahap Evaluasi": stageLabel[ev.stage] || ev.stage,
+            "Sesi / Narasumber": sess
+              ? `${sess.title}${sess.speakerName ? ` (${sess.speakerName})` : ""}`
+              : "-",
+            Skor: ev.score ?? "-",
+            "Catatan / Masukan": ev.notes || "-",
+            "Waktu Pengisian": new Date(ev.createdAt).toLocaleString("id-ID"),
+          });
+        }
+      }
+
+      const safeTitle = (data.course.title || "Laporan_Kelas")
+        .replace(/[^a-zA-Z0-9_-]+/g, "_")
+        .slice(0, 40);
+      await exportExcel(
+        [
+          { name: "Kehadiran & Nilai", rows: summaryRows.length ? summaryRows : [{ Info: "Belum ada peserta" }] },
+          { name: "Detail Evaluasi", rows: evalDetailRows.length ? evalDetailRows : [{ Info: "Belum ada data evaluasi" }] },
+        ],
+        `Laporan_${safeTitle}.xlsx`
+      );
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const refreshData = useCallback(async () => {
     setIsRefreshing(true);
@@ -208,6 +300,16 @@ export default function AttendanceLiveClient({
               >
                 {isLive ? <Pause size={14} /> : <Play size={14} />}
                 <span>{isLive ? "Jeda" : "Lanjutkan Live"}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => void handleExportExcel()}
+                disabled={isExporting}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-colors disabled:opacity-60 shadow-sm"
+              >
+                <Download size={14} />
+                <span>{isExporting ? "Menyiapkan..." : "Ekspor Excel"}</span>
               </button>
 
               <button
