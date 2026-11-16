@@ -25,13 +25,18 @@ export default async function CertificatePage({ params }: { params: Promise<{ id
         enrollment = allUserEnrollments.find(e => e.id === courseId) || null;
     }
     
-    // Validate if enrollment exists and is completed
-    if (!enrollment || enrollment.status !== 'completed') {
+    // Validate if enrollment exists
+    if (!enrollment) {
         notFound();
     }
 
     const course = await getCourseById(enrollment.courseId);
     if (!course) {
+        notFound();
+    }
+
+    const isClassical = course.trainingType === 'classical_facilitation' || (enrollment as { trainingType?: string }).trainingType === 'classical_facilitation';
+    if (enrollment.status !== 'completed' && !isClassical) {
         notFound();
     }
 

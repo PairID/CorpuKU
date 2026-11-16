@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { PlayCircle, FileText, CheckCircle, ChevronLeft, ChevronDown, ChevronUp, CheckCircle2, ClipboardCheck, Loader2, XCircle, ChevronRight, RotateCcw, AlertCircle, Trophy, FileUp, MessageSquare, Send, Trash2 } from "lucide-react";
+import { PlayCircle, FileText, CheckCircle, ChevronLeft, ChevronDown, ChevronUp, CheckCircle2, ClipboardCheck, Loader2, XCircle, ChevronRight, RotateCcw, AlertCircle, Trophy, FileUp, MessageSquare, Send, Trash2, Award, QrCode, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { UserSession } from "@/app/dashboard/dashboard-client";
@@ -10,6 +10,9 @@ import { getQuizQuestions, submitQuizAttempt, getQuizAttempt, updateLessonProgre
 import { getLessonDiscussions, addDiscussion, deleteDiscussion } from "@/app/actions/discussions";
 import { optimizeAvatar } from "@/lib/utils";
 import { toast } from "sonner";
+import DataVerificationModal from "@/components/profile/DataVerificationModal";
+import MobileAttendanceFAB from "@/components/attendance/MobileAttendanceFAB";
+import FourStageEvaluationWizard from "@/components/evaluations/FourStageEvaluationWizard";
 
 interface Lesson {
     id: string;
@@ -19,6 +22,11 @@ interface Lesson {
     videoUrl: string | null;
     type: string;
     order: string;
+    jp?: number;
+    hasAttendance?: boolean;
+    attendanceQrCode?: string | null;
+    narasumberName?: string | null;
+    sessionDate?: string | null;
 }
 
 interface Module {
@@ -33,13 +41,32 @@ interface Course {
     id: string;
     title: string;
     description: string | null;
+    trainingType?: string;
+    targetOpd?: string | null;
+    attendanceThreshold?: number;
+}
+
+interface EnrollmentProps {
+    id: string;
+    completedLessons?: string[];
+    statementAccepted?: boolean;
+    attendedJp?: number;
+    attendancePercentage?: number;
+    allEvaluationsCompleted?: boolean;
+    evalNarasumberCompleted?: boolean;
+    evalOrganizerCompleted?: boolean;
+    evalUnderstandingCompleted?: boolean;
+    evalSkmCompleted?: boolean;
+    trainingType?: string;
+    targetOpd?: string | null;
+    attendanceThreshold?: number;
 }
 
 interface LearnClientProps {
     course: Course;
     courseContent: Module[];
     session: UserSession;
-    enrollment: { id: string; completedLessons?: string[] } | null;
+    enrollment: EnrollmentProps | null;
 }
 
 interface LessonDiscussion {
@@ -109,6 +136,17 @@ export default function LearnClient({ course, courseContent, session, enrollment
     const [isSubmittingComment, setIsSubmittingComment] = useState(false);
     const [isFetchingDiscussions, setIsFetchingDiscussions] = useState(false);
     const user = session.user;
+
+    const isClassical = course.trainingType === "classical_facilitation" || enrollment?.trainingType === "classical_facilitation";
+    const [isVerificationModalOpen, setIsVerificationModalOpen] = useState(
+        Boolean(isClassical && !enrollment?.statementAccepted && session.user.role === "student")
+    );
+    const [showEvaluationWizard, setShowEvaluationWizard] = useState(false);
+    const [attendanceStats, setAttendanceStats] = useState({
+        attendedJp: Number(enrollment?.attendedJp || 0),
+        attendancePercentage: Number(enrollment?.attendancePercentage || 0),
+        allEvaluationsCompleted: Boolean(enrollment?.allEvaluationsCompleted),
+    });
 
     // Quiz state
     const [quizPhase, setQuizPhase] = useState<QuizPhase>("start");
@@ -764,12 +802,22 @@ export default function LearnClient({ course, courseContent, session, enrollment
                 </Link>
                 <div className="w-px h-6 bg-oxford-800 mx-4 hidden sm:block"></div>
                 <h1 className="text-sm md:text-base font-serif font-bold truncate flex-1">{activeLesson ? cleanLessonTitle(activeLesson.title, activeLesson.type) : course.title}</h1>
+                {isClassical && (
+                    <button
+                        type="button"
+                        onClick={() => setShowEvaluationWizard(true)}
+                        className="mr-2 inline-flex items-center gap-1.5 px-3 py-1 bg-gold-500 hover:bg-gold-400 text-oxford-950 font-bold text-xs rounded-full transition-colors shadow-xs cursor-pointer"
+                    >
+                        <Award size={14} />
+                        <span>Evaluasi (4 Tahap)</span>
+                    </button>
+                )}
                 {enrollment?.id && (
                     <Link
                         href={`/dashboard/courses/${enrollment.id}/progress`}
                         className="hidden sm:inline-flex items-center gap-2 rounded-full border border-oxford-700 px-3 py-1.5 text-xs font-bold text-oxford-200 transition-colors hover:border-gold-500 hover:text-gold-400"
                     >
-                        <ClipboardCheck size={15} /> Nilai
+                        <ClipboardCheck size={15} /> Progres &amp; Sertifikat
                     </Link>
                 )}
                 <div className="flex items-center ml-4">
@@ -870,9 +918,18 @@ export default function LearnClient({ course, courseContent, session, enrollment
                                                                     <div className={`text-sm font-sans truncate ${isActive ? 'font-bold text-oxford-950' : 'text-oxford-700 dark:text-oxford-200'}`}>
                                                                         {cleanLessonTitle(lesson.title, lesson.type)}
                                                                     </div>
-                                                                    <div className={`text-[11px] mt-0.5 flex items-center ${isActive ? 'text-gold-700 font-medium' : 'text-oxford-400'}`}>
-                                                                        {getLessonTypeLabel(lesson.type)}
-                                                                        {isCompleted && <CheckCircle size={10} className="ml-1.5 text-green-500" />}
+                                                                    <div className={`text-[11px] mt-0.5 flex flex-wrap items-center gap-1.5 ${isActive ? 'text-gold-700 font-medium' : 'text-oxford-400'}`}>
+                                                                        <span>{getLessonTypeLabel(lesson.type)}</span>
+                                                                        {isCompleted && <CheckCircle size={10} className="text-green-500" />}
+                                                                        {isClassical && lesson.hasAttendance !== false && (
+                                                                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                                                                isCompleted
+                                                                                    ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                                                                                    : "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                                                                            }`}>
+                                                                                {isCompleted ? `Hadir (${lesson.jp || 2} JP)` : `${lesson.jp || 2} JP • Presensi`}
+                                                                            </span>
+                                                                        )}
                                                                     </div>
                                                                 </div>
                                                             </button>
@@ -1130,6 +1187,72 @@ export default function LearnClient({ course, courseContent, session, enrollment
                     )}
                 </div>
             </div>
+
+            {/* Modal Verifikasi Data Profil & Checklist Pernyataan Peserta */}
+            <DataVerificationModal
+                isOpen={isVerificationModalOpen}
+                onClose={() => setIsVerificationModalOpen(false)}
+                onSuccess={() => {
+                    setIsVerificationModalOpen(false);
+                    toast.success("Verifikasi data profil tuntas!");
+                }}
+                courseId={course.id}
+                courseTitle={course.title}
+                initialProfile={{
+                    name: user.name,
+                    nip: ((user as Record<string, unknown>).nip as string) || "",
+                    instansiAsal: user.instansiAsal || "",
+                    jabatan: ((user as Record<string, unknown>).jabatan as string) || "",
+                    pangkat: ((user as Record<string, unknown>).pangkat as string) || "",
+                    phone: ((user as Record<string, unknown>).phone as string) || "",
+                }}
+            />
+
+            {/* Mobile Persistent Floating Action Button untuk Presensi QR */}
+            {isClassical && (
+                <MobileAttendanceFAB
+                    courseId={course.id}
+                    courseTitle={course.title}
+                    lessons={allLessons}
+                    onAttendanceSuccess={(att) => {
+                        setAttendanceStats((prev) => ({
+                            ...prev,
+                            attendedJp: att.attendedJp,
+                            attendancePercentage: att.attendancePercentage,
+                        }));
+                        setCompletedLessons((prev) => ({ ...prev, [att.lessonId]: true }));
+                    }}
+                />
+            )}
+
+            {/* Modal Rangkaian 4 Tahap Evaluasi Pelatihan */}
+            {showEvaluationWizard && (
+                <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+                    <div className="max-w-3xl w-full my-8 relative animate-in fade-in zoom-in-95 duration-200">
+                        <button
+                            type="button"
+                            onClick={() => setShowEvaluationWizard(false)}
+                            className="absolute -top-3 -right-3 z-10 w-9 h-9 bg-white dark:bg-oxford-800 text-oxford-700 dark:text-white rounded-full shadow-lg flex items-center justify-center font-bold hover:scale-105 transition-transform"
+                        >
+                            ✕
+                        </button>
+                        <FourStageEvaluationWizard
+                            courseId={course.id}
+                            courseTitle={course.title}
+                            sessions={allLessons.map((l) => ({
+                                id: l.id,
+                                title: l.title,
+                                narasumberName: l.narasumberName,
+                                jp: l.jp,
+                            }))}
+                            onEvaluationsComplete={() => {
+                                setAttendanceStats((prev) => ({ ...prev, allEvaluationsCompleted: true }));
+                                toast.success("Rangkaian evaluasi 4 tahap tuntas!");
+                            }}
+                        />
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

@@ -31,6 +31,9 @@ const courseMutationSchema = z.object({
     certificateNumberPrefix: z.string().trim().toUpperCase().regex(/^[A-Z0-9-]{2,20}$/).default("CRS"),
     certificateStartNumber: z.number().int().min(1).nullable().optional(),
     passingScore: z.number().int().min(0).max(100).default(60),
+    trainingType: z.enum(["elearning", "classical_facilitation"]).default("elearning"),
+    targetOpd: z.string().trim().max(255).nullable().optional(),
+    attendanceThreshold: z.number().int().min(1).max(100).default(80),
 }).superRefine((course, context) => {
     if (course.pacingType === "instructor_paced" && !course.startDate) {
         context.addIssue({ code: "custom", path: ["startDate"], message: "Tanggal mulai wajib untuk instructor-paced." });
@@ -97,6 +100,9 @@ interface CourseRecord {
     pacingType?: "self_paced" | "instructor_paced";
     startDate: string | null;
     endDate: string | null;
+    trainingType?: "elearning" | "classical_facilitation";
+    targetOpd?: string | null;
+    attendanceThreshold?: number;
     createdAt: string;
     updatedAt: string;
 }
@@ -114,6 +120,20 @@ interface EnrollmentRecord {
     category: string;
     description: string | null;
     thumbnailUrl: string | null;
+    statementAccepted?: boolean;
+    statementAcceptedAt?: string | null;
+    attendedJp?: number;
+    attendancePercentage?: number;
+    evalNarasumberCompleted?: boolean;
+    evalOrganizerCompleted?: boolean;
+    evalUnderstandingCompleted?: boolean;
+    evalSkmCompleted?: boolean;
+    allEvaluationsCompleted?: boolean;
+    trainingType?: string;
+    targetOpd?: string | null;
+    attendanceThreshold?: number;
+    certificateEnabled?: boolean;
+    passingScore?: number;
 }
 
 interface CourseContentLesson {
@@ -124,6 +144,11 @@ interface CourseContentLesson {
     videoUrl: string | null;
     type: string;
     order: string;
+    jp?: number;
+    hasAttendance?: boolean;
+    attendanceQrCode?: string | null;
+    narasumberName?: string | null;
+    sessionDate?: string | null;
 }
 
 interface CourseContentModule {
@@ -225,6 +250,7 @@ export async function getAllCourses() {
                    certificate_auto_issue as "certificateAutoIssue", certificate_number_prefix as "certificateNumberPrefix",
                    certificate_start_number as "certificateStartNumber",
                    passing_score as "passingScore", pacing_type as "pacingType", start_date as "startDate", end_date as "endDate",
+                   training_type as "trainingType", target_opd as "targetOpd", attendance_threshold as "attendanceThreshold",
                    created_at as "createdAt", 
                    updated_at as "updatedAt"
             FROM courses
@@ -248,6 +274,7 @@ export async function getCourseById(id: string): Promise<CourseRecord | null> {
                    certificate_auto_issue as "certificateAutoIssue", certificate_number_prefix as "certificateNumberPrefix",
                    certificate_start_number as "certificateStartNumber",
                    passing_score as "passingScore", pacing_type as "pacingType", start_date as "startDate", end_date as "endDate",
+                   training_type as "trainingType", target_opd as "targetOpd", attendance_threshold as "attendanceThreshold",
                    created_at as "createdAt", 
                    updated_at as "updatedAt"
             FROM courses
@@ -323,9 +350,23 @@ export async function getEnrollment(courseId: string): Promise<EnrollmentRecord 
             SELECT enrollment.id, enrollment.user_id as "userId", enrollment.course_id as "courseId",
                    enrollment.status, enrollment.progress, enrollment.enrolled_at as "enrolledAt",
                    enrollment.completed_at as "completedAt", enrollment.completed_lessons as "completedLessons",
+                   enrollment.statement_accepted as "statementAccepted",
+                   enrollment.statement_accepted_at as "statementAcceptedAt",
+                   enrollment.attended_jp as "attendedJp",
+                   enrollment.attendance_percentage as "attendancePercentage",
+                   enrollment.eval_narasumber_completed as "evalNarasumberCompleted",
+                   enrollment.eval_organizer_completed as "evalOrganizerCompleted",
+                   enrollment.eval_understanding_completed as "evalUnderstandingCompleted",
+                   enrollment.eval_skm_completed as "evalSkmCompleted",
+                   enrollment.all_evaluations_completed as "allEvaluationsCompleted",
                    COALESCE(course.title, enrollment.title) AS title,
                    COALESCE(course.category, enrollment.category) AS category,
-                   course.description, course.thumbnail_url AS "thumbnailUrl"
+                   course.description, course.thumbnail_url AS "thumbnailUrl",
+                   course.training_type as "trainingType",
+                   course.target_opd as "targetOpd",
+                   course.attendance_threshold as "attendanceThreshold",
+                   course.certificate_enabled as "certificateEnabled",
+                   course.passing_score as "passingScore"
             FROM enrollments enrollment
             LEFT JOIN courses course ON course.id = enrollment.course_id
             WHERE (enrollment.course_id = ${courseId} OR enrollment.id = ${courseId})
@@ -507,7 +548,9 @@ export async function getCourseContent(courseId: string): Promise<CourseContentM
 
         return await Promise.all(modules.map(async (mod) => {
             const lessons = await sql`
-                SELECT id, title, type, video_url as "videoUrl", content, "order"
+                SELECT id, title, type, video_url as "videoUrl", content, "order",
+                       jp, has_attendance as "hasAttendance", attendance_qr_code as "attendanceQrCode",
+                       narasumber_name as "narasumberName", session_date as "sessionDate"
                 FROM lessons 
                 WHERE module_id = ${mod.id} 
                 ORDER BY "order" ASC
@@ -525,6 +568,11 @@ export async function getCourseContent(courseId: string): Promise<CourseContentM
                     type: String(lesson.type),
                     order: String(lesson.order),
                     content: lesson.content ? sanitizeRichText(String(lesson.content)) : null,
+                    jp: Number(lesson.jp || 0),
+                    hasAttendance: lesson.hasAttendance !== false,
+                    attendanceQrCode: lesson.attendanceQrCode ? String(lesson.attendanceQrCode) : null,
+                    narasumberName: lesson.narasumberName ? String(lesson.narasumberName) : null,
+                    sessionDate: lesson.sessionDate ? String(lesson.sessionDate) : null,
                 }))
             };
         }));
@@ -559,7 +607,7 @@ export async function getQuizQuestions(lessonId: string) {
         const course = await sql`
             SELECT module.course_id AS "courseId"
             FROM lessons lesson JOIN modules module ON module.id = lesson.module_id
-            WHERE lesson.id = ${lessonId} AND lesson.type = 'quiz'
+            WHERE lesson.id = ${lessonId}
         `;
         if (!course[0]) return [];
         await requireCourseAccess(String(course[0].courseId));
@@ -592,7 +640,7 @@ export async function submitQuizAttempt(lessonId: string, answers: unknown) {
             SELECT module.course_id AS "courseId", course.passing_score AS "passingScore"
             FROM lessons lesson JOIN modules module ON module.id = lesson.module_id
             JOIN courses course ON course.id = module.course_id
-            WHERE lesson.id = ${lessonId} AND lesson.type = 'quiz'
+            WHERE lesson.id = ${lessonId}
         `;
         if (!courseRows[0]) return { success: false, error: "Kuis tidak ditemukan." };
         await requireCourseAccess(String(courseRows[0].courseId));
@@ -698,46 +746,54 @@ export async function getCoursesWithStats(): Promise<Array<CourseRecord & { inst
     try {
         const session = await requireInstructorSession();
 
-        const courses = session.user.role === "admin"
+        // Single JOIN query instead of 1 + 2N Neon HTTP round-trips
+        const rows = session.user.role === "admin"
             ? await sql`
-                SELECT id, title, description, category, level,
-                       thumbnail_url as "thumbnailUrl", status,
-                       instructor_id as "instructorId", jp,
-                       certificate_type as "certificateType", certificate_enabled as "certificateEnabled",
-                       certificate_auto_issue as "certificateAutoIssue", certificate_number_prefix as "certificateNumberPrefix",
-                       certificate_start_number as "certificateStartNumber",
-                       passing_score as "passingScore", pacing_type as "pacingType", start_date as "startDate", end_date as "endDate",
-                       created_at as "createdAt", updated_at as "updatedAt"
-                FROM courses ORDER BY created_at DESC
+                SELECT c.id, c.title, c.description, c.category, c.level,
+                       c.thumbnail_url as "thumbnailUrl", c.status,
+                       c.instructor_id as "instructorId", c.jp,
+                       c.certificate_type as "certificateType", c.certificate_enabled as "certificateEnabled",
+                       c.certificate_auto_issue as "certificateAutoIssue", c.certificate_number_prefix as "certificateNumberPrefix",
+                       c.certificate_start_number as "certificateStartNumber",
+                       c.passing_score as "passingScore", c.pacing_type as "pacingType", c.start_date as "startDate", c.end_date as "endDate",
+                       c.created_at as "createdAt", c.updated_at as "updatedAt",
+                       COALESCE(u.name, 'Internal Team') as "instructorName",
+                       COALESCE(e.student_count, 0)::int as "studentCount"
+                FROM courses c
+                LEFT JOIN users u ON u.id = c.instructor_id
+                LEFT JOIN (
+                    SELECT course_id, COUNT(*)::int AS student_count
+                    FROM enrollments
+                    GROUP BY course_id
+                ) e ON e.course_id = c.id
+                ORDER BY c.created_at DESC
               `
             : await sql`
-                SELECT id, title, description, category, level,
-                       thumbnail_url as "thumbnailUrl", status,
-                       instructor_id as "instructorId", jp,
-                       certificate_type as "certificateType", certificate_enabled as "certificateEnabled",
-                       certificate_auto_issue as "certificateAutoIssue", certificate_number_prefix as "certificateNumberPrefix",
-                       certificate_start_number as "certificateStartNumber",
-                       passing_score as "passingScore", pacing_type as "pacingType", start_date as "startDate", end_date as "endDate",
-                       created_at as "createdAt", updated_at as "updatedAt"
-                FROM courses WHERE instructor_id = ${session.user.id}
-                ORDER BY created_at DESC
+                SELECT c.id, c.title, c.description, c.category, c.level,
+                       c.thumbnail_url as "thumbnailUrl", c.status,
+                       c.instructor_id as "instructorId", c.jp,
+                       c.certificate_type as "certificateType", c.certificate_enabled as "certificateEnabled",
+                       c.certificate_auto_issue as "certificateAutoIssue", c.certificate_number_prefix as "certificateNumberPrefix",
+                       c.certificate_start_number as "certificateStartNumber",
+                       c.passing_score as "passingScore", c.pacing_type as "pacingType", c.start_date as "startDate", c.end_date as "endDate",
+                       c.created_at as "createdAt", c.updated_at as "updatedAt",
+                       COALESCE(u.name, 'Internal Team') as "instructorName",
+                       COALESCE(e.student_count, 0)::int as "studentCount"
+                FROM courses c
+                LEFT JOIN users u ON u.id = c.instructor_id
+                LEFT JOIN (
+                    SELECT course_id, COUNT(*)::int AS student_count
+                    FROM enrollments
+                    GROUP BY course_id
+                ) e ON e.course_id = c.id
+                WHERE c.instructor_id = ${session.user.id}
+                ORDER BY c.created_at DESC
               `;
-        
-        return await Promise.all(courses.map(async (course) => {
-            const enrollRes = await sql`SELECT count(*)::int as count FROM enrollments WHERE course_id = ${course.id}`;
-            const studentCount = enrollRes[0].count;
-            
-            let instructorName = "Internal Team";
-            if (course.instructorId) {
-                const instrRes = await sql`SELECT name FROM users WHERE id = ${course.instructorId}`;
-                if (instrRes[0]) instructorName = String(instrRes[0].name);
-            }
 
-            return {
-                ...(course as unknown as CourseRecord),
-                instructorName,
-                studentCount: Number(studentCount)
-            };
+        return rows.map((row) => ({
+            ...(row as unknown as CourseRecord),
+            instructorName: String(row.instructorName || "Internal Team"),
+            studentCount: Number(row.studentCount || 0),
         }));
     } catch (err) {
         console.error("Failed to get courses with stats:", err);
@@ -794,13 +850,15 @@ export async function createCourse(input: unknown) {
             INSERT INTO courses (
                 id, title, description, category, level, thumbnail_url, status, instructor_id, pacing_type,
                 start_date, end_date, jp, certificate_type, certificate_enabled, certificate_auto_issue,
-                certificate_number_prefix, certificate_start_number, passing_score, created_at, updated_at
+                certificate_number_prefix, certificate_start_number, passing_score, training_type, target_opd,
+                attendance_threshold, created_at, updated_at
             ) VALUES (
                 ${id}, ${sanitizePlainText(data.title)}, ${sanitizePlainText(data.description)}, ${sanitizePlainText(data.category)},
                 ${data.level}, ${data.thumbnailUrl || null}, 'draft', ${instructorId}, ${data.pacingType}, ${data.startDate || null},
                 ${data.endDate || null}, ${data.jp}, ${data.certificateType}, ${data.certificateEnabled},
                 ${data.certificateEnabled && data.certificateAutoIssue}, ${data.certificateNumberPrefix},
-                ${data.certificateStartNumber || null}, ${data.passingScore}, ${now}, ${now}
+                ${data.certificateStartNumber || null}, ${data.passingScore}, ${data.trainingType}, ${data.targetOpd || null},
+                ${data.attendanceThreshold}, ${now}, ${now}
             )
         `;
         
@@ -834,6 +892,9 @@ export async function updateCourseDetails(id: string, input: unknown) {
                 certificate_number_prefix = ${data.certificateNumberPrefix},
                 certificate_start_number = CASE WHEN ${data.certificateStartNumber !== undefined} THEN ${data.certificateStartNumber || null} ELSE certificate_start_number END,
                 passing_score = ${data.passingScore},
+                training_type = ${data.trainingType},
+                target_opd = ${data.targetOpd || null},
+                attendance_threshold = ${data.attendanceThreshold},
                 status = ${data.status},
                 updated_at = ${now}
             WHERE id = ${id}
@@ -1262,13 +1323,13 @@ export async function testPassportIntegrationConnection(data: {
                 status: res.status,
             };
         }
-    } catch (err: any) {
-        if (err?.name === 'AbortError') {
+    } catch (err: unknown) {
+        if (err instanceof Error && err.name === 'AbortError') {
             return { success: false, error: "Koneksi timeout (server tidak merespons dalam 4 detik)." };
         }
         return {
             success: false,
-            error: `Tidak dapat menghubungi server: ${err?.message || 'Network unreachable'}.`,
+            error: `Tidak dapat menghubungi server: ${err instanceof Error ? err.message : 'Network unreachable'}.`,
         };
     }
 }

@@ -1,5 +1,7 @@
 "use server";
 
+import crypto from "crypto";
+import QRCode from "qrcode";
 import { sql } from "@/lib/db";
 import { getCourseContent } from "./courses";
 import { requireCourseEditor, requireLessonEditor, requireModuleEditor, requireQuestionEditor } from "@/lib/course-authorization";
@@ -46,6 +48,11 @@ interface BuilderLesson {
     content?: string;
     videoUrl?: string;
     type?: string;
+    jp?: number;
+    hasAttendance?: boolean;
+    attendanceQrCode?: string | null;
+    narasumberName?: string | null;
+    sessionDate?: string | null;
     questions?: BuilderQuizQuestion[];
 }
 
@@ -234,8 +241,17 @@ export async function saveCourseContent(courseId: string, modulesData: BuilderMo
                     if (!lessonId || lessonId.startsWith('temp_')) {
                         lessonId = `less_${Date.now()}_${mIdx}_${lIdx}`;
                         await sql`
-                            INSERT INTO lessons (id, module_id, title, content, video_url, type, "order")
-                            VALUES (${lessonId}, ${moduleId}, ${less.title}, ${sanitizeRichText(less.content || "")}, ${less.videoUrl || ""}, ${less.type || "video"}, ${lIdx})
+                            INSERT INTO lessons (
+                                id, module_id, title, content, video_url, type, "order",
+                                jp, has_attendance, attendance_qr_code, narasumber_name, session_date
+                            )
+                            VALUES (
+                                ${lessonId}, ${moduleId}, ${less.title}, ${sanitizeRichText(less.content || "")},
+                                ${less.videoUrl || ""}, ${less.type || "video"}, ${lIdx},
+                                ${Number(less.jp || 0)}, ${less.hasAttendance !== false},
+                                ${less.attendanceQrCode || null}, ${less.narasumberName || null},
+                                ${less.sessionDate || null}
+                            )
                         `;
                     } else {
                         await sql`
@@ -244,13 +260,18 @@ export async function saveCourseContent(courseId: string, modulesData: BuilderMo
                                 content = ${sanitizeRichText(less.content || "")},
                                 video_url = ${less.videoUrl || ""}, 
                                 type = ${less.type || "video"},
-                                "order" = ${lIdx}
+                                "order" = ${lIdx},
+                                jp = ${Number(less.jp || 0)},
+                                has_attendance = ${less.hasAttendance !== false},
+                                attendance_qr_code = COALESCE(${less.attendanceQrCode || null}, attendance_qr_code),
+                                narasumber_name = ${less.narasumberName || null},
+                                session_date = ${less.sessionDate || null}
                             WHERE id = ${lessonId} AND module_id = ${moduleId}
                         `;
                     }
 
-                    // Sync Quiz Questions (Simplified for now - can be expanded)
-                    if (less.type === 'quiz' && less.questions) {
+                    // Sync Quiz Questions (Any lesson type can have attached quiz questions)
+                    if (less.questions && less.questions.length > 0) {
                         for (let qIdx = 0; qIdx < less.questions.length; qIdx++) {
                             const q = less.questions[qIdx];
                             let qId = q.id;
@@ -286,5 +307,84 @@ export async function saveCourseContent(courseId: string, modulesData: BuilderMo
     } catch (err: unknown) {
         console.error("Save course structure error:", err);
         return { success: false, error: errorMessage(err, "Gagal menyimpan struktur kursus.") };
+    }
+}
+
+/**
+ * Men-generate kode dan QR code presensi unik untuk sesi materi
+ */
+export async function generateMaterialAttendanceQr(courseId: string, lessonId: string) {
+    try {
+        await requireCourseEditor(courseId);
+
+        const suffix = crypto.randomBytes(3).toString("hex").toUpperCase();
+        const code = `CLF-${lessonId.replace(/^less_/, "").slice(0, 10)}-${suffix}`;
+
+        await sql`
+            UPDATE lessons
+            SET attendance_qr_code = ${code}
+            WHERE id = ${lessonId}
+        `;
+
+        const qrPayload = JSON.stringify({
+            type: "material_attendance",
+            courseId,
+            lessonId,
+            code,
+        });
+
+        const qrDataUrl = await QRCode.toDataURL(qrPayload, {
+            width: 320,
+            margin: 2,
+            color: { dark: "#0f172a", light: "#ffffff" },
+        });
+
+        return { success: true, code, qrDataUrl };
+    } catch (err: unknown) {
+        console.error("generateMaterialAttendanceQr error:", err);
+        return { success: false, error: errorMessage(err, "Gagal men-generate QR presensi.") };
+    }
+}
+
+/**
+ * Mengambil kode QR presensi yang sudah tersimpan untuk sesi materi
+ */
+export async function getMaterialAttendanceQr(courseId: string, lessonId: string) {
+    try {
+        await requireCourseEditor(courseId);
+
+        const rows = await sql`
+            SELECT attendance_qr_code, title FROM lessons WHERE id = ${lessonId} LIMIT 1
+        `;
+        if (!rows[0]) return { success: false, error: "Materi tidak ditemukan." };
+
+        let code = rows[0].attendance_qr_code ? String(rows[0].attendance_qr_code) : "";
+        if (!code) {
+            const suffix = crypto.randomBytes(3).toString("hex").toUpperCase();
+            code = `CLF-${lessonId.replace(/^less_/, "").slice(0, 10)}-${suffix}`;
+            await sql`
+                UPDATE lessons
+                SET attendance_qr_code = ${code}
+                WHERE id = ${lessonId}
+            `;
+        }
+
+        const qrPayload = JSON.stringify({
+            type: "material_attendance",
+            courseId,
+            lessonId,
+            code,
+        });
+
+        const qrDataUrl = await QRCode.toDataURL(qrPayload, {
+            width: 320,
+            margin: 2,
+            color: { dark: "#0f172a", light: "#ffffff" },
+        });
+
+        return { success: true, code, qrDataUrl, title: String(rows[0].title) };
+    } catch (err: unknown) {
+        console.error("getMaterialAttendanceQr error:", err);
+        return { success: false, error: errorMessage(err, "Gagal memuat QR presensi.") };
     }
 }

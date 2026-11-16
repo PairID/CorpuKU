@@ -32,6 +32,9 @@ export interface CourseFormData {
         certificateAutoIssue?: boolean;
         certificateNumberPrefix?: string;
         passingScore?: number;
+        trainingType?: "elearning" | "classical_facilitation";
+        targetOpd?: string | null;
+        attendanceThreshold?: number;
 }
 
 interface CourseFormProps {
@@ -62,6 +65,9 @@ export default function CourseForm({ initialData, instructors, mode, basePath = 
     const [certificateAutoIssue, setCertificateAutoIssue] = useState(initialData?.certificateAutoIssue ?? true);
     const [certificateNumberPrefix, setCertificateNumberPrefix] = useState(initialData?.certificateNumberPrefix || "CRS");
     const [passingScore, setPassingScore] = useState(initialData?.passingScore ?? 60);
+    const [trainingType, setTrainingType] = useState<"elearning" | "classical_facilitation">(initialData?.trainingType || "elearning");
+    const [targetOpd, setTargetOpd] = useState(initialData?.targetOpd || "");
+    const [attendanceThreshold, setAttendanceThreshold] = useState<number>(initialData?.attendanceThreshold ?? 80);
     const [thumbnailPreview, setThumbnailPreview] = useState<string>(initialData?.thumbnailUrl || "");
 
     const handleThumbnailUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -127,6 +133,9 @@ export default function CourseForm({ initialData, instructors, mode, basePath = 
             certificateAutoIssue,
             certificateNumberPrefix,
             passingScore,
+            trainingType,
+            targetOpd: trainingType === "classical_facilitation" ? targetOpd : null,
+            attendanceThreshold: Number(attendanceThreshold || 80),
         };
 
         try {
@@ -304,6 +313,54 @@ export default function CourseForm({ initialData, instructors, mode, basePath = 
                             <option value="Intermediate">Menengah</option>
                             <option value="Advanced">Lanjutan</option>
                         </select>
+                    </div>
+
+                    <div className="bg-oxford-50 dark:bg-oxford-950 p-5 rounded-xl border border-oxford-100 dark:border-oxford-800">
+                        <label className="block text-sm font-bold text-oxford-900 dark:text-white mb-2">Tipe Pelatihan</label>
+                        <select
+                            value={trainingType}
+                            onChange={(e) => setTrainingType(e.target.value as "elearning" | "classical_facilitation")}
+                            className="w-full px-4 py-3 bg-white dark:bg-[#161B2A] border border-oxford-200 dark:border-oxford-700 rounded-lg text-sm focus:outline-none focus:border-gold-500 text-oxford-900 dark:text-white font-medium"
+                        >
+                            <option value="elearning">E-Learning Mandiri (Asynchronous)</option>
+                            <option value="classical_facilitation">Fasilitasi Pelatihan Klasikal OPD Luar</option>
+                        </select>
+                        {trainingType === "classical_facilitation" && (
+                            <div className="mt-4 space-y-4 pt-3 border-t border-oxford-200 dark:border-oxford-800">
+                                <div>
+                                    <label className="block text-xs font-bold text-oxford-700 dark:text-oxford-200 mb-1">
+                                        Target Instansi / OPD Luar <span className="text-crimson-500">*</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        required
+                                        value={targetOpd}
+                                        onChange={(e) => setTargetOpd(e.target.value)}
+                                        placeholder="Contoh: Dinas Kesehatan Kab. Bulungan"
+                                        className="w-full px-4 py-2 bg-white dark:bg-[#161B2A] border border-oxford-200 dark:border-oxford-700 rounded-lg text-sm focus:outline-none focus:border-gold-500 text-oxford-900 dark:text-white"
+                                    />
+                                    <p className="text-[11px] text-oxford-500 mt-1">Nama instansi/OPD yang difasilitasi dalam pelatihan ini.</p>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-oxford-700 dark:text-oxford-200 mb-1">
+                                        Ambang Batas Kehadiran Minimal (% JP)
+                                    </label>
+                                    <div className="flex items-center gap-2">
+                                        <input
+                                            type="number"
+                                            min={1}
+                                            max={100}
+                                            required
+                                            value={attendanceThreshold}
+                                            onChange={(e) => setAttendanceThreshold(Number(e.target.value))}
+                                            className="w-full px-4 py-2 bg-white dark:bg-[#161B2A] border border-oxford-200 dark:border-oxford-700 rounded-lg text-sm focus:outline-none focus:border-gold-500 text-oxford-900 dark:text-white"
+                                        />
+                                        <span className="text-sm font-bold text-oxford-600 dark:text-oxford-400">%</span>
+                                    </div>
+                                    <p className="text-[11px] text-oxford-500 mt-1">Standar minimal kelulusan sertifikat adalah 80% JP kehadiran.</p>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     <div className="bg-oxford-50 dark:bg-oxford-950 p-5 rounded-xl border border-oxford-100 dark:border-oxford-800">

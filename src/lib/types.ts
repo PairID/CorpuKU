@@ -12,6 +12,8 @@ export interface User {
     targetJpTahunan?: number;
     kategoriPegawai?: 'Provinsi' | 'OPD' | 'Kab_Kota' | 'Lainnya';
     namaInstansi?: string;
+    phone?: string;
+    profileVerifiedAt?: string | null;
     createdAt?: string;
     joinedAt?: string;
 }
@@ -27,8 +29,26 @@ export interface Course {
     instructorId: string;
     jp: number;
     certificateType: string;
+    trainingType?: 'elearning' | 'classical_facilitation';
+    targetOpd?: string | null;
+    attendanceThreshold?: number;
     createdAt: string;
     updatedAt: string;
+}
+
+export interface Lesson {
+    id: string;
+    moduleId: string;
+    title: string;
+    content: string;
+    videoUrl?: string | null;
+    type: 'video' | 'reading' | 'quiz' | 'file';
+    order: number;
+    jp?: number;
+    hasAttendance?: boolean;
+    attendanceQrCode?: string | null;
+    narasumberName?: string | null;
+    sessionDate?: string | null;
 }
 
 export interface NewsArticle {
@@ -73,6 +93,37 @@ export interface Enrollment {
     enrolledAt: string;
     completedAt?: string | null;
     completedLessons: string[];
+    statementAccepted?: boolean;
+    statementAcceptedAt?: string | null;
+    attendedJp?: number;
+    attendancePercentage?: number;
+    evalNarasumberCompleted?: boolean;
+    evalOrganizerCompleted?: boolean;
+    evalUnderstandingCompleted?: boolean;
+    evalSkmCompleted?: boolean;
+    allEvaluationsCompleted?: boolean;
+}
+
+export interface MaterialAttendance {
+    id: string;
+    enrollmentId: string;
+    userId: string;
+    courseId: string;
+    lessonId: string;
+    jp: number;
+    attendedAt: string;
+}
+
+export interface TrainingEvaluation {
+    id: string;
+    enrollmentId: string;
+    userId: string;
+    courseId: string;
+    stage: 'narasumber' | 'organizer' | 'understanding' | 'skm';
+    sessionId?: string | null;
+    answers: Record<string, unknown>;
+    score?: number | null;
+    createdAt: string;
 }
 
 export interface Notification {

@@ -1,0 +1,292 @@
+"use server";
+
+import crypto from "crypto";
+import { sql } from "@/lib/db";
+import { requireUserSession } from "./auth";
+import { revalidatePath } from "next/cache";
+import { calculateAttendancePercentage, sanitizeParticipantNip } from "@/lib/classical-training";
+import { issueCourseCertificate } from "@/lib/course-certificates";
+
+interface SubmitAttendancePayload {
+  courseId: string;
+  lessonId: string;
+  attendanceCode: string;
+}
+
+interface ConfirmParticipantDataPayload {
+  courseId: string;
+  profile: {
+    name: string;
+    nip: string;
+    instansiAsal: string;
+    jabatan: string;
+    pangkat: string;
+    phone: string;
+  };
+  statementAccepted: boolean;
+}
+
+/**
+ * Mencatat presensi peserta per materi melalui scan QR code atau input token
+ */
+export async function submitMaterialAttendance(payload: SubmitAttendancePayload) {
+  try {
+    const session = await requireUserSession();
+    const userId = session.user.id;
+    const { courseId, lessonId, attendanceCode } = payload;
+
+    if (!courseId || !lessonId || !attendanceCode) {
+      return { success: false, error: "Data presensi tidak lengkap." };
+    }
+
+    // 1. Cek pendaftaran kursus
+    const enrollmentRows = await sql`
+      SELECT id, user_id, course_id, statement_accepted, attended_jp, attendance_percentage, completed_lessons, all_evaluations_completed
+      FROM enrollments
+      WHERE (course_id = ${courseId} OR id = ${courseId}) AND user_id = ${userId}
+      LIMIT 1
+    `;
+    const enrollment = enrollmentRows[0];
+    if (!enrollment) {
+      return { success: false, error: "Anda belum terdaftar pada kelas ini." };
+    }
+
+    if (!enrollment.statement_accepted) {
+      return {
+        success: false,
+        error: "Harap lakukan verifikasi data profil dan checklist pernyataan sebelum presensi.",
+        requireStatement: true,
+      };
+    }
+
+    // 2. Ambil data sesi materi
+    const lessonRows = await sql`
+      SELECT lesson.id, lesson.jp, lesson.has_attendance, lesson.attendance_qr_code, lesson.title,
+             module.course_id AS "courseId"
+      FROM lessons lesson
+      JOIN modules module ON module.id = lesson.module_id
+      WHERE lesson.id = ${lessonId} AND module.course_id = ${courseId}
+      LIMIT 1
+    `;
+    const lesson = lessonRows[0];
+    if (!lesson) {
+      return { success: false, error: "Materi tidak ditemukan pada kelas ini." };
+    }
+
+    if (lesson.has_attendance === false) {
+      return { success: false, error: "Materi ini tidak memerlukan presensi kehadiran." };
+    }
+
+    // 3. Verifikasi kode presensi
+    // Support either raw code string or JSON encoded payload: { type: "material_attendance", code: "..." }
+    let rawInputCode = attendanceCode.trim();
+    if (rawInputCode.startsWith("{") && rawInputCode.endsWith("}")) {
+      try {
+        const parsed = JSON.parse(rawInputCode);
+        if (parsed.code) {
+          rawInputCode = String(parsed.code).trim();
+        }
+      } catch {
+        // use raw string
+      }
+    }
+
+    const expectedCode = String(lesson.attendance_qr_code || "").trim();
+    if (!expectedCode || rawInputCode.toUpperCase() !== expectedCode.toUpperCase()) {
+      return { success: false, error: "Kode QR presensi tidak sesuai dengan sesi ini." };
+    }
+
+    // 4. Periksa apakah sudah pernah presensi
+    const existingAtt = await sql`
+      SELECT id, jp, attended_at FROM material_attendances
+      WHERE user_id = ${userId} AND lesson_id = ${lessonId}
+      LIMIT 1
+    `;
+    const lessonJp = Math.max(0, Number(lesson.jp || 0));
+
+    if (!existingAtt[0]) {
+      const attId = `att_${crypto.randomUUID()}`;
+      await sql`
+        INSERT INTO material_attendances (id, enrollment_id, user_id, course_id, lesson_id, jp, attended_at)
+        VALUES (${attId}, ${enrollment.id}, ${userId}, ${courseId}, ${lessonId}, ${lessonJp}, CURRENT_TIMESTAMP)
+        ON CONFLICT (user_id, lesson_id) DO NOTHING
+      `;
+    }
+
+    // 5. Hitung ulang total akumulasi JP yang dihadiri
+    const attendedJpRows = await sql`
+      SELECT COALESCE(SUM(jp), 0)::INTEGER AS "attendedJp"
+      FROM material_attendances
+      WHERE user_id = ${userId} AND course_id = ${courseId}
+    `;
+    const attendedJp = Number(attendedJpRows[0]?.attendedJp || 0);
+
+    // Hitung total JP kelas dari materi yang mewajibkan presensi
+    const totalJpRows = await sql`
+      SELECT COALESCE(SUM(lesson.jp), 0)::INTEGER AS "totalJp"
+      FROM lessons lesson
+      JOIN modules module ON module.id = lesson.module_id
+      WHERE module.course_id = ${courseId} AND lesson.has_attendance = TRUE
+    `;
+    let totalClassJp = Number(totalJpRows[0]?.totalJp || 0);
+    if (totalClassJp === 0) {
+      const courseRows = await sql`SELECT jp FROM courses WHERE id = ${courseId} LIMIT 1`;
+      totalClassJp = Number(courseRows[0]?.jp || 0);
+    }
+
+    // Hitung persentase kehadiran: (attended JP / total class JP) * 100% (presisi 2 desimal, 0 JP aman)
+    const attendancePercentage = calculateAttendancePercentage(attendedJp, totalClassJp);
+
+    // Perbarui completed_lessons agar materi juga tercatat selesai
+    let completedLessons: string[] = [];
+    if (enrollment.completed_lessons) {
+      try {
+        const parsed = typeof enrollment.completed_lessons === "string"
+          ? JSON.parse(enrollment.completed_lessons)
+          : enrollment.completed_lessons;
+        completedLessons = Array.isArray(parsed) ? parsed.map(String) : [];
+      } catch {
+        completedLessons = [];
+      }
+    }
+    if (!completedLessons.includes(lessonId)) {
+      completedLessons.push(lessonId);
+    }
+
+    const isAttendanceSufficient = attendancePercentage >= 80;
+    const canCompleteEnrollment = isAttendanceSufficient && Boolean(enrollment.all_evaluations_completed);
+
+    await sql`
+      UPDATE enrollments
+      SET attended_jp = ${attendedJp},
+          attendance_percentage = ${attendancePercentage},
+          completed_lessons = ${JSON.stringify(completedLessons)},
+          status = CASE WHEN ${canCompleteEnrollment} THEN 'completed' ELSE status END,
+          completed_at = CASE WHEN ${canCompleteEnrollment} THEN COALESCE(completed_at, CURRENT_TIMESTAMP) ELSE completed_at END
+      WHERE id = ${enrollment.id}
+    `;
+
+    if (canCompleteEnrollment) {
+      try {
+        await issueCourseCertificate(userId, courseId);
+      } catch (certErr) {
+        console.warn("Auto-issue certificate on attendance threshold met skipped:", certErr);
+      }
+    }
+
+    revalidatePath(`/learn/${courseId}`);
+    revalidatePath(`/dashboard/courses/${courseId}/progress`);
+
+    return {
+      success: true,
+      message: `Presensi berhasil dicatat! (+${lessonJp} JP)`,
+      attendedJp,
+      totalClassJp,
+      attendancePercentage,
+      alreadyAttended: Boolean(existingAtt[0]),
+    };
+  } catch (err: unknown) {
+    console.error("submitMaterialAttendance error:", err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Terjadi kesalahan saat mencatat presensi.",
+    };
+  }
+}
+
+/**
+ * Mengambil daftar sesi materi yang sudah dihadiri oleh peserta
+ */
+export async function getMaterialAttendances(courseId: string) {
+  try {
+    const session = await requireUserSession();
+    const userId = session.user.id;
+
+    const rows = await sql`
+      SELECT lesson_id AS "lessonId", jp, attended_at AS "attendedAt"
+      FROM material_attendances
+      WHERE user_id = ${userId} AND course_id = ${courseId}
+      ORDER BY attended_at ASC
+    `;
+
+    const attendedLessonIds = rows.map((r) => String(r.lessonId));
+    const totalAttendedJp = rows.reduce((sum, r) => sum + Number(r.jp || 0), 0);
+
+    return {
+      success: true,
+      attendances: rows,
+      attendedLessonIds,
+      totalAttendedJp,
+    };
+  } catch (err: unknown) {
+    console.error("getMaterialAttendances error:", err);
+    return { success: false, attendances: [], attendedLessonIds: [], totalAttendedJp: 0 };
+  }
+}
+
+/**
+ * Konfirmasi kebenaran data profil peserta sebelum masuk kelas pelatihan klasikal
+ */
+export async function confirmParticipantData(payload: ConfirmParticipantDataPayload) {
+  try {
+    const session = await requireUserSession();
+    const userId = session.user.id;
+    const { courseId, profile, statementAccepted } = payload;
+
+    if (!statementAccepted) {
+      return {
+        success: false,
+        error: "Anda wajib mencentang checklist pernyataan kebenaran data.",
+      };
+    }
+
+    if (!profile.name?.trim() || !profile.nip?.trim() || !profile.instansiAsal?.trim()) {
+      return {
+        success: false,
+        error: "Nama lengkap, NIP/NIK, dan Instansi/OPD wajib diisi.",
+      };
+    }
+
+    const cleanNip = sanitizeParticipantNip(profile.nip);
+    if (cleanNip.length < 16) {
+      return {
+        success: false,
+        error: "NIP/NIK minimal 16 digit.",
+      };
+    }
+
+    const cleanPhone = (profile.phone || "").replace(/[^\d+]/g, "");
+
+    // 1. Update data pada tabel users
+    await sql`
+      UPDATE users
+      SET name = ${profile.name.trim()},
+          nip = ${cleanNip},
+          instansi_asal = ${profile.instansiAsal.trim()},
+          jabatan = ${profile.jabatan?.trim() || null},
+          pangkat = ${profile.pangkat?.trim() || null},
+          phone = ${cleanPhone || null},
+          profile_verified_at = CURRENT_TIMESTAMP
+      WHERE id = ${userId}
+    `;
+
+    // 2. Update status checklist pernyataan pada pendaftaran kelas
+    await sql`
+      UPDATE enrollments
+      SET statement_accepted = TRUE,
+          statement_accepted_at = CURRENT_TIMESTAMP
+      WHERE (course_id = ${courseId} OR id = ${courseId}) AND user_id = ${userId}
+    `;
+
+    revalidatePath(`/learn/${courseId}`);
+    revalidatePath(`/dashboard/courses/${courseId}/progress`);
+
+    return { success: true, message: "Data profil berhasil diverifikasi dan dikonfirmasi." };
+  } catch (err: unknown) {
+    console.error("confirmParticipantData error:", err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Gagal mengonfirmasi data profil.",
+    };
+  }
+}

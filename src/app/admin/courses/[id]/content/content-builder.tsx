@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { PlusCircle, Trash2, Edit2, PlayCircle, FileText, CheckCircle2, Save, Loader2, ListPlus, FileUp, Sparkles, Search } from "lucide-react";
-import { saveCourseContent } from "@/app/actions/builder";
+import { PlusCircle, Trash2, Edit2, PlayCircle, FileText, CheckCircle2, Save, Loader2, ListPlus, FileUp, Sparkles, Search, QrCode, Copy, Check, HelpCircle } from "lucide-react";
+import { saveCourseContent, generateMaterialAttendanceQr, getMaterialAttendanceQr } from "@/app/actions/builder";
 import { generateAIQuiz } from "@/app/actions/ai";
 import { useRouter } from "next/navigation";
 import { MediaPicker } from "@/components/MediaPicker";
@@ -30,6 +30,11 @@ interface CourseLesson {
     type: LessonType;
     content?: string;
     videoUrl?: string;
+    jp?: number;
+    hasAttendance?: boolean;
+    attendanceQrCode?: string | null;
+    narasumberName?: string | null;
+    sessionDate?: string | null;
     questions: QuizQuestion[];
 }
 
@@ -53,7 +58,56 @@ export default function ContentBuilder({ courseId, initialData }: { courseId: st
     const [customAITexts, setCustomAITexts] = useState<{ [key: string]: string }>({});
     const [isMediaPickerOpen, setIsMediaPickerOpen] = useState(false);
     const [activeTarget, setActiveTarget] = useState<{ mIndex: number, lIndex: number, field: "videoUrl" | "content" } | null>(null);
+    const [openQuizForLesson, setOpenQuizForLesson] = useState<{ [key: string]: boolean }>({});
+    const [copiedCode, setCopiedCode] = useState(false);
+    const [qrModalData, setQrModalData] = useState<{
+        isOpen: boolean;
+        lessonTitle: string;
+        lessonId: string;
+        code: string;
+        qrDataUrl: string;
+        isLoading: boolean;
+    } | null>(null);
     const router = useRouter();
+
+    const openQrModal = async (lesson: CourseLesson) => {
+        if (!lesson.id) {
+            showToast.warning("Simpan Materi Dulu", "Simpan kurikulum terlebih dahulu agar materi memiliki ID sebelum membuat QR presensi.");
+            return;
+        }
+        setQrModalData({
+            isOpen: true,
+            lessonTitle: lesson.title,
+            lessonId: lesson.id,
+            code: lesson.attendanceQrCode || "",
+            qrDataUrl: "",
+            isLoading: true,
+        });
+        const res = await getMaterialAttendanceQr(courseId, lesson.id);
+        if (res.success && res.qrDataUrl) {
+            setQrModalData(prev => prev ? { ...prev, code: res.code || "", qrDataUrl: res.qrDataUrl, isLoading: false } : null);
+        } else {
+            setQrModalData(prev => prev ? { ...prev, isLoading: false } : null);
+            showToast.error("Gagal Memuat QR", res.error || "Gagal memuat QR presensi.");
+        }
+    };
+
+    const handleGenerateQr = async () => {
+        if (!qrModalData) return;
+        setQrModalData(prev => prev ? { ...prev, isLoading: true } : null);
+        const res = await generateMaterialAttendanceQr(courseId, qrModalData.lessonId);
+        if (res.success && res.qrDataUrl) {
+            setQrModalData(prev => prev ? { ...prev, code: res.code || "", qrDataUrl: res.qrDataUrl, isLoading: false } : null);
+            showToast.success("QR Code Baru Diterbitkan", `Kode: ${res.code}`);
+            setModules(prev => prev.map(m => ({
+                ...m,
+                lessons: m.lessons.map(l => l.id === qrModalData.lessonId ? { ...l, attendanceQrCode: res.code } : l)
+            })));
+        } else {
+            setQrModalData(prev => prev ? { ...prev, isLoading: false } : null);
+            showToast.error("Gagal", res.error || "Gagal men-generate QR presensi.");
+        }
+    };
 
     // Core state
     const [modules, setModules] = useState<CourseContentModule[]>(initialData || []);
@@ -92,6 +146,11 @@ export default function ContentBuilder({ courseId, initialData }: { courseId: st
             type,
             content: "",
             videoUrl: "",
+            jp: 2,
+            hasAttendance: true,
+            attendanceQrCode: null,
+            narasumberName: "",
+            sessionDate: null,
             questions: []
         });
         setModules(newModules);
@@ -356,14 +415,81 @@ export default function ContentBuilder({ courseId, initialData }: { courseId: st
                                                 </label>
                                             </div>
                                         )}
+
+                                        {/* Classical Facilitation & Attendance Settings */}
+                                        <div className="mt-3 p-2.5 bg-white dark:bg-[#161B2A] border border-oxford-200 dark:border-oxford-700 rounded-lg flex flex-wrap items-center justify-between gap-3 text-xs">
+                                            <div className="flex flex-wrap items-center gap-4">
+                                                <div className="flex items-center gap-1.5">
+                                                    <span className="font-bold text-oxford-600 dark:text-oxford-300">Beban JP:</span>
+                                                    <input
+                                                        type="number"
+                                                        min={0}
+                                                        max={100}
+                                                        value={less.jp ?? 0}
+                                                        onChange={e => updateLesson(mIndex, lIndex, 'jp', parseInt(e.target.value) || 0)}
+                                                        className="w-16 px-2 py-1 text-xs border border-oxford-200 dark:border-oxford-700 rounded font-bold text-center bg-oxford-50 dark:bg-oxford-900 text-oxford-900 dark:text-white"
+                                                    />
+                                                </div>
+                                                <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={less.hasAttendance !== false}
+                                                        onChange={e => updateLesson(mIndex, lIndex, 'hasAttendance', e.target.checked)}
+                                                        className="h-4 w-4 rounded border-oxford-300 accent-gold-500"
+                                                    />
+                                                    <span className="font-semibold text-oxford-700 dark:text-oxford-200">Wajib Presensi</span>
+                                                </label>
+                                                <div className="flex items-center gap-1.5 flex-1 min-w-[200px]">
+                                                    <span className="font-bold text-oxford-600 dark:text-oxford-300 whitespace-nowrap">Narasumber:</span>
+                                                    <input
+                                                        type="text"
+                                                        value={less.narasumberName || ""}
+                                                        onChange={e => updateLesson(mIndex, lIndex, 'narasumberName', e.target.value)}
+                                                        placeholder="Nama Narasumber / Fasilitator"
+                                                        className="flex-1 px-2 py-1 text-xs border border-oxford-200 dark:border-oxford-700 rounded bg-oxford-50 dark:bg-oxford-900 text-oxford-900 dark:text-white"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => openQrModal(less)}
+                                                    className="px-2.5 py-1 bg-gold-500 hover:bg-gold-400 text-oxford-950 font-bold rounded flex items-center gap-1.5 transition-colors shadow-xs"
+                                                    title="Generate / Lihat QR Code Presensi"
+                                                >
+                                                    <QrCode size={13} />
+                                                    <span>QR Presensi</span>
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const key = `${mIndex}-${lIndex}`;
+                                                        setOpenQuizForLesson(prev => ({ ...prev, [key]: !prev[key] }));
+                                                    }}
+                                                    className={`px-2.5 py-1 font-bold rounded border flex items-center gap-1.5 transition-colors ${
+                                                        (less.questions && less.questions.length > 0) || openQuizForLesson[`${mIndex}-${lIndex}`]
+                                                            ? 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-300 text-indigo-700 dark:text-indigo-300'
+                                                            : 'bg-oxford-50 dark:bg-oxford-900 border-oxford-200 dark:border-oxford-700 text-oxford-700 dark:text-oxford-300 hover:bg-oxford-100'
+                                                    }`}
+                                                    title="Kelola kuis / soal pemahaman untuk materi ini"
+                                                >
+                                                    <HelpCircle size={13} />
+                                                    <span>
+                                                        {less.questions && less.questions.length > 0
+                                                            ? `Kuis (${less.questions.length})`
+                                                            : (openQuizForLesson[`${mIndex}-${lIndex}`] ? 'Tutup Kuis' : '+ Kuis Materi')}
+                                                    </span>
+                                                </button>
+                                            </div>
+                                        </div>
                                     </div>
                                     <button onClick={() => deleteLesson(mIndex, lIndex)} className="text-red-400 p-1 hover:bg-red-50 rounded transition-colors flex-shrink-0">
                                         <Trash2 size={16} />
                                     </button>
                                 </div>
 
-                                {/* QUIZ BUILDER SECTION */}
-                                {less.type === 'quiz' && (
+                                {/* QUIZ BUILDER SECTION (Any lesson can attach a quiz) */}
+                                {(less.type === 'quiz' || openQuizForLesson[`${mIndex}-${lIndex}`] || (less.questions && less.questions.length > 0)) && (
                                     <div className="mt-4 border-t border-oxford-200 dark:border-oxford-700 pt-4 pl-8 border-l border-l-oxford-200 ml-5 space-y-6">
                                         {/* AI Generator Section */}
                                         <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-xl mb-4 space-y-3">
@@ -542,6 +668,79 @@ export default function ContentBuilder({ courseId, initialData }: { courseId: st
                     setIsMediaPickerOpen(false);
                 }}
             />
+
+            {/* Modal QR Code Presensi */}
+            {qrModalData && qrModalData.isOpen && (
+                <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+                    <div className="bg-white dark:bg-[#161B2A] border border-oxford-200 dark:border-oxford-700 rounded-2xl max-w-sm w-full p-6 shadow-2xl relative animate-in fade-in zoom-in-95 duration-150">
+                        <button
+                            type="button"
+                            onClick={() => setQrModalData(null)}
+                            className="absolute top-4 right-4 text-oxford-400 hover:text-oxford-700 dark:hover:text-white p-1 rounded-lg"
+                        >
+                            ✕
+                        </button>
+                        <div className="text-center space-y-4">
+                            <div className="inline-flex p-3 bg-gold-50 dark:bg-gold-950/40 text-gold-600 rounded-full">
+                                <QrCode size={28} />
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-bold text-oxford-900 dark:text-white">QR Code Presensi Materi</h3>
+                                <p className="text-xs text-oxford-500 dark:text-oxford-400 mt-1 line-clamp-2">{qrModalData.lessonTitle}</p>
+                            </div>
+
+                            {qrModalData.isLoading ? (
+                                <div className="aspect-square w-full max-w-[240px] mx-auto bg-oxford-50 dark:bg-oxford-900 rounded-xl flex items-center justify-center">
+                                    <Loader2 size={32} className="animate-spin text-gold-500" />
+                                </div>
+                            ) : qrModalData.qrDataUrl ? (
+                                <div className="space-y-3">
+                                    <div className="p-3 bg-white rounded-xl border border-oxford-200 inline-block shadow-inner">
+                                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                                        <img src={qrModalData.qrDataUrl} alt="QR Code Presensi" className="w-52 h-52 object-contain mx-auto" />
+                                    </div>
+                                    <div className="flex items-center justify-center gap-2 bg-oxford-50 dark:bg-oxford-900 p-2.5 rounded-lg border border-oxford-200 dark:border-oxford-700 font-mono text-xs font-bold text-oxford-900 dark:text-white">
+                                        <span>Kode: {qrModalData.code}</span>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                navigator.clipboard.writeText(qrModalData.code);
+                                                setCopiedCode(true);
+                                                setTimeout(() => setCopiedCode(false), 2000);
+                                            }}
+                                            className="p-1 text-oxford-500 hover:text-gold-600"
+                                            title="Salin Kode"
+                                        >
+                                            {copiedCode ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <p className="text-sm text-crimson-500">QR Code belum tersedia.</p>
+                            )}
+
+                            <div className="pt-2 flex gap-2">
+                                <button
+                                    type="button"
+                                    onClick={handleGenerateQr}
+                                    disabled={qrModalData.isLoading}
+                                    className="flex-1 py-2.5 bg-oxford-900 hover:bg-oxford-800 text-gold-400 text-xs font-bold rounded-lg transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
+                                >
+                                    <QrCode size={14} />
+                                    <span>{qrModalData.code ? "Regenerate QR" : "Generate QR"}</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setQrModalData(null)}
+                                    className="px-4 py-2.5 bg-oxford-100 hover:bg-oxford-200 dark:bg-oxford-800 dark:hover:bg-oxford-700 text-oxford-700 dark:text-oxford-200 text-xs font-bold rounded-lg transition-colors"
+                                >
+                                    Tutup
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

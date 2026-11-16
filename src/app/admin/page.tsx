@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Menu, Users, BookOpen, FileText, PlusCircle, Activity } from "lucide-react";
 import { useState, useEffect } from "react";
 import { getCoursesWithStats } from "@/app/actions/courses";
-import { getAllUsers } from "@/app/actions/users";
+import { getAdminUserStats } from "@/app/actions/users";
 import { AdminSidebar } from "@/components/layout/AdminSidebar";
 
 interface DashboardStats {
@@ -21,10 +21,6 @@ interface RecentCourse {
     status: string;
 }
 
-interface UserRoleRecord {
-    role: string;
-}
-
 export default function AdminDashboard() {
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -35,12 +31,14 @@ export default function AdminDashboard() {
         async function fetchData() {
             setLoading(true);
             try {
-                const courses = await getCoursesWithStats() as unknown as RecentCourse[];
-                const allUsers = await getAllUsers() as unknown as UserRoleRecord[];
-                
+                const [courses, userStats] = await Promise.all([
+                    getCoursesWithStats() as unknown as Promise<RecentCourse[]>,
+                    getAdminUserStats(),
+                ]);
+
                 setStats({
-                    totalUsers: allUsers.length,
-                    totalStudents: allUsers.filter(u => u.role === "student").length,
+                    totalUsers: userStats.totalUsers,
+                    totalStudents: userStats.totalStudents,
                     totalCourses: courses.length
                 });
                 setRecentCourses(courses.slice(0, 5));

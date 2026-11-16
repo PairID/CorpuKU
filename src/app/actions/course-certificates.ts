@@ -5,7 +5,8 @@ import { requireAdminSession } from "@/app/actions/auth";
 import { writeAuditLog } from "@/lib/audit";
 import { sql } from "@/lib/db";
 import { requireCourseEditor } from "@/lib/course-authorization";
-import { issueCourseCertificate } from "@/lib/course-certificates";
+import { issueCourseCertificate, checkCourseCertificateEligibility } from "@/lib/course-certificates";
+import { requireUserSession } from "@/app/actions/auth";
 
 export async function getIssuedCourseCertificates() {
   await requireAdminSession();
@@ -80,12 +81,29 @@ export async function issueSingleCourseCertificate(formData: FormData) {
   ) throw new Error("Data peserta tidak valid.");
   const session = await requireCourseEditor(courseId);
   const eligible = await sql`
-    SELECT id FROM enrollments
-    WHERE user_id = ${userId} AND course_id = ${courseId}
-      AND status = 'completed' AND progress = 100 AND completed_at IS NOT NULL
+    SELECT enrollment.id, enrollment.status, enrollment.progress, enrollment.completed_at,
+           enrollment.attendance_percentage, enrollment.all_evaluations_completed,
+           enrollment.statement_accepted,
+           course.training_type, course.attendance_threshold
+    FROM enrollments enrollment
+    JOIN courses course ON course.id = enrollment.course_id
+    WHERE enrollment.user_id = ${userId} AND enrollment.course_id = ${courseId}
+      AND enrollment.status = 'completed' AND enrollment.progress = 100 AND enrollment.completed_at IS NOT NULL
     LIMIT 1
   `;
   if (!eligible[0]) throw new Error("Peserta belum memenuhi persyaratan kelulusan.");
+  const el = eligible[0];
+  if (el.training_type === 'classical_facilitation') {
+    if (Number(el.attendance_percentage || 0) < Number(el.attendance_threshold || 80)) {
+      throw new Error(`Kehadiran JP belum memenuhi batas minimal ${el.attendance_threshold || 80}%.`);
+    }
+    if (!el.all_evaluations_completed) {
+      throw new Error("Peserta belum menyelesaikan seluruh tahapan evaluasi wajib.");
+    }
+    if (!el.statement_accepted) {
+      throw new Error("Peserta belum menyetujui pernyataan kebenaran data.");
+    }
+  }
   const certificate = await issueCourseCertificate(userId, courseId, { forceManualIssue: true });
   if (!certificate) throw new Error("Penerbitan sertifikat dinonaktifkan atau sertifikat telah dicabut.");
   await writeAuditLog({
@@ -95,4 +113,9 @@ export async function issueSingleCourseCertificate(formData: FormData) {
   });
   revalidatePath(`/admin/courses/${courseId}/certificates`);
   revalidatePath("/admin/certificates/issued");
+}
+
+export async function checkUserCertificateEligibility(courseId: string) {
+  const session = await requireUserSession();
+  return checkCourseCertificateEligibility(session.user.id, courseId);
 }

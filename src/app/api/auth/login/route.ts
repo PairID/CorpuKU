@@ -59,13 +59,15 @@ export async function POST(request: NextRequest) {
         if (verification.needsRehash) {
             await sql`UPDATE users SET password = ${await hashPassword(password)} WHERE id = ${user.id}`;
         }
-        await clearRateLimit("login", rateIdentifier);
 
-        const sessionRecord = await createServerSession(String(user.id), {
-            ipHash: privacyHash(getClientIp(request)),
-            userAgent: request.headers.get("user-agent"),
-            role,
-        });
+        const [, sessionRecord] = await Promise.all([
+            clearRateLimit("login", rateIdentifier),
+            createServerSession(String(user.id), {
+                ipHash: privacyHash(getClientIp(request)),
+                userAgent: request.headers.get("user-agent"),
+                role,
+            }),
+        ]);
         const sessionData = {
             id: String(user.id),
             name: String(user.name),

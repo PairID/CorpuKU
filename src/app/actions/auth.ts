@@ -1,9 +1,10 @@
 "use server";
 
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { getServerSession, SESSION_COOKIE_NAME } from "@/lib/session";
 
-export async function getAuthSession() {
+const readAuthSession = cache(async () => {
     const cookieStore = await cookies();
     const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME);
     
@@ -16,6 +17,10 @@ export async function getAuthSession() {
     } catch {
         return null;
     }
+});
+
+export async function getAuthSession() {
+    return readAuthSession();
 }
 
 export async function requireAdminSession() {

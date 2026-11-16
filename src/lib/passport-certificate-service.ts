@@ -27,6 +27,7 @@ export interface ReservedCertificateResult {
   sequenceNumber: number;
   source: 'passport_api' | 'local_counter';
   verificationUrl?: string;
+  registrationId?: string;
 }
 
 export interface PassportIntegrationConfig {
@@ -154,6 +155,7 @@ export async function reserveOfficialCertificateNumber(
             sequenceNumber: Number(cert.sequenceNumber) || 0,
             source: 'passport_api',
             verificationUrl: cert.verificationUrl,
+            registrationId: data.registrationId,
           };
         }
       } else {
@@ -185,4 +187,64 @@ export async function reserveOfficialCertificateNumber(
     sequenceNumber: seqNumber,
     source: 'local_counter',
   };
+}
+
+export interface UploadCertificatePdfOptions {
+  registrationId?: string;
+  pdfBuffer: Buffer | Uint8Array;
+  filename: string;
+  nip?: string | null;
+  certificateNumber?: string;
+}
+
+/**
+ * Mengunggah file PDF sertifikat yang telah selesai digenerate ke ASN Learning Passport
+ * melalui endpoint terlindungi API key: POST /api/alumni/external/upload-certificate
+ */
+export async function uploadCertificatePdfToPassport(
+  options: UploadCertificatePdfOptions
+): Promise<{ success: boolean; url?: string; error?: string }> {
+  const activeConfig = await getActivePassportConfig();
+  if (!activeConfig) {
+    return { success: false, error: 'Passport integration not configured or disabled' };
+  }
+  if (!options.registrationId) {
+    return { success: false, error: 'No passport registrationId available for upload' };
+  }
+
+  try {
+    const baseUrl = activeConfig.apiUrl.replace(/\/+$/, '').replace(/\/api$/, '');
+    const endpoint = `${baseUrl}/api/alumni/external/upload-certificate?registrationId=${encodeURIComponent(options.registrationId)}`;
+
+    const formData = new FormData();
+    const blob = new Blob([new Uint8Array(options.pdfBuffer)], { type: 'application/pdf' });
+    formData.append('files', blob, options.filename);
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'x-api-key': activeConfig.apiKey,
+      },
+      body: formData,
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (response.ok) {
+      const result = await response.json();
+      const uploaded = result?.matchedResults?.[0];
+      return { success: true, url: uploaded?.signedUrl };
+    } else {
+      const text = await response.text().catch(() => '');
+      console.warn(`[Passport PDF Upload] Failed (HTTP ${response.status}):`, text);
+      return { success: false, error: `HTTP ${response.status}: ${text}` };
+    }
+  } catch (err: unknown) {
+    console.warn('[Passport PDF Upload] Network error uploading certificate PDF to passport:', err);
+    return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
+  }
 }

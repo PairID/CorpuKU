@@ -28,19 +28,21 @@ export function Header() {
     const shouldHide = hideOnPaths.some(p => pathname.startsWith(p));
 
     useEffect(() => {
-        const controller = new AbortController();
-        fetch('/api/auth/session', { cache: 'no-store', signal: controller.signal })
-            .then(async response => response.ok ? response.json() : { user: null })
-            .then(result => {
-                setUser(result.user || null);
-                setIsLoaded(true);
+        let active = true;
+        authClient.getSession()
+            .then((resolvedUser) => {
+                if (active) {
+                    setUser(resolvedUser);
+                    setIsLoaded(true);
+                }
             })
-            .catch((error: unknown) => {
-                if (error instanceof DOMException && error.name === "AbortError") return;
-                setUser(null);
-                setIsLoaded(true);
+            .catch(() => {
+                if (active) {
+                    setUser(null);
+                    setIsLoaded(true);
+                }
             });
-        return () => controller.abort();
+        return () => { active = false; };
     }, [pathname]);
 
     // Intelligent Instant Search Logic

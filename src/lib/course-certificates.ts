@@ -75,10 +75,13 @@ export async function issueCourseCertificate(userId: string, courseId: string, o
   // 2. Ambil data eligibilitas dan detail peserta
   const eligibleRows = await sql`
     SELECT enrollment.id AS enrollment_id, enrollment.user_id, enrollment.course_id,
-           enrollment.completed_at, user_account.name, user_account.nip,
+           enrollment.completed_at, enrollment.attendance_percentage, enrollment.all_evaluations_completed,
+           enrollment.statement_accepted,
+           user_account.name, user_account.nip,
            user_account.pangkat, user_account.jabatan, user_account.instansi_asal,
            user_account.phone, user_account.email,
            course.title, course.jp, course.certificate_type,
+           course.training_type, course.attendance_threshold,
            course.certificate_number_prefix, course.certificate_start_number,
            COALESCE(NULLIF(settings.settings -> course.certificate_type, 'null'::jsonb),
                     NULLIF(settings.settings -> 'sertifikat', 'null'::jsonb),
@@ -88,27 +91,50 @@ export async function issueCourseCertificate(userId: string, courseId: string, o
     JOIN courses course ON course.id = enrollment.course_id
     LEFT JOIN certificate_settings settings ON settings.type = 'sertifikat'
     WHERE enrollment.user_id = ${userId} AND enrollment.course_id = ${courseId}
-      AND enrollment.status = 'completed' AND enrollment.progress = 100
-      AND enrollment.completed_at IS NOT NULL AND course.certificate_enabled = TRUE
+      AND course.certificate_enabled = TRUE
+      AND (
+        course.training_type = 'classical_facilitation'
+        OR (enrollment.status = 'completed' AND enrollment.progress = 100 AND enrollment.completed_at IS NOT NULL)
+      )
     LIMIT 1
   `;
 
   const el = eligibleRows[0];
   if (!el) return null;
 
+  // Persyaratan khusus Classical Facilitation Training:
+  if (el.training_type === 'classical_facilitation') {
+    const requiredThreshold = Number(el.attendance_threshold || 80);
+    const actualAttendance = Number(el.attendance_percentage || 0);
+
+    if (actualAttendance < requiredThreshold) {
+      console.warn(`[Certificate] Kehadiran ${actualAttendance}% < ${requiredThreshold}% untuk kursus ${courseId}`);
+      return null;
+    }
+    if (!el.all_evaluations_completed) {
+      console.warn(`[Certificate] 4 tahap evaluasi belum lengkap untuk kursus ${courseId}`);
+      return null;
+    }
+    if (!el.statement_accepted) {
+      console.warn(`[Certificate] Checklist pernyataan belum disetujui untuk kursus ${courseId}`);
+      return null;
+    }
+  }
+
   // 3. Pesan nomor resmi standar BPSDM Kaltara (Master Register Passport atau Fallback Local Counter)
   let officialCertNumber = '';
+  let reserved: { certificateNumber: string; sequenceNumber: number; registrationId?: string } | null = null;
   if (el.certificate_start_number != null) {
     const countRes = await sql`SELECT COUNT(*)::INTEGER AS cnt FROM issued_course_certificates WHERE course_id = ${courseId}`;
     const seq = Number(el.certificate_start_number) + Number(countRes[0]?.cnt || 0);
     const yr = new Date(String(el.completed_at || Date.now())).getFullYear();
     officialCertNumber = `${el.certificate_number_prefix || 'CRS'}/${yr}/${String(seq).padStart(6, '0')}`;
   } else {
-    const reserved = await reserveOfficialCertificateNumber({
+    reserved = await reserveOfficialCertificateNumber({
       trainingName: String(el.title),
       batchCode: String(el.certificate_number_prefix || 'CRS'),
       category: 'Teknis',
-      trainingType: 'E-Learning',
+      trainingType: el.training_type === 'classical_facilitation' ? 'Klasikal' : 'E-Learning',
       jp: Number(el.jp || 0),
       activityDate: el.completed_at ? new Date(String(el.completed_at)) : new Date(),
       participant: {
@@ -126,6 +152,10 @@ export async function issueCourseCertificate(userId: string, courseId: string, o
 
   const certificateId = crypto.randomUUID();
   const verificationToken = crypto.randomUUID();
+  const mergedTemplateSettings = {
+    ...(typeof el.template_settings === 'object' && el.template_settings !== null ? el.template_settings : {}),
+    ...(reserved?.registrationId ? { passportRegistrationId: reserved.registrationId } : {}),
+  };
 
   // 4. Simpan ke issued_course_certificates
   const rows = await sql`
@@ -139,12 +169,21 @@ export async function issueCourseCertificate(userId: string, courseId: string, o
       ${certificateId}, ${el.enrollment_id}, ${userId}, ${courseId}, ${officialCertNumber},
       ${verificationToken}, ${el.name}, ${el.nip},
       ${el.pangkat}, ${el.jabatan}, ${el.instansi_asal},
-      ${el.title}, ${el.completed_at}, ${COALESCE_JP(el.jp)},
-      ${el.certificate_type || 'sertifikat'}, ${el.template_settings}
+      ${el.title}, ${el.completed_at || new Date()}, ${COALESCE_JP(el.jp)},
+      ${el.certificate_type || 'sertifikat'}, ${JSON.stringify(mergedTemplateSettings)}
     )
     ON CONFLICT (enrollment_id) DO UPDATE
-      SET certificate_number = EXCLUDED.certificate_number
+      SET certificate_number = EXCLUDED.certificate_number,
+          template_settings = EXCLUDED.template_settings
     RETURNING *, TRUE AS _newly_issued
+  `;
+
+  // Pastikan status enrollment peserta ditandai selesai
+  await sql`
+    UPDATE enrollments
+    SET status = 'completed',
+        completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP)
+    WHERE user_id = ${userId} AND course_id = ${courseId}
   `;
 
   const row = rows[0];
@@ -205,4 +244,95 @@ export async function getUserCourseCertificates(userId: string) {
     ORDER BY issued_at DESC LIMIT 500
   `;
   return rows.map(mapCourseCertificate);
+}
+
+export async function checkCourseCertificateEligibility(userId: string, courseId: string): Promise<{
+  eligible: boolean;
+  reason?: string;
+  attendancePercentage?: number;
+  attendanceThreshold?: number;
+  allEvaluationsCompleted?: boolean;
+  statementAccepted?: boolean;
+  trainingType?: string;
+}> {
+  const rows = await sql`
+    SELECT enrollment.id, enrollment.status, enrollment.progress, enrollment.completed_at,
+           enrollment.attendance_percentage, enrollment.all_evaluations_completed,
+           enrollment.statement_accepted,
+           course.training_type, course.attendance_threshold, course.certificate_enabled
+    FROM enrollments enrollment
+    JOIN courses course ON course.id = enrollment.course_id
+    WHERE enrollment.user_id = ${userId} AND enrollment.course_id = ${courseId}
+    LIMIT 1
+  `;
+  const enr = rows[0];
+  if (!enr) {
+    return { eligible: false, reason: "Pendaftaran tidak ditemukan." };
+  }
+  if (!enr.certificate_enabled) {
+    return { eligible: false, reason: "Sertifikat tidak diaktifkan untuk kelas ini." };
+  }
+
+  const isClassical = enr.training_type === 'classical_facilitation';
+  const attendancePercentage = Number(enr.attendance_percentage || 0);
+  const attendanceThreshold = Number(enr.attendance_threshold || 80);
+  const allEvaluationsCompleted = Boolean(enr.all_evaluations_completed);
+  const statementAccepted = Boolean(enr.statement_accepted);
+
+  if (isClassical) {
+    if (!statementAccepted) {
+      return {
+        eligible: false,
+        reason: "Harap selesaikan verifikasi profil dan checklist pernyataan kebenaran data.",
+        attendancePercentage,
+        attendanceThreshold,
+        allEvaluationsCompleted,
+        statementAccepted,
+        trainingType: String(enr.training_type),
+      };
+    }
+    if (attendancePercentage < attendanceThreshold) {
+      return {
+        eligible: false,
+        reason: `Presensi kehadiran Anda (${attendancePercentage}%) belum memenuhi batas minimal ${attendanceThreshold}% total JP.`,
+        attendancePercentage,
+        attendanceThreshold,
+        allEvaluationsCompleted,
+        statementAccepted,
+        trainingType: String(enr.training_type),
+      };
+    }
+    if (!allEvaluationsCompleted) {
+      return {
+        eligible: false,
+        reason: "Anda belum menyelesaikan seluruh 4 tahapan evaluasi wajib.",
+        attendancePercentage,
+        attendanceThreshold,
+        allEvaluationsCompleted,
+        statementAccepted,
+        trainingType: String(enr.training_type),
+      };
+    }
+    return {
+      eligible: true,
+      attendancePercentage,
+      attendanceThreshold,
+      allEvaluationsCompleted,
+      statementAccepted,
+      trainingType: String(enr.training_type),
+    };
+  }
+
+  if (Number(enr.progress) < 100 || enr.status !== 'completed') {
+    return { eligible: false, reason: "Materi pembelajaran belum selesai 100%." };
+  }
+
+  return {
+    eligible: true,
+    attendancePercentage,
+    attendanceThreshold,
+    allEvaluationsCompleted,
+    statementAccepted,
+    trainingType: String(enr.training_type),
+  };
 }

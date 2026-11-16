@@ -52,12 +52,6 @@ export async function createServerSession(
   const expiresAt = new Date(Date.now() + maxAgeSeconds * 1000);
 
   await sql`
-    DELETE FROM auth_sessions
-    WHERE user_id = ${userId}
-      AND (expires_at <= CURRENT_TIMESTAMP OR (revoked_at IS NOT NULL AND revoked_at < CURRENT_TIMESTAMP - INTERVAL '30 days'))
-  `;
-
-  await sql`
     INSERT INTO auth_sessions (
       id, token_hash, user_id, expires_at, ip_hash, user_agent
     ) VALUES (
@@ -66,8 +60,14 @@ export async function createServerSession(
     )
   `;
 
+  // ponytail: combine expired purge + >10 active-session cap into one CTE round-trip
   await sql`
-    WITH ranked AS (
+    WITH deleted_expired AS (
+      DELETE FROM auth_sessions
+      WHERE user_id = ${userId}
+        AND (expires_at <= CURRENT_TIMESTAMP OR (revoked_at IS NOT NULL AND revoked_at < CURRENT_TIMESTAMP - INTERVAL '30 days'))
+    ),
+    ranked AS (
       SELECT id, ROW_NUMBER() OVER (ORDER BY created_at DESC) AS session_rank
       FROM auth_sessions WHERE user_id = ${userId} AND revoked_at IS NULL
     )

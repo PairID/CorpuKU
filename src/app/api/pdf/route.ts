@@ -7,6 +7,7 @@ import { sql } from '@/lib/db';
 import { getAuthSession } from '@/app/actions/auth';
 import { getWebinarCertificateForDownload, reserveCertificateDownload, getCertificateByVerificationToken, formatWebinarCertificateFilename } from '@/lib/webinar-certificates';
 import { getCourseCertificateForDownload, reserveCourseCertificateDownload, getCourseCertificateByVerificationToken } from '@/lib/course-certificates';
+import { uploadCertificatePdfToPassport } from '@/lib/passport-certificate-service';
 import {
   KALTARA_LOGO_DATA_URI,
   BSRE_FOOTER_DATA_URI,
@@ -211,6 +212,16 @@ export async function POST(req: Request) {
     if (!isTest && fs.existsSync(cachedFilePath)) {
       try {
         const cachedPdf = fs.readFileSync(cachedFilePath);
+        const regId = (certificate.templateSettings as Record<string, unknown>)?.passportRegistrationId as string | undefined;
+        if (regId && certificate.certificateNumber) {
+          uploadCertificatePdfToPassport({
+            registrationId: regId,
+            pdfBuffer: cachedPdf,
+            filename: safeCertFilename,
+            nip: certificate.participantNip,
+            certificateNumber: certificate.certificateNumber,
+          }).catch((err) => console.warn('[Passport PDF Upload] Background upload deferred:', err));
+        }
         return new NextResponse(cachedPdf as BodyInit, {
           headers: {
             'Content-Type': 'application/pdf',
@@ -510,6 +521,17 @@ export async function POST(req: Request) {
           fs.mkdirSync(cacheDir, { recursive: true });
         }
         fs.writeFileSync(cachedFilePath, pdf);
+
+        const regId = (certificate.templateSettings as Record<string, unknown>)?.passportRegistrationId as string | undefined;
+        if (regId && certificate.certificateNumber) {
+          uploadCertificatePdfToPassport({
+            registrationId: regId,
+            pdfBuffer: pdf,
+            filename: safeCertFilename,
+            nip: certificate.participantNip,
+            certificateNumber: certificate.certificateNumber,
+          }).catch((err) => console.warn('[Passport PDF Upload] Background upload deferred:', err));
+        }
       } catch (saveErr) {
         console.warn('Gagal menyimpan cache PDF ke disk:', saveErr);
       }

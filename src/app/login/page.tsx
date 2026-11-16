@@ -4,6 +4,7 @@ import Link from "next/link";
 import { BookOpen, User, Lock, ArrowRight, Eye, EyeOff } from "lucide-react";
 import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { authClient } from "@/lib/auth-client";
 
 function LoginForm() {
     const searchParams = useSearchParams();
@@ -32,6 +33,7 @@ function LoginForm() {
                 setError(data.error || "Login gagal. Periksa username dan password.");
                 setLoading(false);
             } else {
+                authClient.invalidateSession(data.user || null);
                 // Redirect based on role
                 const role = data.user?.role;
                 if (role === "admin") {

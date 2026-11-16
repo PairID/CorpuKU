@@ -24,6 +24,24 @@ export async function getAllUsers() {
     }
 }
 
+export async function getAdminUserStats(): Promise<{ totalUsers: number; totalStudents: number }> {
+    try {
+        await requireAdminSession();
+        const rows = await sql`
+            SELECT COUNT(*)::int AS "totalUsers",
+                   COUNT(*) FILTER (WHERE role = 'student')::int AS "totalStudents"
+            FROM users
+        `;
+        return {
+            totalUsers: Number(rows[0]?.totalUsers || 0),
+            totalStudents: Number(rows[0]?.totalStudents || 0),
+        };
+    } catch (err) {
+        console.error("Failed to get admin user stats:", err);
+        return { totalUsers: 0, totalStudents: 0 };
+    }
+}
+
 export async function getCurrentUser() {
     const session = await getAuthSession();
     if (!session) return null;

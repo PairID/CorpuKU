@@ -245,10 +245,10 @@ export function CertificateNumberingAdmin() {
           message: res.error || "Gagal terhubung ke server ASN Learning Passport.",
         });
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       setTestResult({
         success: false,
-        message: err?.message || "Terjadi kesalahan saat menguji koneksi.",
+        message: err instanceof Error ? err.message : "Terjadi kesalahan saat menguji koneksi.",
       });
     } finally {
       setTestingConnection(false);

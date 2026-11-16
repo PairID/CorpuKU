@@ -79,9 +79,19 @@ export default async function CourseProgressPage({ params }: ProgressPageProps) 
                enrollment.course_id AS "courseId", enrollment.status,
                enrollment.progress AS "storedProgress",
                enrollment.completed_lessons AS "completedLessons",
+               enrollment.statement_accepted AS "statementAccepted",
+               enrollment.attended_jp AS "attendedJp",
+               enrollment.attendance_percentage AS "attendancePercentage",
+               enrollment.all_evaluations_completed AS "allEvaluationsCompleted",
+               enrollment.eval_narasumber_completed AS "evalNarasumberCompleted",
+               enrollment.eval_organizer_completed AS "evalOrganizerCompleted",
+               enrollment.eval_understanding_completed AS "evalUnderstandingCompleted",
+               enrollment.eval_skm_completed AS "evalSkmCompleted",
                enrollment.enrolled_at AS "enrolledAt",
                enrollment.completed_at AS "completedAt",
                course.title AS "courseTitle", course.instructor_id AS "instructorId",
+               course.training_type AS "trainingType", course.target_opd AS "targetOpd",
+               COALESCE(course.attendance_threshold, 80) AS "attendanceThreshold",
                COALESCE(course.passing_score, 60) AS "passingScore",
                COALESCE(course.certificate_enabled, TRUE) AS "certificateEnabled",
                participant.name AS "participantName"
@@ -191,9 +201,18 @@ export default async function CourseProgressPage({ params }: ProgressPageProps) 
         : quizLessons.every((lesson) => lesson.attempts.some((attempt) => attempt.passed));
     const certificate = certificateRows[0];
     const certificateRevoked = Boolean(certificate?.revokedAt);
+
+    const isClassical = enrollment.trainingType === "classical_facilitation";
+    const attendancePercentage = Number(enrollment.attendancePercentage || 0);
+    const attendanceThreshold = Number(enrollment.attendanceThreshold || 80);
+    const isAttendanceSufficient = attendancePercentage >= attendanceThreshold;
+    const allEvaluationsCompleted = Boolean(enrollment.allEvaluationsCompleted);
+    const statementAccepted = Boolean(enrollment.statementAccepted);
+
+    const isEligibleForCertificate = !isClassical || (isAttendanceSufficient && allEvaluationsCompleted && statementAccepted);
     const canOpenCertificate = Boolean(enrollment.certificateEnabled)
-        && authoritativeProgress === 100
-        && String(enrollment.status) === "completed";
+        && (isClassical ? isEligibleForCertificate : (authoritativeProgress === 100 && String(enrollment.status) === "completed"));
+
     const certificateHref = isParticipant
         ? `/dashboard/certificates/${String(enrollment.id)}`
         : certificate?.verificationToken
@@ -231,48 +250,89 @@ export default async function CourseProgressPage({ params }: ProgressPageProps) 
                         </p>
                     )}
                     <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                        <SummaryCard label="Kemajuan" value={`${authoritativeProgress}%`} detail={`${completedCount} dari ${lessons.length} materi`} />
-                        <SummaryCard
-                            label="Nilai kuis"
-                            value={quizGrade === null ? "-" : `${quizGrade}%`}
-                            detail={quizLessons.length === 0 ? "Tidak ada kuis" : `Nilai minimum ${Number(enrollment.passingScore)}%`}
-                        />
-                        <SummaryCard
-                            label="Status kuis"
-                            value={allQuizzesPassed === null ? "N/A" : allQuizzesPassed ? "Lulus" : "Belum lulus"}
-                            detail={`${quizLessons.filter((lesson) => lesson.completed).length} dari ${quizLessons.length} kuis lulus`}
-                        />
-                        <SummaryCard
-                            label="Status kursus"
-                            value={authoritativeProgress === 100 ? "Selesai" : "Berjalan"}
-                            detail={authoritativeProgress === 100 ? formatDate(enrollment.completedAt) : `Terdaftar ${formatDate(enrollment.enrolledAt)}`}
-                        />
+                        <SummaryCard label="Kemajuan Materi" value={`${authoritativeProgress}%`} detail={`${completedCount} dari ${lessons.length} materi`} />
+                        {isClassical ? (
+                            <>
+                                <SummaryCard
+                                    label="Presensi Kehadiran"
+                                    value={`${attendancePercentage}%`}
+                                    detail={`${Number(enrollment.attendedJp || 0)} JP dihadiri • Syarat min ${attendanceThreshold}%`}
+                                />
+                                <SummaryCard
+                                    label="Evaluasi 4 Tahap"
+                                    value={allEvaluationsCompleted ? "4/4 Selesai" : "Belum Lengkap"}
+                                    detail={`${[enrollment.evalNarasumberCompleted, enrollment.evalOrganizerCompleted, enrollment.evalUnderstandingCompleted, enrollment.evalSkmCompleted].filter(Boolean).length} dari 4 tahap tuntas`}
+                                />
+                                <SummaryCard
+                                    label="Status Kelulusan"
+                                    value={canOpenCertificate ? "Lulus" : isClassical ? (isAttendanceSufficient ? "Syarat Belum Lengkap" : "Berjalan") : (authoritativeProgress === 100 ? "Syarat Belum Lengkap" : "Berjalan")}
+                                    detail={canOpenCertificate ? formatDate(enrollment.completedAt || new Date().toISOString()) : isClassical ? `Target: ${enrollment.targetOpd || 'OPD'}` : `Terdaftar ${formatDate(enrollment.enrolledAt)}`}
+                                />
+                            </>
+                        ) : (
+                            <>
+                                <SummaryCard
+                                    label="Nilai kuis"
+                                    value={quizGrade === null ? "-" : `${quizGrade}%`}
+                                    detail={quizLessons.length === 0 ? "Tidak ada kuis" : `Nilai minimum ${Number(enrollment.passingScore)}%`}
+                                />
+                                <SummaryCard
+                                    label="Status kuis"
+                                    value={allQuizzesPassed === null ? "N/A" : allQuizzesPassed ? "Lulus" : "Belum lulus"}
+                                    detail={`${quizLessons.filter((lesson) => lesson.completed).length} dari ${quizLessons.length} kuis lulus`}
+                                />
+                                <SummaryCard
+                                    label="Status kursus"
+                                    value={authoritativeProgress === 100 ? "Selesai" : "Berjalan"}
+                                    detail={authoritativeProgress === 100 ? formatDate(enrollment.completedAt) : `Terdaftar ${formatDate(enrollment.enrolledAt)}`}
+                                />
+                            </>
+                        )}
                     </div>
                 </section>
 
-                {authoritativeProgress === 100 && (
-                    <section className="mb-6 flex flex-col gap-4 rounded-2xl border border-green-200 bg-green-50 p-5 sm:flex-row sm:items-center sm:justify-between dark:border-green-900 dark:bg-green-950/30">
+                {(isClassical || authoritativeProgress === 100) && (
+                    <section className={`mb-6 flex flex-col gap-4 rounded-2xl border p-5 sm:flex-row sm:items-center sm:justify-between ${
+                        canOpenCertificate && !certificateRevoked
+                            ? "border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950/30"
+                            : "border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-950/20"
+                    }`}>
                         <div className="flex items-start gap-3">
-                            <Award className="mt-0.5 shrink-0 text-green-700 dark:text-green-400" size={24} />
+                            <Award className={`mt-0.5 shrink-0 ${canOpenCertificate && !certificateRevoked ? "text-green-700 dark:text-green-400" : "text-amber-700 dark:text-amber-400"}`} size={24} />
                             <div>
-                                <h2 className="font-bold text-green-950 dark:text-green-100">Persyaratan penyelesaian terpenuhi</h2>
-                                <p className="mt-1 text-sm text-green-800 dark:text-green-300">
+                                <h2 className={`font-bold ${canOpenCertificate && !certificateRevoked ? "text-green-950 dark:text-green-100" : "text-amber-950 dark:text-amber-100"}`}>
+                                    {canOpenCertificate && !certificateRevoked
+                                        ? "Persyaratan penyelesaian & penerbitan sertifikat terpenuhi"
+                                        : "Sertifikat Pelatihan Belum Dapat Diterbitkan (Terkunci)"}
+                                </h2>
+                                <p className={`mt-1 text-sm ${canOpenCertificate && !certificateRevoked ? "text-green-800 dark:text-green-300" : "text-amber-800 dark:text-amber-300"}`}>
                                     {certificateRevoked
                                         ? "Sertifikat pernah diterbitkan, tetapi telah dicabut oleh administrator."
                                         : canOpenCertificate
-                                            ? "Sertifikat tersedia sesuai konfigurasi kursus."
-                                            : "Penerbitan sertifikat belum tersedia atau status enrollment masih menunggu sinkronisasi."}
+                                            ? isClassical
+                                                ? `Presensi kehadiran ${attendancePercentage}% (memenuhi syarat min ${attendanceThreshold}% JP) dan seluruh 4 tahap evaluasi telah lengkap.`
+                                                : "Sertifikat tersedia sesuai konfigurasi kursus."
+                                            : isClassical
+                                                ? `Syarat kelulusan belum terpenuhi: ${!isAttendanceSufficient ? `Presensi kehadiran (${attendancePercentage}%) masih di bawah batas minimal ${attendanceThreshold}% total JP. ` : ''}${!allEvaluationsCompleted ? 'Rangkaian 4 tahap evaluasi belum lengkap diselesaikan. ' : ''}${!statementAccepted ? 'Pernyataan kebenaran data profil belum disetujui.' : ''}`
+                                                : "Penerbitan sertifikat belum tersedia atau status enrollment masih menunggu sinkronisasi."}
                                 </p>
                             </div>
                         </div>
-                        {canOpenCertificate && certificateHref && !certificateRevoked && (
+                        {canOpenCertificate && certificateHref && !certificateRevoked ? (
                             <Link
                                 href={certificateHref}
-                                className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full bg-green-700 px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-green-800"
+                                className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full bg-green-700 px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-green-800 shadow-md"
                             >
-                                {isParticipant ? "Lihat sertifikat" : "Verifikasi sertifikat"} <ExternalLink size={16} />
+                                {isParticipant ? "Lihat / Unduh Sertifikat" : "Verifikasi sertifikat"} <ExternalLink size={16} />
                             </Link>
-                        )}
+                        ) : !canOpenCertificate && isParticipant ? (
+                            <Link
+                                href={`/learn/${String(enrollment.id)}`}
+                                className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full bg-amber-600 px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-amber-700 shadow-md"
+                            >
+                                Lengkapi Presensi & Evaluasi <ExternalLink size={16} />
+                            </Link>
+                        ) : null}
                     </section>
                 )}
 
