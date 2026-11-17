@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { PlayCircle, FileText, CheckCircle, ChevronLeft, ChevronDown, ChevronUp, CheckCircle2, ClipboardCheck, Loader2, XCircle, ChevronRight, RotateCcw, AlertCircle, Trophy, FileUp, MessageSquare, Send, Trash2, Award, QrCode, ShieldCheck, Camera, ExternalLink, Lock } from "lucide-react";
+import { PlayCircle, FileText, CheckCircle, ChevronLeft, ChevronDown, ChevronUp, CheckCircle2, ClipboardCheck, Loader2, XCircle, ChevronRight, RotateCcw, AlertCircle, Trophy, FileUp, MessageSquare, Send, Trash2, Award, QrCode, ShieldCheck, Camera, ExternalLink, Lock, Menu, X } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { UserSession } from "@/app/dashboard/dashboard-client";
@@ -151,6 +151,7 @@ export default function LearnClient({ course, courseContent, session, enrollment
         Boolean(isClassical && !enrollment?.statementAccepted && session.user.role === "student")
     );
     const [showEvaluationWizard, setShowEvaluationWizard] = useState(false);
+    const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
     const [requestedEvalStage, setRequestedEvalStage] = useState<"narasumber" | "organizer" | "understanding" | "skm" | null>(null);
     const [attendanceStats, setAttendanceStats] = useState({
         attendedJp: Number(enrollment?.attendedJp || 0),
@@ -177,6 +178,7 @@ export default function LearnClient({ course, courseContent, session, enrollment
             return;
         }
         setActiveLesson(lesson);
+        setMobileSidebarOpen(false);
         // Reset quiz state when switching lessons
         if (lesson.type === "quiz") {
             setQuizPhase("start");
@@ -809,9 +811,18 @@ export default function LearnClient({ course, courseContent, session, enrollment
     return (
         <div className="min-h-screen bg-oxford-50 dark:bg-oxford-950 flex flex-col">
             {/* Top Navigation Bar - sticky at top since global header is hidden */}
-            <div className="bg-oxford-950 text-white h-14 flex items-center px-4 md:px-6 sticky top-0 z-30 shadow-md">
-                <Link href={`/courses/${course.id}`} className="flex items-center text-oxford-300 hover:text-white transition-colors mr-4">
-                    <ChevronLeft size={20} className="mr-1" />
+            <div className="bg-oxford-950 text-white h-14 flex items-center px-3 md:px-6 sticky top-0 z-30 shadow-md gap-2">
+                <button
+                    type="button"
+                    onClick={() => setMobileSidebarOpen((prev) => !prev)}
+                    className="md:hidden inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-oxford-800 hover:bg-oxford-700 text-gold-400 text-xs font-bold shrink-0"
+                    aria-label="Buka Menu Kurikulum & Evaluasi"
+                >
+                    {mobileSidebarOpen ? <X size={16} /> : <Menu size={16} />}
+                    <span>Menu</span>
+                </button>
+                <Link href={`/courses/${course.id}`} className="flex items-center text-oxford-300 hover:text-white transition-colors mr-1 md:mr-4 shrink-0">
+                    <ChevronLeft size={20} className="mr-0.5 md:mr-1" />
                     <span className="hidden sm:inline text-sm font-sans font-medium">Kembali ke Kursus</span>
                 </Link>
                 <div className="w-px h-6 bg-oxford-800 mx-4 hidden sm:block"></div>
@@ -840,11 +851,25 @@ export default function LearnClient({ course, courseContent, session, enrollment
                 </div>
             </div>
 
-            <div className="flex flex-1 h-[calc(100vh-56px)]">
+            <div className="flex flex-1 h-[calc(100vh-56px)] relative">
+                {mobileSidebarOpen && (
+                    <div
+                        onClick={() => setMobileSidebarOpen(false)}
+                        className="fixed inset-0 top-14 bg-black/50 z-30 md:hidden"
+                    />
+                )}
                 {/* Sidebar - Curriculum */}
-                <div className="w-full md:w-80 lg:w-96 bg-white dark:bg-[#161B2A] border-r border-oxford-200 dark:border-oxford-700 flex-shrink-0 flex flex-col md:static absolute inset-y-0 left-0 z-20 md:z-0 transform transition-transform duration-300 md:translate-x-0 -translate-x-full">
-                    <div className="p-4 border-b border-oxford-200 dark:border-oxford-700 bg-oxford-50 dark:bg-oxford-950">
+                <div className={`w-80 max-w-[85vw] md:w-80 lg:w-96 bg-white dark:bg-[#161B2A] border-r border-oxford-200 dark:border-oxford-700 flex-shrink-0 flex flex-col md:static fixed inset-y-0 top-14 md:top-0 left-0 z-40 md:z-0 transform transition-transform duration-300 md:translate-x-0 ${mobileSidebarOpen ? "translate-x-0" : "-translate-x-full"}`}>
+                    <div className="p-4 border-b border-oxford-200 dark:border-oxford-700 bg-oxford-50 dark:bg-oxford-950 flex items-center justify-between">
                         <h2 className="font-sans font-bold text-oxford-900 dark:text-white">Kurikulum Kursus</h2>
+                        <button
+                            type="button"
+                            onClick={() => setMobileSidebarOpen(false)}
+                            className="md:hidden p-1 text-oxford-500 hover:text-oxford-800 dark:hover:text-white"
+                            aria-label="Tutup Menu"
+                        >
+                            <X size={18} />
+                        </button>
                     </div>
                     <div className="flex-1 overflow-y-auto custom-scrollbar">
                         {courseContent.map((module) => {
@@ -978,6 +1003,7 @@ export default function LearnClient({ course, courseContent, session, enrollment
                                                 onClick={() => {
                                                     setRequestedEvalStage(item.key);
                                                     setShowEvaluationWizard(true);
+                                                    setMobileSidebarOpen(false);
                                                 }}
                                                 className="w-full text-left px-5 py-3 flex items-center justify-between gap-2 hover:bg-white dark:hover:bg-[#161B2A] transition-colors"
                                             >
