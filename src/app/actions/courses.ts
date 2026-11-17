@@ -966,7 +966,7 @@ export async function getQuizAttempt(lessonId: string): Promise<QuizAttemptRecor
     } catch { return null; }
 }
 
-export async function getCoursesWithStats(): Promise<Array<CourseRecord & { instructorName: string; studentCount: number }>> {
+export async function getCoursesWithStats(): Promise<Array<CourseRecord & { instructorName: string; studentCount: number; pendingCount: number }>> {
     try {
         const session = await requireInstructorSession();
 
@@ -984,11 +984,14 @@ export async function getCoursesWithStats(): Promise<Array<CourseRecord & { inst
                        COALESCE(c.access_mode, 'open') as "accessMode",
                        c.passcode,
                        COALESCE(u.name, 'Internal Team') as "instructorName",
-                       COALESCE(e.student_count, 0)::int as "studentCount"
+                       COALESCE(e.student_count, 0)::int as "studentCount",
+                       COALESCE(e.pending_count, 0)::int as "pendingCount"
                 FROM courses c
                 LEFT JOIN users u ON u.id = c.instructor_id
                 LEFT JOIN (
-                    SELECT course_id, COUNT(*)::int AS student_count
+                    SELECT course_id, 
+                           COUNT(*) FILTER (WHERE status != 'pending_approval' AND status != 'rejected')::int AS student_count,
+                           COUNT(*) FILTER (WHERE status = 'pending_approval')::int AS pending_count
                     FROM enrollments
                     GROUP BY course_id
                 ) e ON e.course_id = c.id
@@ -1006,11 +1009,14 @@ export async function getCoursesWithStats(): Promise<Array<CourseRecord & { inst
                        COALESCE(c.access_mode, 'open') as "accessMode",
                        c.passcode,
                        COALESCE(u.name, 'Internal Team') as "instructorName",
-                       COALESCE(e.student_count, 0)::int as "studentCount"
+                       COALESCE(e.student_count, 0)::int as "studentCount",
+                       COALESCE(e.pending_count, 0)::int as "pendingCount"
                 FROM courses c
                 LEFT JOIN users u ON u.id = c.instructor_id
                 LEFT JOIN (
-                    SELECT course_id, COUNT(*)::int AS student_count
+                    SELECT course_id, 
+                           COUNT(*) FILTER (WHERE status != 'pending_approval' AND status != 'rejected')::int AS student_count,
+                           COUNT(*) FILTER (WHERE status = 'pending_approval')::int AS pending_count
                     FROM enrollments
                     GROUP BY course_id
                 ) e ON e.course_id = c.id
@@ -1022,6 +1028,7 @@ export async function getCoursesWithStats(): Promise<Array<CourseRecord & { inst
             ...(row as unknown as CourseRecord),
             instructorName: String(row.instructorName || "Internal Team"),
             studentCount: Number(row.studentCount || 0),
+            pendingCount: Number(row.pendingCount || 0),
         }));
     } catch (err) {
         console.error("Failed to get courses with stats:", err);

@@ -23,6 +23,8 @@ export default function AdminCourses() {
                 const c = await getCoursesWithStats();
                 setCourses((c as unknown as RawAdminCourse[]).map(course => ({
                     ...course,
+                    pendingCount: Number(course.pendingCount || 0),
+                    accessMode: String(course.accessMode || "open"),
                     createdAt: new Date(course.createdAt).toISOString(),
                     updatedAt: new Date(course.updatedAt).toISOString(),
                 })));

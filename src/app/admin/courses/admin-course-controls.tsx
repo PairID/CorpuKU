@@ -13,6 +13,8 @@ export interface AdminCourse {
     status: string;
     instructorName: string | null;
     studentCount: number;
+    pendingCount?: number;
+    accessMode?: string;
     createdAt: string;
     updatedAt: string;
 }
