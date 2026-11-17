@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
+import QRCode from 'qrcode';
 import { NextResponse } from 'next/server';
 import { withBrowserPage } from '@/lib/puppeteer';
 import { sql } from '@/lib/db';
@@ -236,9 +237,12 @@ export async function POST(req: Request) {
       .update(
         JSON.stringify(config) +
           String(certificate.certificateNumber) +
+          String(certificate.participantName || '') +
+          String(certificate.verificationToken || '') +
           resolvedActivityDate +
           resolvedOrganizer +
-          resolvedDelivery
+          resolvedDelivery +
+          'qr-v1'
       )
       .digest('hex')
       .slice(0, 10);
@@ -439,6 +443,18 @@ export async function POST(req: Request) {
       const paragraphText = parseText(paragraphEl?.text || 'Atas partisipasinya dalam {{kursus}} yang diselenggarakan oleh Badan Pengembangan Sumber Daya Manusia Provinsi Kalimantan Utara pada tanggal {{tanggal}} secara daring yang meliputi {{jp}} Jam Pelajaran.');
       const sigDateText = parseText(sigDateEl?.text || 'Tanjung Selor, {{tanggal_terbit}}');
 
+      const appBaseUrl = (process.env.NEXT_PUBLIC_APP_URL || new URL(req.url).origin).replace(/\/$/, '');
+      const verifyUrl = certificate.verificationToken
+        ? `${appBaseUrl}/verify/certificates/${certificate.verificationToken}`
+        : '';
+      const verifyQrDataUri = verifyUrl
+        ? await QRCode.toDataURL(verifyUrl, {
+            width: 240,
+            margin: 1,
+            color: { dark: '#000000', light: '#FFFFFF' },
+          }).catch(() => '')
+        : '';
+
       const rawTableText = parseText(tableEl?.text || 'Nama : {{nama}}\nNIP/NIK : {{nip}}\nInstansi : {{instansi}}');
       const tableLines = rawTableText.split('\n').map(l => l.trim()).filter(Boolean);
       const identityRowsHtml = tableLines.map(line => {
@@ -456,6 +472,16 @@ export async function POST(req: Request) {
       }).join('');
 
       const isLandscape = orientation === 'landscape';
+      const verifyQrHtml = verifyQrDataUri
+        ? `
+          <div style="display:flex;flex-direction:column;align-items:center;flex-shrink:0;">
+            <div style="width:${isLandscape ? '26mm' : '28mm'};height:${isLandscape ? '26mm' : '28mm'};padding:1.2mm;border:1px solid rgba(0,0,0,0.15);background:#ffffff;box-sizing:border-box;">
+              <img src="${verifyQrDataUri}" alt="QR Verifikasi Sertifikat" style="width:100%;height:100%;display:block;object-fit:contain;" />
+            </div>
+            <div style="font-size:${isLandscape ? '7.5pt' : '8.5pt'};font-style:italic;color:#111111;margin-top:3px;text-align:center;">scan to verify</div>
+          </div>
+        `
+        : '<div></div>';
       const sigDateY = typeof sigDateEl?.y === 'number' ? sigDateEl.y : (Number(sigDateEl?.y) || 0);
       const sigMarginTop = sigDateY > 45 
         ? `${Math.max(12, (sigDateY - 42) * 1.5)}mm` 
@@ -499,15 +525,12 @@ export async function POST(req: Request) {
             ${paragraphText}
           </div>
 
-          <div style="width:100%;display:flex;justify-content:flex-end;margin-top:${sigMarginTop};">
+          <div style="width:100%;display:flex;justify-content:space-between;align-items:flex-end;margin-top:${sigMarginTop};">
+            ${verifyQrHtml}
             <div style="width:${isLandscape ? '70mm' : '74mm'};display:flex;flex-direction:column;align-items:flex-start;text-align:left;">
               <div style="font-size:${sigDateFontSize};margin-bottom:6px;text-align:left;width:100%;color:#000000;">${sigDateText}</div>
               <img src="${sigDataUri}" alt="TTE Resmi BPSDM" style="width:${isLandscape ? '70mm' : '73.8mm'};height:${isLandscape ? '24mm' : '25.4mm'};display:block;object-fit:contain;object-position:left;" />
             </div>
-          </div>
-
-          <div style="position:absolute;bottom:${isLandscape ? '10mm' : '16mm'};left:0;right:0;text-align:center;">
-            <img src="${BSRE_FOOTER_DATA_URI}" alt="BSrE BSSN" style="height:9.8mm;max-width:114mm;display:inline-block;" />
           </div>
         </div>
       `;

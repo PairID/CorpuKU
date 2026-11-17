@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import QRCode from "qrcode";
 import { CertificateView, CertificateData, CertificateTypeConfig } from "@/components/CertificateView";
 import { Download, ExternalLink, ChevronLeft } from "lucide-react";
 import Link from "next/link";
@@ -9,6 +11,19 @@ export default function CertificateClient({ data, initialConfig, courseId, verif
     const orientation = config?.orientation || "landscape";
     const isPortrait = orientation === "portrait";
     const aspectRatio = isPortrait ? '1 / 1.414' : '1.414 / 1';
+    const [verifyQrDataUrl, setVerifyQrDataUrl] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (!verificationToken || typeof window === "undefined") return;
+        const verifyUrl = `${window.location.origin}/verify/certificates/${verificationToken}`;
+        QRCode.toDataURL(verifyUrl, {
+            width: 240,
+            margin: 1,
+            color: { dark: "#000000", light: "#FFFFFF" },
+        })
+            .then(setVerifyQrDataUrl)
+            .catch(() => {});
+    }, [verificationToken]);
 
     const handleDownload = async () => {
         const response = await fetch('/api/pdf', {
@@ -58,9 +73,9 @@ export default function CertificateClient({ data, initialConfig, courseId, verif
                 >
                     <div className="w-full h-full">
                         {config ? (
-                            <CertificateView data={data} config={config} />
+                            <CertificateView data={{ ...data, verifyQrDataUrl }} config={config} />
                         ) : (
-                            <CertificateView data={data} />
+                            <CertificateView data={{ ...data, verifyQrDataUrl }} />
                         )}
                     </div>
                 </div>

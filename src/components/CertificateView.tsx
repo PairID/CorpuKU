@@ -28,6 +28,7 @@ export interface CertificateData {
     birthPlace?: string; // Tempat lahir
     birthDate?: string; // Tanggal lahir
     photoUrl?: string; // URL foto peserta (3x4)
+    verifyQrDataUrl?: string | null; // QR code verifikasi sertifikat
 }
 
 export interface TextElement {
@@ -442,11 +443,39 @@ export const CertificateView: React.FC<Props> = ({ data, config = DEFAULT_CONFIG
                     {paragraphText}
                 </div>
 
-                {/* 7. BLOK TTE KANAN */}
+                {/* 7. QR VERIFIKASI KIRI & BLOK TTE KANAN */}
                 <div 
-                    className="w-full flex justify-end"
+                    className="w-full flex items-end justify-between gap-4"
                     style={{ marginTop: sigMarginTop }}
                 >
+                    {data.verifyQrDataUrl ? (
+                        <div className="flex flex-col items-center shrink-0">
+                            <div
+                                className="bg-white p-[0.4cqi] border border-black/15"
+                                style={{
+                                    width: isPortrait ? '13.5cqi' : '9.5cqi',
+                                    height: isPortrait ? '13.5cqi' : '9.5cqi',
+                                }}
+                            >
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                    src={data.verifyQrDataUrl}
+                                    alt="QR Verifikasi Sertifikat"
+                                    className="w-full h-full object-contain"
+                                />
+                            </div>
+                            <span
+                                className="text-black italic text-center"
+                                style={{
+                                    fontSize: isPortrait ? '1.35cqi' : '0.95cqi',
+                                    marginTop: isPortrait ? '0.45cqi' : '0.3cqi',
+                                }}
+                            >
+                                scan to verify
+                            </span>
+                        </div>
+                    ) : <div />}
+
                     <div 
                         className="flex flex-col items-start text-left"
                         style={{ width: isPortrait ? '35.2cqi' : '23.57cqi' }}
@@ -476,29 +505,6 @@ export const CertificateView: React.FC<Props> = ({ data, config = DEFAULT_CONFIG
                                 className="object-contain object-left" 
                             />
                         </div>
-                    </div>
-                </div>
-
-                {/* 8. BSrE FOOTER BANNER */}
-                <div 
-                    className="absolute left-0 right-0 text-center pointer-events-none"
-                    style={{ bottom: isPortrait ? '5.38cqi' : '3.37cqi' }}
-                >
-                    <div 
-                        className="relative mx-auto"
-                        style={{ 
-                            width: isPortrait ? '54.28cqi' : '38.38cqi', 
-                            height: isPortrait ? '4.66cqi' : '3.3cqi' 
-                        }}
-                    >
-                        <Image
-                            src={BSRE_FOOTER_DATA_URI}
-                            alt="BSrE BSSN"
-                            fill
-                            sizes="100vw"
-                            unoptimized
-                            className="object-contain"
-                        />
                     </div>
                 </div>
             </div>
