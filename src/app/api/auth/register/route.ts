@@ -26,7 +26,8 @@ export async function POST(request: NextRequest) {
         const rateLimit = await consumeRateLimit({
             scope: "register",
             identifier: getClientIp(request),
-            limit: 3,
+            // ponytail: allow shared NAT/Wi-Fi classrooms (65+ participants on one public IP) to register concurrently
+            limit: 100,
             windowSeconds: 60 * 60,
         });
         if (!rateLimit.allowed) {
