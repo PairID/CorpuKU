@@ -6,6 +6,7 @@ import { requireUserSession, requireInstructorSession } from "./auth";
 import { revalidatePath } from "next/cache";
 import { calculateAttendancePercentage, sanitizeParticipantNip } from "@/lib/classical-training";
 import { issueCourseCertificate } from "@/lib/course-certificates";
+import { hashPassword } from "@/lib/password";
 
 interface SubmitAttendancePayload {
   courseId: string;
@@ -929,6 +930,240 @@ export async function adminUpdateParticipantRegistration(payload: {
     return {
       success: false,
       error: err instanceof Error ? err.message : "Gagal memperbarui data peserta.",
+    };
+  }
+}
+
+/**
+ * Mencari calon peserta dari database pengguna terdaftar untuk dimasukkan ke kelas
+ */
+export async function adminSearchCandidateUsers(courseId: string, query: string) {
+  try {
+    const session = await requireInstructorSession();
+    const isAdmin = session.user.role === "admin";
+
+    const courseRows = await sql`
+      SELECT id, instructor_id AS "instructorId"
+      FROM courses
+      WHERE id = ${courseId}
+      LIMIT 1
+    `;
+    const course = courseRows[0];
+    if (!course) return { success: false, error: "Kelas tidak ditemukan.", users: [] };
+    if (!isAdmin && String(course.instructorId || "") !== session.user.id) {
+      return { success: false, error: "Akses ditolak.", users: [] };
+    }
+
+    const q = (query || "").trim();
+    if (!q || q.length < 2) {
+      return { success: true, users: [] };
+    }
+
+    const searchPattern = `%${q}%`;
+    const rows = await sql`
+      SELECT 
+        u.id, 
+        u.name, 
+        u.nip, 
+        u.email, 
+        u.instansi_asal AS "instansiAsal", 
+        u.jabatan, 
+        u.pangkat,
+        CASE WHEN e.id IS NOT NULL THEN TRUE ELSE FALSE END AS "isAlreadyEnrolled"
+      FROM users u
+      LEFT JOIN enrollments e ON e.user_id = u.id AND e.course_id = ${courseId}
+      WHERE u.role <> 'admin'
+        AND (u.name ILIKE ${searchPattern} OR u.nip ILIKE ${searchPattern} OR u.email ILIKE ${searchPattern})
+      ORDER BY "isAlreadyEnrolled" ASC, u.name ASC
+      LIMIT 15
+    `;
+
+    return {
+      success: true,
+      users: rows.map((r) => ({
+        id: String(r.id),
+        name: String(r.name || ""),
+        nip: String(r.nip || ""),
+        email: String(r.email || ""),
+        instansiAsal: String(r.instansiAsal || ""),
+        jabatan: String(r.jabatan || ""),
+        pangkat: String(r.pangkat || ""),
+        isAlreadyEnrolled: Boolean(r.isAlreadyEnrolled),
+      })),
+    };
+  } catch (err: unknown) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Gagal mencari pengguna.",
+      users: [],
+    };
+  }
+}
+
+/**
+ * Menambahkan pengguna yang sudah ada di sistem ke dalam kelas secara manual
+ */
+export async function adminEnrollExistingUser(payload: {
+  courseId: string;
+  userId: string;
+}) {
+  try {
+    const { courseId, userId } = payload;
+    const session = await requireInstructorSession();
+    const isAdmin = session.user.role === "admin";
+
+    const courseRows = await sql`
+      SELECT id, title, category, jp, instructor_id AS "instructorId"
+      FROM courses
+      WHERE id = ${courseId}
+      LIMIT 1
+    `;
+    const course = courseRows[0];
+    if (!course) return { success: false, error: "Kelas tidak ditemukan." };
+    if (!isAdmin && String(course.instructorId || "") !== session.user.id) {
+      return { success: false, error: "Anda tidak memiliki akses ke kelas ini." };
+    }
+
+    const userRows = await sql`
+      SELECT id, name, nip, instansi_asal AS "instansiAsal"
+      FROM users
+      WHERE id = ${userId}
+      LIMIT 1
+    `;
+    const user = userRows[0];
+    if (!user) return { success: false, error: "Data pengguna tidak ditemukan." };
+
+    const enrollmentId = `enroll_${crypto.randomUUID()}`;
+    const now = new Date().toISOString();
+
+    await sql`
+      INSERT INTO enrollments (id, user_id, course_id, title, category, progress, status, jp, enrolled_at)
+      VALUES (${enrollmentId}, ${userId}, ${courseId}, ${course.title}, ${course.category || "Umum"}, 0, 'active', ${course.jp || 0}, ${now})
+      ON CONFLICT (user_id, course_id) DO UPDATE SET
+        status = 'active'
+    `;
+
+    revalidatePath(`/courses/${courseId}`);
+    revalidatePath(`/admin/courses/${courseId}`);
+    revalidatePath(`/admin/courses`);
+
+    return { success: true, name: String(user.name) };
+  } catch (err: unknown) {
+    console.error("adminEnrollExistingUser error:", err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Gagal menambahkan peserta ke kelas.",
+    };
+  }
+}
+
+/**
+ * Mendaftarkan peserta baru langsung (bila belum ada akun) sekaligus mengaktifkan di kelas
+ */
+export async function adminCreateAndEnrollUser(payload: {
+  courseId: string;
+  name: string;
+  nip: string;
+  instansiAsal?: string;
+  jabatan?: string;
+  pangkat?: string;
+  email?: string;
+  phone?: string;
+}) {
+  try {
+    const { courseId, name, instansiAsal, jabatan, pangkat, phone } = payload;
+    const cleanNip = sanitizeParticipantNip(payload.nip || "");
+    const cleanName = (name || "").trim();
+
+    if (!cleanName || cleanName.length < 2) {
+      return { success: false, error: "Nama peserta wajib diisi." };
+    }
+    if (!cleanNip || cleanNip.length < 5) {
+      return { success: false, error: "NIP/NIK peserta valid wajib diisi minimal 5 digit." };
+    }
+
+    const session = await requireInstructorSession();
+    const isAdmin = session.user.role === "admin";
+
+    const courseRows = await sql`
+      SELECT id, title, category, jp, instructor_id AS "instructorId"
+      FROM courses
+      WHERE id = ${courseId}
+      LIMIT 1
+    `;
+    const course = courseRows[0];
+    if (!course) return { success: false, error: "Kelas tidak ditemukan." };
+    if (!isAdmin && String(course.instructorId || "") !== session.user.id) {
+      return { success: false, error: "Anda tidak memiliki akses ke kelas ini." };
+    }
+
+    const cleanEmail = (payload.email || "").trim().toLowerCase() || `${cleanNip}@kaltaraprov.go.id`;
+    const now = new Date().toISOString();
+
+    // Cek apakah user sudah ada berdasarkan NIP atau Email
+    const existingUserRows = await sql`
+      SELECT id, name, nip, email
+      FROM users
+      WHERE nip = ${cleanNip} OR email = ${cleanEmail}
+      LIMIT 1
+    `;
+
+    let targetUserId = "";
+    if (existingUserRows[0]) {
+      targetUserId = String(existingUserRows[0].id);
+      await sql`
+        UPDATE users
+        SET name = ${cleanName},
+            instansi_asal = COALESCE(${instansiAsal?.trim() || null}, instansi_asal),
+            jabatan = COALESCE(${jabatan?.trim() || null}, jabatan),
+            pangkat = COALESCE(${pangkat?.trim() || null}, pangkat),
+            phone = COALESCE(${phone?.trim() || null}, phone)
+        WHERE id = ${targetUserId}
+      `;
+    } else {
+      targetUserId = `usr_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+      const defaultPassword = cleanNip;
+      const pwdHash = await hashPassword(defaultPassword);
+
+      await sql`
+        INSERT INTO users (id, name, nip, username, email, password, role, instansi_asal, pangkat, jabatan, phone, created_at, joined_at)
+        VALUES (
+          ${targetUserId},
+          ${cleanName},
+          ${cleanNip},
+          ${cleanNip},
+          ${cleanEmail},
+          ${pwdHash},
+          'student',
+          ${instansiAsal?.trim() || "BPSDM Kaltara"},
+          ${pangkat?.trim() || null},
+          ${jabatan?.trim() || null},
+          ${phone?.trim() || null},
+          ${now},
+          ${now}
+        )
+      `;
+    }
+
+    // Enroll ke kursus dengan status = 'active'
+    const enrollmentId = `enroll_${crypto.randomUUID()}`;
+    await sql`
+      INSERT INTO enrollments (id, user_id, course_id, title, category, progress, status, jp, enrolled_at)
+      VALUES (${enrollmentId}, ${targetUserId}, ${courseId}, ${course.title}, ${course.category || "Umum"}, 0, 'active', ${course.jp || 0}, ${now})
+      ON CONFLICT (user_id, course_id) DO UPDATE SET
+        status = 'active'
+    `;
+
+    revalidatePath(`/courses/${courseId}`);
+    revalidatePath(`/admin/courses/${courseId}`);
+    revalidatePath(`/admin/courses`);
+
+    return { success: true, name: cleanName, nip: cleanNip };
+  } catch (err: unknown) {
+    console.error("adminCreateAndEnrollUser error:", err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Gagal menambahkan peserta baru ke kelas.",
     };
   }
 }

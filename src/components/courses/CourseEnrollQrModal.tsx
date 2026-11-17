@@ -17,6 +17,7 @@ import {
   Search,
   Trash2,
   UserCheck,
+  UserPlus,
   UserX,
   Users,
   X,
@@ -24,7 +25,10 @@ import {
 import { showToast } from "@/lib/toast";
 import {
   adminApproveAllPendingEnrollments,
+  adminCreateAndEnrollUser,
+  adminEnrollExistingUser,
   adminRemoveCourseParticipant,
+  adminSearchCandidateUsers,
   adminUpdateEnrollmentApproval,
   adminUpdateParticipantRegistration,
   getCourseEnrollmentsLive,
@@ -54,6 +58,33 @@ export default function CourseEnrollQrModal({
 
   // Delete confirmation state
   const [deletingEnrollment, setDeletingEnrollment] = useState<{ id: string; name: string } | null>(null);
+
+  // Manual add participant modal state
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [addMode, setAddMode] = useState<"search" | "new">("search");
+  const [searchUserQuery, setSearchUserQuery] = useState("");
+  const [candidateUsers, setCandidateUsers] = useState<
+    Array<{
+      id: string;
+      name: string;
+      nip: string;
+      email: string;
+      instansiAsal: string;
+      jabatan: string;
+      pangkat: string;
+      isAlreadyEnrolled: boolean;
+    }>
+  >([]);
+  const [isSearchingUsers, setIsSearchingUsers] = useState(false);
+  const [newUserForm, setNewUserForm] = useState({
+    name: "",
+    nip: "",
+    instansiAsal: "",
+    jabatan: "",
+    pangkat: "",
+    email: "",
+    phone: "",
+  });
 
   // Edit participant modal state
   const [editingUser, setEditingUser] = useState<LiveEnrolledParticipant | null>(null);
@@ -270,6 +301,83 @@ export default function CourseEnrollQrModal({
     }
   };
 
+  const handleSearchUsers = async (q: string) => {
+    setSearchUserQuery(q);
+    if (!q || q.trim().length < 2) {
+      setCandidateUsers([]);
+      return;
+    }
+    setIsSearchingUsers(true);
+    try {
+      const res = await adminSearchCandidateUsers(courseId, q);
+      if (res.success && res.users) {
+        setCandidateUsers(res.users);
+      }
+    } finally {
+      setIsSearchingUsers(false);
+    }
+  };
+
+  const handleEnrollExisting = async (userId: string, userName: string) => {
+    setIsActionLoading(true);
+    try {
+      const res = await adminEnrollExistingUser({ courseId, userId });
+      if (res.success) {
+        showToast.success("Peserta Ditambahkan", `${userName} berhasil dimasukkan ke kelas.`);
+        setCandidateUsers((prev) =>
+          prev.map((u) => (u.id === userId ? { ...u, isAlreadyEnrolled: true } : u))
+        );
+        await fetchParticipants(true);
+      } else {
+        showToast.error("Gagal Menambahkan", res.error || "Terjadi kesalahan.");
+      }
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  const handleCreateAndEnroll = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newUserForm.name.trim() || !newUserForm.nip.trim()) {
+      showToast.error("Data Kurang", "Nama dan NIP/NIK peserta wajib diisi.");
+      return;
+    }
+    setIsActionLoading(true);
+    try {
+      const res = await adminCreateAndEnrollUser({
+        courseId,
+        name: newUserForm.name,
+        nip: newUserForm.nip,
+        instansiAsal: newUserForm.instansiAsal,
+        jabatan: newUserForm.jabatan,
+        pangkat: newUserForm.pangkat,
+        email: newUserForm.email,
+        phone: newUserForm.phone,
+      });
+      if (res.success) {
+        showToast.success(
+          "Peserta Berhasil Didaftarkan",
+          `${res.name} (NIP: ${res.nip}) telah ditambahkan dan aktif di kelas.`
+        );
+        setShowAddModal(false);
+        setNewUserForm({
+          name: "",
+          nip: "",
+          instansiAsal: "",
+          jabatan: "",
+          pangkat: "",
+          email: "",
+          phone: "",
+        });
+        await fetchParticipants(true);
+      } else {
+        showToast.error("Gagal Mendaftarkan", res.error || "Terjadi kesalahan.");
+      }
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
   const openEdit = (p: LiveEnrolledParticipant) => {
     setEditingUser(p);
     setEditForm({
@@ -459,11 +567,21 @@ export default function CourseEnrollQrModal({
                   {participants.length} Peserta
                 </span>
               </div>
-              {lastUpdated && (
-                <span className="text-sm text-oxford-500">
-                  Update: {lastUpdated}
-                </span>
-              )}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gold-500 hover:bg-gold-400 text-oxford-950 font-bold text-sm shadow-sm transition-all active:scale-95"
+                >
+                  <UserPlus size={16} />
+                  <span>Tambah Peserta</span>
+                </button>
+                {lastUpdated && (
+                  <span className="text-xs text-oxford-500 hidden sm:inline">
+                    Update: {lastUpdated}
+                  </span>
+                )}
+              </div>
             </div>
 
             {/* Banner persetujuan tertunda jika ada */}
@@ -766,6 +884,227 @@ export default function CourseEnrollQrModal({
                 Ya, Hapus Peserta
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sub-modal Tambah Peserta Manual */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-[#161B2A] border border-oxford-200 dark:border-oxford-700 rounded-2xl max-w-xl w-full p-6 sm:p-7 shadow-2xl space-y-4 text-oxford-900 dark:text-white flex flex-col max-h-[90vh] overflow-hidden">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-oxford-200 dark:border-oxford-700">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-gold-500/15 text-gold-500 flex items-center justify-center shrink-0">
+                  <UserPlus size={22} />
+                </div>
+                <div>
+                  <h4 className="font-bold text-lg text-oxford-950 dark:text-white">Tambah Peserta ke Kelas</h4>
+                  <p className="text-xs text-oxford-500 dark:text-oxford-400">{courseTitle}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAddModal(false);
+                  setCandidateUsers([]);
+                  setSearchUserQuery("");
+                }}
+                className="p-1.5 rounded-lg text-oxford-400 hover:text-oxford-600 dark:hover:text-white"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Mode Switcher Tabs */}
+            <div className="flex rounded-xl bg-oxford-100 dark:bg-oxford-900/60 p-1 border border-oxford-200 dark:border-oxford-800">
+              <button
+                type="button"
+                onClick={() => setAddMode("search")}
+                className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${
+                  addMode === "search"
+                    ? "bg-white dark:bg-[#161B2A] text-oxford-950 dark:text-white shadow-sm"
+                    : "text-oxford-500 dark:text-oxford-400 hover:text-oxford-900"
+                }`}
+              >
+                Cari Pengguna Terdaftar
+              </button>
+              <button
+                type="button"
+                onClick={() => setAddMode("new")}
+                className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${
+                  addMode === "new"
+                    ? "bg-white dark:bg-[#161B2A] text-oxford-950 dark:text-white shadow-sm"
+                    : "text-oxford-500 dark:text-oxford-400 hover:text-oxford-900"
+                }`}
+              >
+                Input Peserta Baru
+              </button>
+            </div>
+
+            {/* TAB 1: Search Existing Users */}
+            {addMode === "search" && (
+              <div className="flex flex-col flex-1 min-h-0 space-y-3">
+                <div className="relative">
+                  <Search
+                    size={16}
+                    className="absolute left-3.5 top-1/2 -translate-y-1/2 text-oxford-400"
+                  />
+                  <input
+                    type="text"
+                    value={searchUserQuery}
+                    onChange={(e) => handleSearchUsers(e.target.value)}
+                    placeholder="Ketik nama, NIP, atau email pengguna..."
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-oxford-200 dark:border-oxford-700 bg-oxford-50 dark:bg-oxford-900 text-sm focus:outline-none focus:border-gold-500"
+                  />
+                </div>
+
+                <div className="flex-1 overflow-y-auto space-y-2 max-h-[320px] pr-1">
+                  {isSearchingUsers ? (
+                    <div className="h-32 flex items-center justify-center text-sm text-oxford-400 gap-2">
+                      <Loader2 size={16} className="animate-spin" /> Mencari pengguna...
+                    </div>
+                  ) : searchUserQuery.trim().length < 2 ? (
+                    <div className="h-32 flex items-center justify-center text-sm text-oxford-400 text-center px-4">
+                      Ketik minimal 2 karakter untuk mencari ASN / pengguna terdaftar di sistem.
+                    </div>
+                  ) : candidateUsers.length === 0 ? (
+                    <div className="h-32 flex items-center justify-center text-sm text-oxford-400 text-center px-4">
+                      Pengguna tidak ditemukan. Anda dapat menggunakan tab &quot;Input Peserta Baru&quot; di atas untuk mendaftarkannya langsung.
+                    </div>
+                  ) : (
+                    candidateUsers.map((u) => (
+                      <div
+                        key={u.id}
+                        className="p-3 rounded-xl border border-oxford-200 dark:border-oxford-800 bg-white dark:bg-oxford-900/40 flex items-center justify-between gap-3"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="font-bold text-sm text-oxford-950 dark:text-white truncate">
+                            {u.name}
+                          </p>
+                          <p className="text-xs text-oxford-500 dark:text-oxford-400 truncate">
+                            NIP: {u.nip || "-"} &bull; {u.instansiAsal || "Instansi belum diisi"}
+                          </p>
+                        </div>
+                        {u.isAlreadyEnrolled ? (
+                          <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-bold shrink-0">
+                            <Check size={14} /> Terdaftar
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleEnrollExisting(u.id, u.name)}
+                            disabled={isActionLoading}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gold-500 hover:bg-gold-400 text-oxford-950 text-xs font-bold transition-all disabled:opacity-50 shrink-0"
+                          >
+                            <UserPlus size={14} /> Tambahkan
+                          </button>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* TAB 2: Input New Participant */}
+            {addMode === "new" && (
+              <form onSubmit={handleCreateAndEnroll} className="space-y-3 overflow-y-auto max-h-[380px] pr-1">
+                <div>
+                  <label className="block text-xs font-bold mb-1">Nama Lengkap &amp; Gelar *</label>
+                  <input
+                    type="text"
+                    required
+                    value={newUserForm.name}
+                    onChange={(e) => setNewUserForm((f) => ({ ...f, name: e.target.value }))}
+                    placeholder="Contoh: Ahmad Fauzi, S.STP"
+                    className="w-full px-3.5 py-2 rounded-xl border border-oxford-200 dark:border-oxford-700 bg-oxford-50 dark:bg-oxford-900 text-sm"
+                  />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold mb-1">NIP / NIK *</label>
+                    <input
+                      type="text"
+                      required
+                      value={newUserForm.nip}
+                      onChange={(e) => setNewUserForm((f) => ({ ...f, nip: e.target.value }))}
+                      placeholder="19870102..."
+                      className="w-full px-3.5 py-2 rounded-xl border border-oxford-200 dark:border-oxford-700 bg-oxford-50 dark:bg-oxford-900 text-sm font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold mb-1">No. WhatsApp / HP</label>
+                    <input
+                      type="text"
+                      value={newUserForm.phone}
+                      onChange={(e) => setNewUserForm((f) => ({ ...f, phone: e.target.value }))}
+                      placeholder="081234567890"
+                      className="w-full px-3.5 py-2 rounded-xl border border-oxford-200 dark:border-oxford-700 bg-oxford-50 dark:bg-oxford-900 text-sm"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold mb-1">Instansi / OPD Asal</label>
+                  <input
+                    type="text"
+                    value={newUserForm.instansiAsal}
+                    onChange={(e) => setNewUserForm((f) => ({ ...f, instansiAsal: e.target.value }))}
+                    placeholder="Contoh: Dinas Kehutanan Prov. Kaltara"
+                    className="w-full px-3.5 py-2 rounded-xl border border-oxford-200 dark:border-oxford-700 bg-oxford-50 dark:bg-oxford-900 text-sm"
+                  />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold mb-1">Jabatan</label>
+                    <input
+                      type="text"
+                      value={newUserForm.jabatan}
+                      onChange={(e) => setNewUserForm((f) => ({ ...f, jabatan: e.target.value }))}
+                      placeholder="Analis Kepegawaian"
+                      className="w-full px-3.5 py-2 rounded-xl border border-oxford-200 dark:border-oxford-700 bg-oxford-50 dark:bg-oxford-900 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold mb-1">Pangkat / Golongan</label>
+                    <input
+                      type="text"
+                      value={newUserForm.pangkat}
+                      onChange={(e) => setNewUserForm((f) => ({ ...f, pangkat: e.target.value }))}
+                      placeholder="Penata Muda (III/a)"
+                      className="w-full px-3.5 py-2 rounded-xl border border-oxford-200 dark:border-oxford-700 bg-oxford-50 dark:bg-oxford-900 text-sm"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold mb-1">Email (Opsional)</label>
+                  <input
+                    type="email"
+                    value={newUserForm.email}
+                    onChange={(e) => setNewUserForm((f) => ({ ...f, email: e.target.value }))}
+                    placeholder="Bila dikosongkan: {nip}@kaltaraprov.go.id"
+                    className="w-full px-3.5 py-2 rounded-xl border border-oxford-200 dark:border-oxford-700 bg-oxford-50 dark:bg-oxford-900 text-sm"
+                  />
+                </div>
+                <div className="flex justify-end gap-2.5 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddModal(false)}
+                    className="px-4 py-2 rounded-xl border border-oxford-200 dark:border-oxford-700 text-sm font-bold text-oxford-700 dark:text-oxford-300 hover:bg-oxford-100"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isActionLoading}
+                    className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-gold-500 hover:bg-gold-400 text-oxford-950 text-sm font-bold disabled:opacity-50 shadow-sm"
+                  >
+                    {isActionLoading && <Loader2 size={16} className="animate-spin" />}
+                    Daftarkan ke Kelas
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}
