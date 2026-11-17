@@ -192,6 +192,12 @@ interface CourseContentLesson {
     attendanceQrCode?: string | null;
     narasumberName?: string | null;
     sessionDate?: string | null;
+    questions?: Array<{
+        id: string;
+        questionText: string;
+        explanation?: string;
+        options: Array<{ optionText: string; isCorrect: boolean }>;
+    }>;
 }
 
 interface CourseContentModule {
@@ -626,6 +632,15 @@ export async function getCourseContent(
                 WHERE module_id = ${mod.id} 
                 ORDER BY "order" ASC
             `;
+            const lessonIds = lessons.map((l) => String(l.id));
+            const quizRows = !hideContent && lessonIds.length > 0
+                ? await sql`
+                    SELECT id, lesson_id AS "lessonId", question, options, correct_option_index AS "correctOptionIndex"
+                    FROM quiz_questions
+                    WHERE lesson_id = ANY(${lessonIds})
+                    ORDER BY "order" ASC, id ASC
+                  `
+                : [];
             return {
                 id: String(mod.id),
                 courseId,
@@ -637,20 +652,51 @@ export async function getCourseContent(
                 activeUntil,
                 isLocked,
                 lockReason: isLocked ? access.reason : null,
-                lessons: lessons.map((lesson) => ({
-                    id: String(lesson.id),
-                    moduleId: String(mod.id),
-                    title: String(lesson.title),
-                    videoUrl: hideContent ? null : (lesson.videoUrl ? String(lesson.videoUrl) : null),
-                    type: String(lesson.type),
-                    order: String(lesson.order),
-                    content: hideContent ? null : (lesson.content ? sanitizeRichText(String(lesson.content)) : null),
-                    jp: Number(lesson.jp || 0),
-                    hasAttendance: lesson.hasAttendance !== false,
-                    attendanceQrCode: hideContent ? null : (lesson.attendanceQrCode ? String(lesson.attendanceQrCode) : null),
-                    narasumberName: lesson.narasumberName ? String(lesson.narasumberName) : null,
-                    sessionDate: lesson.sessionDate ? String(lesson.sessionDate) : null,
-                }))
+                lessons: lessons.map((lesson) => {
+                    const lessonId = String(lesson.id);
+                    const lessonQuestions = quizRows
+                        .filter((qr) => String(qr.lessonId) === lessonId)
+                        .map((qr) => {
+                            let rawOptions: unknown[] = [];
+                            if (Array.isArray(qr.options)) {
+                                rawOptions = qr.options;
+                            } else if (typeof qr.options === "string") {
+                                try {
+                                    const parsed = JSON.parse(qr.options);
+                                    if (Array.isArray(parsed)) rawOptions = parsed;
+                                } catch {
+                                    rawOptions = [];
+                                }
+                            }
+                            const correctIdx = Number(qr.correctOptionIndex ?? 0);
+                            return {
+                                id: String(qr.id),
+                                questionText: String(qr.question || ""),
+                                explanation: "",
+                                options: rawOptions.map((opt, idx) => ({
+                                    optionText: typeof opt === "string"
+                                        ? opt
+                                        : String((opt as Record<string, unknown>)?.optionText || ""),
+                                    isCorrect: idx === correctIdx,
+                                })),
+                            };
+                        });
+                    return {
+                        id: lessonId,
+                        moduleId: String(mod.id),
+                        title: String(lesson.title),
+                        videoUrl: hideContent ? null : (lesson.videoUrl ? String(lesson.videoUrl) : null),
+                        type: String(lesson.type),
+                        order: String(lesson.order),
+                        content: hideContent ? null : (lesson.content ? sanitizeRichText(String(lesson.content)) : null),
+                        jp: Number(lesson.jp || 0),
+                        hasAttendance: lesson.hasAttendance !== false,
+                        attendanceQrCode: hideContent ? null : (lesson.attendanceQrCode ? String(lesson.attendanceQrCode) : null),
+                        narasumberName: lesson.narasumberName ? String(lesson.narasumberName) : null,
+                        sessionDate: lesson.sessionDate ? String(lesson.sessionDate) : null,
+                        questions: lessonQuestions,
+                    };
+                })
             };
         }));
     } catch (err) {

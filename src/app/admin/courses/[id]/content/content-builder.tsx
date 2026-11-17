@@ -210,6 +210,9 @@ export default function ContentBuilder({ courseId, initialData, initialDocumenta
 
     const addQuestion = (modIndex: number, lessonIndex: number) => {
         const newModules = [...modules];
+        if (!Array.isArray(newModules[modIndex].lessons[lessonIndex].questions)) {
+            newModules[modIndex].lessons[lessonIndex].questions = [];
+        }
         newModules[modIndex].lessons[lessonIndex].questions.push({
             id: "",
             questionText: "Pertanyaan Baru?",
