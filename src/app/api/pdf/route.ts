@@ -9,7 +9,7 @@ import { getAuthSession } from '@/app/actions/auth';
 import { getWebinarCertificateForDownload, reserveCertificateDownload, getCertificateByVerificationToken, formatWebinarCertificateFilename } from '@/lib/webinar-certificates';
 import { getCourseCertificateForDownload, reserveCourseCertificateDownload, getCourseCertificateByVerificationToken } from '@/lib/course-certificates';
 import { uploadCertificatePdfToPassport } from '@/lib/passport-certificate-service';
-import { DEFAULT_ORGANIZER_NAME, formatActivityDateRange, formatDeliveryPhrase } from '@/lib/certificate-activity';
+import { DEFAULT_ORGANIZER_NAME, formatActivityDateRange, formatCertificateIssueDate, formatDeliveryPhrase } from '@/lib/certificate-activity';
 import {
   KALTARA_LOGO_DATA_URI,
   BSRE_FOOTER_DATA_URI,
@@ -228,6 +228,10 @@ export async function POST(req: Request) {
       courseMeta.endDate,
       certificate.activityAt
     );
+    const resolvedIssueDate = formatCertificateIssueDate(
+      courseMeta.endDate,
+      certificate.issuedAt
+    );
     const resolvedOrganizer = (courseMeta.organizerName || "").trim() || DEFAULT_ORGANIZER_NAME;
     const resolvedDelivery = formatDeliveryPhrase(courseMeta.deliveryMode, courseMeta.locationName);
 
@@ -240,9 +244,10 @@ export async function POST(req: Request) {
           String(certificate.participantName || '') +
           String(certificate.verificationToken || '') +
           resolvedActivityDate +
+          resolvedIssueDate +
           resolvedOrganizer +
           resolvedDelivery +
-          'qr-v1'
+          'qr-v2'
       )
       .digest('hex')
       .slice(0, 10);
@@ -298,7 +303,7 @@ export async function POST(req: Request) {
       '{{pangkat}}': certificate.participantRank || '',
       '{{jabatan}}': certificate.participantPosition || '',
       '{{instansi}}': certificate.participantInstitution || '',
-      '{{tanggal_terbit}}': new Date(certificate.issuedAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }),
+      '{{tanggal_terbit}}': resolvedIssueDate,
       '{{tanggal_kegiatan}}': resolvedActivityDate,
       '{{tanggal}}': resolvedActivityDate,
       '{{penyelenggara}}': resolvedOrganizer,

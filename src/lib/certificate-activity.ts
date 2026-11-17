@@ -78,6 +78,25 @@ export function formatActivityDateRange(
   return "";
 }
 
+export function formatCertificateIssueDate(
+  endDate?: string | Date | null,
+  fallbackDate?: string | Date | null
+): string {
+  const target = endDate ? parseIsoDateParts(endDate) : (fallbackDate ? parseIsoDateParts(fallbackDate) : null);
+  if (target) {
+    return target.date.toLocaleDateString("id-ID", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    });
+  }
+  return new Date().toLocaleDateString("id-ID", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+}
+
 export function formatDeliveryPhrase(
   deliveryMode?: string | null,
   locationName?: string | null

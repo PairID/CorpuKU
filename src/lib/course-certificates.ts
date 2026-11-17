@@ -83,6 +83,7 @@ export async function issueCourseCertificate(userId: string, courseId: string, o
            course.title, course.jp, course.certificate_type,
            course.training_type, course.attendance_threshold,
            course.certificate_number_prefix, course.certificate_start_number,
+           course.start_date, course.end_date,
            COALESCE(NULLIF(settings.settings -> course.certificate_type, 'null'::jsonb),
                     NULLIF(settings.settings -> 'sertifikat', 'null'::jsonb),
                     NULLIF(settings.settings, 'null'::jsonb), '{}'::jsonb) AS template_settings
@@ -121,13 +122,20 @@ export async function issueCourseCertificate(userId: string, courseId: string, o
     }
   }
 
-  // 3. Pesan nomor resmi standar BPSDM Kaltara (Master Register Passport atau Fallback Local Counter)
+  // 3. Tanggal terbit otomatis disetel ke tanggal hari terakhir kelas (end_date)
+  const effectiveIssueDate = el.end_date
+    ? new Date(String(el.end_date))
+    : el.completed_at
+    ? new Date(String(el.completed_at))
+    : new Date();
+
+  // Pesan nomor resmi standar BPSDM Kaltara (Master Register Passport atau Fallback Local Counter)
   let officialCertNumber = '';
   let reserved: { certificateNumber: string; sequenceNumber: number; registrationId?: string } | null = null;
   if (el.certificate_start_number != null) {
     const countRes = await sql`SELECT COUNT(*)::INTEGER AS cnt FROM issued_course_certificates WHERE course_id = ${courseId}`;
     const seq = Number(el.certificate_start_number) + Number(countRes[0]?.cnt || 0);
-    const yr = new Date(String(el.completed_at || Date.now())).getFullYear();
+    const yr = effectiveIssueDate.getFullYear();
     officialCertNumber = `${el.certificate_number_prefix || 'CRS'}/${yr}/${String(seq).padStart(6, '0')}`;
   } else {
     reserved = await reserveOfficialCertificateNumber({
@@ -136,7 +144,7 @@ export async function issueCourseCertificate(userId: string, courseId: string, o
       category: 'Teknis',
       trainingType: el.training_type === 'classical_facilitation' ? 'Klasikal' : 'E-Learning',
       jp: Number(el.jp || 0),
-      activityDate: el.completed_at ? new Date(String(el.completed_at)) : new Date(),
+      activityDate: effectiveIssueDate,
       participant: {
         name: String(el.name),
         nip: el.nip ? String(el.nip) : null,
@@ -157,23 +165,25 @@ export async function issueCourseCertificate(userId: string, courseId: string, o
     ...(reserved?.registrationId ? { passportRegistrationId: reserved.registrationId } : {}),
   };
 
-  // 4. Simpan ke issued_course_certificates
+  // 4. Simpan ke issued_course_certificates dengan tanggal terbit hari terakhir kelas
   const rows = await sql`
     INSERT INTO issued_course_certificates (
       id, enrollment_id, user_id, course_id, certificate_number, verification_token,
       participant_name, participant_nip, participant_rank, participant_position,
-      participant_institution, course_title, completed_at, certificate_jp,
+      participant_institution, course_title, completed_at, issued_at, certificate_jp,
       template_version, template_settings
     )
     VALUES (
       ${certificateId}, ${el.enrollment_id}, ${userId}, ${courseId}, ${officialCertNumber},
       ${verificationToken}, ${el.name}, ${el.nip},
       ${el.pangkat}, ${el.jabatan}, ${el.instansi_asal},
-      ${el.title}, ${el.completed_at || new Date()}, ${COALESCE_JP(el.jp)},
+      ${el.title}, ${effectiveIssueDate}, ${effectiveIssueDate}, ${COALESCE_JP(el.jp)},
       ${el.certificate_type || 'sertifikat'}, ${JSON.stringify(mergedTemplateSettings)}
     )
     ON CONFLICT (enrollment_id) DO UPDATE
       SET certificate_number = EXCLUDED.certificate_number,
+          completed_at = EXCLUDED.completed_at,
+          issued_at = EXCLUDED.issued_at,
           template_settings = EXCLUDED.template_settings
     RETURNING *, TRUE AS _newly_issued
   `;
@@ -182,7 +192,7 @@ export async function issueCourseCertificate(userId: string, courseId: string, o
   await sql`
     UPDATE enrollments
     SET status = 'completed',
-        completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP)
+        completed_at = COALESCE(completed_at, ${effectiveIssueDate}, CURRENT_TIMESTAMP)
     WHERE user_id = ${userId} AND course_id = ${courseId}
   `;
 
