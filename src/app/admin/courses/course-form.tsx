@@ -7,6 +7,7 @@ import { createCourse, updateCourseDetails } from "@/app/actions/courses";
 import { COURSE_CATEGORIES } from "@/lib/constants";
 import { showToast } from "@/lib/toast";
 import { CourseEvaluationConfig, getDefaultCourseEvaluationConfig } from "@/lib/skm-constants";
+import { DEFAULT_ORGANIZER_NAME, type DeliveryMode } from "@/lib/certificate-activity";
 import CourseEvaluationConfigEditor from "@/components/evaluations/CourseEvaluationConfigEditor";
 
 
@@ -38,6 +39,9 @@ export interface CourseFormData {
         targetOpd?: string | null;
         attendanceThreshold?: number;
         documentationUrl?: string | null;
+        organizerName?: string | null;
+        deliveryMode?: DeliveryMode;
+        locationName?: string | null;
         evaluationConfig?: CourseEvaluationConfig | null;
 }
 
@@ -80,6 +84,9 @@ export default function CourseForm({ initialData, instructors, mode, basePath = 
     const [targetOpd, setTargetOpd] = useState(initialData?.targetOpd || "");
     const [attendanceThreshold, setAttendanceThreshold] = useState<number>(initialData?.attendanceThreshold ?? 80);
     const [documentationUrl, setDocumentationUrl] = useState(initialData?.documentationUrl || "");
+    const [organizerName, setOrganizerName] = useState(initialData?.organizerName || DEFAULT_ORGANIZER_NAME);
+    const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>(initialData?.deliveryMode || "daring");
+    const [locationName, setLocationName] = useState(initialData?.locationName || "");
     const [evaluationConfig, setEvaluationConfig] = useState<Required<CourseEvaluationConfig>>(() => {
         const defaults = getDefaultCourseEvaluationConfig();
         return {
@@ -157,6 +164,9 @@ export default function CourseForm({ initialData, instructors, mode, basePath = 
             targetOpd: trainingType === "classical_facilitation" ? targetOpd : null,
             attendanceThreshold: Number(attendanceThreshold || 80),
             documentationUrl: documentationUrl.trim() || "",
+            organizerName: organizerName.trim() || DEFAULT_ORGANIZER_NAME,
+            deliveryMode,
+            locationName: deliveryMode === "daring" ? null : locationName.trim(),
             evaluationConfig: trainingType === "classical_facilitation" ? evaluationConfig : undefined,
         };
 
@@ -381,6 +391,73 @@ export default function CourseForm({ initialData, instructors, mode, basePath = 
                                     </div>
                                     <p className="text-[11px] text-oxford-500 mt-1">Standar minimal kelulusan sertifikat adalah 80% JP kehadiran.</p>
                                 </div>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="bg-oxford-50 dark:bg-oxford-950 p-5 rounded-xl border border-oxford-100 dark:border-oxford-800 space-y-4">
+                        <h4 className="text-sm font-bold text-oxford-900 dark:text-white">Penyelenggara &amp; Pola Kegiatan</h4>
+
+                        <div>
+                            <div className="flex items-center justify-between gap-2 mb-1">
+                                <label className="block text-xs font-bold text-oxford-700 dark:text-oxford-200">
+                                    Penyelenggara (Tercetak di Sertifikat) <span className="text-crimson-500">*</span>
+                                </label>
+                                {targetOpd.trim() && (
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            setOrganizerName(
+                                                `${targetOpd.trim()} bekerjasama dengan ${DEFAULT_ORGANIZER_NAME}`
+                                            )
+                                        }
+                                        className="text-[11px] font-bold text-gold-600 hover:underline"
+                                    >
+                                        + Pola Kerjasama OPD
+                                    </button>
+                                )}
+                            </div>
+                            <textarea
+                                rows={2}
+                                required
+                                value={organizerName}
+                                onChange={(e) => setOrganizerName(e.target.value)}
+                                placeholder={`Contoh: ${DEFAULT_ORGANIZER_NAME}`}
+                                className="w-full px-3.5 py-2 bg-white dark:bg-[#161B2A] border border-oxford-200 dark:border-oxford-700 rounded-lg text-xs focus:outline-none focus:border-gold-500 text-oxford-900 dark:text-white"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-bold text-oxford-700 dark:text-oxford-200 mb-1">
+                                Pola Kegiatan
+                            </label>
+                            <select
+                                value={deliveryMode}
+                                onChange={(e) => setDeliveryMode(e.target.value as DeliveryMode)}
+                                className="w-full px-4 py-2.5 bg-white dark:bg-[#161B2A] border border-oxford-200 dark:border-oxford-700 rounded-lg text-sm focus:outline-none focus:border-gold-500 text-oxford-900 dark:text-white font-medium"
+                            >
+                                <option value="daring">Daring (Online)</option>
+                                <option value="luring">Luring / Klasikal (Tatap Muka)</option>
+                                <option value="blended">Blended Learning</option>
+                            </select>
+                        </div>
+
+                        {(deliveryMode === "luring" || deliveryMode === "blended") && (
+                            <div>
+                                <label className="block text-xs font-bold text-oxford-700 dark:text-oxford-200 mb-1">
+                                    Nama Tempat / Lokasi Pelaksanaan <span className="text-crimson-500">*</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    required
+                                    value={locationName}
+                                    onChange={(e) => setLocationName(e.target.value)}
+                                    placeholder="Contoh: Kota Tarakan"
+                                    className="w-full px-4 py-2 bg-white dark:bg-[#161B2A] border border-oxford-200 dark:border-oxford-700 rounded-lg text-sm focus:outline-none focus:border-gold-500 text-oxford-900 dark:text-white"
+                                />
+                                <p className="text-[11px] text-oxford-500 mt-1">
+                                    Akan tercetak di sertifikat: &ldquo;{deliveryMode === "luring" ? "secara klasikal" : "secara blended learning"} di {locationName.trim() || "..."}&rdquo;.
+                                </p>
                             </div>
                         )}
                     </div>

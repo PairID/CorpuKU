@@ -7,12 +7,15 @@ import {
     BOOKMAN_REGULAR_BASE64,
     BOOKMAN_BOLD_BASE64,
 } from '@/lib/certificate-assets';
+import { DEFAULT_ORGANIZER_NAME } from '@/lib/certificate-activity';
 
 export interface CertificateData {
     certificateNumber: string;
     date: string; // kept for backward compat (same as issueDate)
     issueDate?: string; // tanggal terbit sertifikat
     activityDate?: string; // tanggal pelaksanaan kegiatan
+    organizerName?: string; // penyelenggara kegiatan
+    deliveryText?: string; // pola & tempat kegiatan (misal: secara klasikal di Kota Tarakan)
     studentName: string;
     nip?: string;
     grade?: string; // Pangkat/Golongan
@@ -93,10 +96,26 @@ export const CertificateView: React.FC<Props> = ({ data, config = DEFAULT_CONFIG
     const parseText = (rawText: string | undefined | null) => {
         if (!rawText || typeof rawText !== "string") return "";
         let txt = rawText;
+        const resolvedOrganizer = data.organizerName || DEFAULT_ORGANIZER_NAME;
+        const resolvedDelivery = data.deliveryText || "secara daring";
+        const resolvedActivityDate = data.activityDate || data.issueDate || data.date || "";
+
+        if (!txt.includes("KEPALA BADAN PENGEMBANGAN SUMBER DAYA MANUSIA") && data.organizerName) {
+            txt = txt.replace(
+                /Badan Pengembangan Sumber Daya Manusia Provinsi Kalimantan Utara/g,
+                resolvedOrganizer
+            );
+        }
+        if (data.deliveryText) {
+            txt = txt.replace(/\bsecara daring\b/g, resolvedDelivery);
+        }
+
         txt = txt.replace(/\{\{nomor\}\}/g, data.certificateNumber || "");
         txt = txt.replace(/\{\{tanggal_terbit\}\}/g, data.issueDate || data.date || "");
-        txt = txt.replace(/\{\{tanggal_kegiatan\}\}/g, data.activityDate || "");
-        txt = txt.replace(/\{\{tanggal\}\}/g, data.issueDate || data.date || ""); // backward compat
+        txt = txt.replace(/\{\{tanggal_kegiatan\}\}/g, resolvedActivityDate);
+        txt = txt.replace(/\{\{tanggal\}\}/g, resolvedActivityDate);
+        txt = txt.replace(/\{\{penyelenggara\}\}/g, resolvedOrganizer);
+        txt = txt.replace(/\{\{pola_kegiatan\}\}/g, resolvedDelivery);
         txt = txt.replace(/\{\{nama\}\}/g, data.studentName || "");
         txt = txt.replace(/\{\{nip\}\}/g, data.nip || "-");
         txt = txt.replace(/\{\{pangkat\}\}/g, data.grade || "-");

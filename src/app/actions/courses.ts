@@ -35,6 +35,9 @@ let ensuredEvaluationConfigCol = false;
 async function ensureEvaluationConfigColumn() {
     if (ensuredEvaluationConfigCol) return;
     await sql`ALTER TABLE courses ADD COLUMN IF NOT EXISTS evaluation_config JSONB`;
+    await sql`ALTER TABLE courses ADD COLUMN IF NOT EXISTS organizer_name TEXT`;
+    await sql`ALTER TABLE courses ADD COLUMN IF NOT EXISTS delivery_mode TEXT NOT NULL DEFAULT 'daring'`;
+    await sql`ALTER TABLE courses ADD COLUMN IF NOT EXISTS location_name TEXT`;
     ensuredEvaluationConfigCol = true;
 }
 
@@ -74,6 +77,9 @@ const courseMutationSchema = z.object({
         z.literal(""),
         z.null(),
     ]).optional(),
+    organizerName: z.string().trim().max(500).nullable().optional(),
+    deliveryMode: z.enum(["daring", "luring", "blended"]).default("daring"),
+    locationName: z.string().trim().max(255).nullable().optional(),
     evaluationConfig: evaluationConfigSchema,
 }).superRefine((course, context) => {
     if (course.pacingType === "instructor_paced" && !course.startDate) {
@@ -81,6 +87,9 @@ const courseMutationSchema = z.object({
     }
     if (course.startDate && course.endDate && course.endDate < course.startDate) {
         context.addIssue({ code: "custom", path: ["endDate"], message: "Tanggal selesai harus setelah tanggal mulai." });
+    }
+    if ((course.deliveryMode === "luring" || course.deliveryMode === "blended") && !course.locationName?.trim()) {
+        context.addIssue({ code: "custom", path: ["locationName"], message: "Nama tempat wajib diisi untuk pola klasikal/luring atau blended learning." });
     }
 });
 
@@ -145,6 +154,9 @@ interface CourseRecord {
     targetOpd?: string | null;
     attendanceThreshold?: number;
     documentationUrl?: string | null;
+    organizerName?: string | null;
+    deliveryMode?: "daring" | "luring" | "blended";
+    locationName?: string | null;
     evaluationConfig?: z.infer<typeof evaluationConfigSchema>;
     createdAt: string;
     updatedAt: string;
@@ -308,6 +320,9 @@ export async function getAllCourses() {
                    passing_score as "passingScore", pacing_type as "pacingType", TO_CHAR(start_date::date, 'YYYY-MM-DD') as "startDate", TO_CHAR(end_date::date, 'YYYY-MM-DD') as "endDate",
                    training_type as "trainingType", target_opd as "targetOpd", attendance_threshold as "attendanceThreshold",
                    documentation_url as "documentationUrl",
+                   organizer_name as "organizerName",
+                   COALESCE(delivery_mode, 'daring') as "deliveryMode",
+                   location_name as "locationName",
                    evaluation_config as "evaluationConfig",
                    created_at as "createdAt", 
                    updated_at as "updatedAt"
@@ -335,6 +350,9 @@ export async function getCourseById(id: string): Promise<CourseRecord | null> {
                    passing_score as "passingScore", pacing_type as "pacingType", TO_CHAR(start_date::date, 'YYYY-MM-DD') as "startDate", TO_CHAR(end_date::date, 'YYYY-MM-DD') as "endDate",
                    training_type as "trainingType", target_opd as "targetOpd", attendance_threshold as "attendanceThreshold",
                    documentation_url as "documentationUrl",
+                   organizer_name as "organizerName",
+                   COALESCE(delivery_mode, 'daring') as "deliveryMode",
+                   location_name as "locationName",
                    evaluation_config as "evaluationConfig",
                    created_at as "createdAt", 
                    updated_at as "updatedAt"
@@ -977,14 +995,18 @@ export async function createCourse(input: unknown) {
                 id, title, description, category, level, thumbnail_url, status, instructor_id, pacing_type,
                 start_date, end_date, jp, certificate_type, certificate_enabled, certificate_auto_issue,
                 certificate_number_prefix, certificate_start_number, passing_score, training_type, target_opd,
-                attendance_threshold, documentation_url, evaluation_config, created_at, updated_at
+                attendance_threshold, documentation_url, organizer_name, delivery_mode, location_name, evaluation_config, created_at, updated_at
             ) VALUES (
                 ${id}, ${sanitizePlainText(data.title)}, ${sanitizePlainText(data.description)}, ${sanitizePlainText(data.category)},
                 ${data.level}, ${data.thumbnailUrl || null}, 'draft', ${instructorId}, ${data.pacingType}, ${data.startDate || null},
                 ${data.endDate || null}, ${data.jp}, ${data.certificateType}, ${data.certificateEnabled},
                 ${data.certificateEnabled && data.certificateAutoIssue}, ${data.certificateNumberPrefix},
                 ${data.certificateStartNumber || null}, ${data.passingScore}, ${data.trainingType}, ${data.targetOpd || null},
-                ${data.attendanceThreshold}, ${data.documentationUrl || null}, ${evalConfigJson}::jsonb, ${now}, ${now}
+                ${data.attendanceThreshold}, ${data.documentationUrl || null},
+                ${data.organizerName ? sanitizePlainText(data.organizerName) : null},
+                ${data.deliveryMode},
+                ${data.deliveryMode === "daring" ? null : (data.locationName ? sanitizePlainText(data.locationName) : null)},
+                ${evalConfigJson}::jsonb, ${now}, ${now}
             )
         `;
         
@@ -1026,6 +1048,9 @@ export async function updateCourseDetails(id: string, input: unknown) {
                 target_opd = ${data.targetOpd || null},
                 attendance_threshold = ${data.attendanceThreshold},
                 documentation_url = CASE WHEN ${data.documentationUrl !== undefined} THEN ${data.documentationUrl || null} ELSE documentation_url END,
+                organizer_name = ${data.organizerName ? sanitizePlainText(data.organizerName) : null},
+                delivery_mode = ${data.deliveryMode},
+                location_name = ${data.deliveryMode === "daring" ? null : (data.locationName ? sanitizePlainText(data.locationName) : null)},
                 evaluation_config = CASE WHEN ${hasEvalConfig} THEN ${evalConfigJson}::jsonb ELSE evaluation_config END,
                 status = ${data.status},
                 updated_at = ${now}

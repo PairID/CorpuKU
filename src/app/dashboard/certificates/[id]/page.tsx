@@ -5,6 +5,7 @@ import { CertificateData } from "@/components/CertificateView";
 import { getAuthSession } from "@/app/actions/auth";
 import { issueCourseCertificate } from "@/lib/course-certificates";
 import type { CertificateTypeConfig } from "@/components/CertificateView";
+import { DEFAULT_ORGANIZER_NAME, formatActivityDateRange, formatDeliveryPhrase } from "@/lib/certificate-activity";
 
 export const dynamic = "force-dynamic";
 
@@ -102,16 +103,11 @@ export default async function CertificatePage({ params }: { params: Promise<{ id
     });
 
     // Format activity date (tanggal pelaksanaan kegiatan)
-    let activityDate = "";
-    if (course.startDate && course.endDate) {
-        const start = new Date(course.startDate);
-        const end = new Date(course.endDate);
-        const startStr = start.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
-        const endStr = end.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
-        activityDate = start.getMonth() === end.getMonth() 
-            ? `${start.getDate()} - ${endStr}`
-            : `${startStr} s.d. ${endStr}`;
-    }
+    const activityDate = formatActivityDateRange(
+        course.startDate,
+        course.endDate,
+        issuedCertificate.completedAt
+    );
 
     const certType = (["sertifikat", "surat_keterangan", "sttp"] as const).includes(issuedCertificate.templateType as "sertifikat" | "surat_keterangan" | "sttp")
         ? issuedCertificate.templateType as "sertifikat" | "surat_keterangan" | "sttp"
@@ -123,6 +119,8 @@ export default async function CertificatePage({ params }: { params: Promise<{ id
         date: issueDate,
         issueDate: issueDate,
         activityDate: activityDate,
+        organizerName: course.organizerName || DEFAULT_ORGANIZER_NAME,
+        deliveryText: formatDeliveryPhrase(course.deliveryMode, course.locationName),
         studentName: issuedCertificate.participantName,
         nip: issuedCertificate.participantNip || undefined,
         grade: issuedCertificate.participantRank || "-",

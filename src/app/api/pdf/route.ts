@@ -8,6 +8,7 @@ import { getAuthSession } from '@/app/actions/auth';
 import { getWebinarCertificateForDownload, reserveCertificateDownload, getCertificateByVerificationToken, formatWebinarCertificateFilename } from '@/lib/webinar-certificates';
 import { getCourseCertificateForDownload, reserveCourseCertificateDownload, getCourseCertificateByVerificationToken } from '@/lib/course-certificates';
 import { uploadCertificatePdfToPassport } from '@/lib/passport-certificate-service';
+import { DEFAULT_ORGANIZER_NAME, formatActivityDateRange, formatDeliveryPhrase } from '@/lib/certificate-activity';
 import {
   KALTARA_LOGO_DATA_URI,
   BSRE_FOOTER_DATA_URI,
@@ -200,10 +201,45 @@ export async function POST(req: Request) {
         : `Sertifikat-${certificate.activityTitle}.pdf`.replace(/[/\\?%*:|"<>]/g, '_');
     const encodedTitle = encodeURIComponent(safeCertFilename);
 
+    let courseMeta: {
+      startDate?: string | null;
+      endDate?: string | null;
+      organizerName?: string | null;
+      deliveryMode?: string | null;
+      locationName?: string | null;
+    } = {};
+    if (courseCertificate?.courseId) {
+      const courseMetaRows = await sql`
+        SELECT TO_CHAR(start_date::date, 'YYYY-MM-DD') AS "startDate",
+               TO_CHAR(end_date::date, 'YYYY-MM-DD') AS "endDate",
+               organizer_name AS "organizerName",
+               COALESCE(delivery_mode, 'daring') AS "deliveryMode",
+               location_name AS "locationName"
+        FROM courses WHERE id = ${courseCertificate.courseId} LIMIT 1
+      `.catch(() => []);
+      if (courseMetaRows[0]) {
+        courseMeta = courseMetaRows[0] as typeof courseMeta;
+      }
+    }
+
+    const resolvedActivityDate = formatActivityDateRange(
+      courseMeta.startDate,
+      courseMeta.endDate,
+      certificate.activityAt
+    );
+    const resolvedOrganizer = (courseMeta.organizerName || "").trim() || DEFAULT_ORGANIZER_NAME;
+    const resolvedDelivery = formatDeliveryPhrase(courseMeta.deliveryMode, courseMeta.locationName);
+
     // Disk Cache check: jika PDF sudah pernah dicetak dan template/data nomor belum berubah, kirim langsung dari disk
     const templateHash = crypto
       .createHash('md5')
-      .update(JSON.stringify(config) + String(certificate.certificateNumber))
+      .update(
+        JSON.stringify(config) +
+          String(certificate.certificateNumber) +
+          resolvedActivityDate +
+          resolvedOrganizer +
+          resolvedDelivery
+      )
       .digest('hex')
       .slice(0, 10);
     const cacheDir = path.join(process.cwd(), '.cache', 'certificates');
@@ -259,7 +295,10 @@ export async function POST(req: Request) {
       '{{jabatan}}': certificate.participantPosition || '',
       '{{instansi}}': certificate.participantInstitution || '',
       '{{tanggal_terbit}}': new Date(certificate.issuedAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }),
-      '{{tanggal}}': new Date(certificate.activityAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }),
+      '{{tanggal_kegiatan}}': resolvedActivityDate,
+      '{{tanggal}}': resolvedActivityDate,
+      '{{penyelenggara}}': resolvedOrganizer,
+      '{{pola_kegiatan}}': resolvedDelivery,
       '{{jp}}': String(certificate.certificateJp),
       '{{nomor}}': certificate.certificateNumber,
       '{{verifikasi}}': verificationUrl,
@@ -267,6 +306,15 @@ export async function POST(req: Request) {
 
     const parseText = (raw: unknown) => {
       let text = String(raw ?? '');
+      if (!text.includes('KEPALA BADAN PENGEMBANGAN SUMBER DAYA MANUSIA') && courseMeta.organizerName) {
+        text = text.replace(
+          /Badan Pengembangan Sumber Daya Manusia Provinsi Kalimantan Utara/g,
+          resolvedOrganizer
+        );
+      }
+      if (courseMeta.deliveryMode && courseMeta.deliveryMode !== 'daring') {
+        text = text.replace(/\bsecara daring\b/g, resolvedDelivery);
+      }
       for (const [placeholder, replacement] of Object.entries(replacements)) {
         text = text.split(placeholder).join(replacement);
       }
