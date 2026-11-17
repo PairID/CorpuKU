@@ -81,6 +81,7 @@ export default function FourStageEvaluationWizard({
   const [selectedSessionId, setSelectedSessionId] = useState<string>(
     narasumberSessions[0]?.id || sessions[0]?.id || "sess_default"
   );
+  const [evaluatedSessionIds, setEvaluatedSessionIds] = useState<string[]>([]);
   const [narasumberRatings, setNarasumberRatings] = useState<Record<number, { key: string; score: number }>>({});
   const [narasumberNotes, setNarasumberNotes] = useState("");
 
@@ -108,6 +109,14 @@ export default function FourStageEvaluationWizard({
           skm: Boolean(res.stages.skm.completed),
         };
         setStagesStatus(nextStatus);
+        const doneIds = (res.stages.narasumber.sessions || [])
+          .filter((s: { evaluated?: boolean }) => Boolean(s.evaluated))
+          .map((s: { lessonId: string }) => String(s.lessonId));
+        setEvaluatedSessionIds(doneIds);
+        const firstPending = narasumberSessions.find((s) => !doneIds.includes(s.id));
+        if (firstPending) {
+          setSelectedSessionId(firstPending.id);
+        }
         const canJump =
           requestedStage &&
           (requestedStage === "narasumber" ||
@@ -158,7 +167,9 @@ export default function FourStageEvaluationWizard({
 
       if (res.success) {
         if (res.nextStage === "narasumber") {
-          const nextSess = narasumberSessions.find((s) => s.id !== selectedSessionId);
+          const nextEvaluated = Array.from(new Set([...evaluatedSessionIds, selectedSessionId]));
+          setEvaluatedSessionIds(nextEvaluated);
+          const nextSess = narasumberSessions.find((s) => !nextEvaluated.includes(s.id));
           if (nextSess) setSelectedSessionId(nextSess.id);
           setNarasumberRatings({});
           setNarasumberNotes("");
@@ -501,6 +512,7 @@ export default function FourStageEvaluationWizard({
                 >
                   {narasumberSessions.map((s) => (
                     <option key={s.id} value={s.id}>
+                      {evaluatedSessionIds.includes(s.id) ? "✓ " : ""}
                       {s.narasumberName} &mdash; {s.title}
                     </option>
                   ))}
