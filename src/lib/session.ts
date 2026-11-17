@@ -2,8 +2,8 @@ import crypto from "crypto";
 import { sql } from "@/lib/db";
 
 export const SESSION_COOKIE_NAME = "corpuku_session";
-export const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7; // 7 hari untuk student biasa
-export const ADMIN_SESSION_MAX_AGE_SECONDS = 60 * 60 * 2; // Tepat 2 jam untuk Admin / Instruktur
+export const SESSION_MAX_AGE_SECONDS = 60 * 60 * 8; // 8 jam setelah aktivitas terakhir
+export const ADMIN_SESSION_MAX_AGE_SECONDS = 60 * 60 * 8; // 8 jam setelah aktivitas terakhir
 
 export interface AuthUser {
   id: string;
@@ -99,9 +99,22 @@ export async function getServerSession(token: string): Promise<AuthSession | nul
   const row = rows[0];
   if (!row || !["student", "instructor", "admin"].includes(String(row.role))) return null;
 
+  // Sliding expiration: perpanjang 8 jam dari penggunaan terakhir (throttle per 5 menit)
+  const currentExpiresMs = new Date(row.expiresAt).getTime();
+  const maxAgeMs = SESSION_MAX_AGE_SECONDS * 1000;
+  let effectiveExpiresAt = new Date(currentExpiresMs);
+  if (Number.isFinite(currentExpiresMs) && currentExpiresMs - Date.now() < maxAgeMs - 5 * 60 * 1000) {
+    effectiveExpiresAt = new Date(Date.now() + maxAgeMs);
+    await sql`
+      UPDATE auth_sessions
+      SET expires_at = ${effectiveExpiresAt.toISOString()}
+      WHERE id = ${String(row.sessionId)}
+    `.catch(() => {});
+  }
+
   return {
     id: String(row.sessionId),
-    expiresAt: new Date(row.expiresAt).toISOString(),
+    expiresAt: effectiveExpiresAt.toISOString(),
     user: {
       id: String(row.id),
       name: String(row.name),

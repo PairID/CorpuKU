@@ -881,10 +881,10 @@ export default function LearnClient({ course, courseContent, session, enrollment
                                     <button
                                         onClick={() => toggleModule(module.id)}
                                         className={`w-full text-left px-5 py-4 flex items-center justify-between transition-all group
-                                            ${hasActiveLesson ? 'bg-gold-50/30' : 'hover:bg-oxford-50 dark:hover:bg-oxford-950'}`}
+                                            ${hasActiveLesson ? 'bg-gold-500/10 dark:bg-gold-500/15' : 'hover:bg-oxford-50 dark:hover:bg-oxford-900'}`}
                                     >
                                         <div className="flex-1 min-w-0 pr-2">
-                                            <h3 className={`font-sans font-bold text-sm truncate ${hasActiveLesson ? 'text-gold-700' : 'text-oxford-900 dark:text-white'}`}>
+                                            <h3 className={`font-sans font-bold text-sm truncate ${hasActiveLesson ? 'text-gold-700 dark:text-gold-400' : 'text-oxford-900 dark:text-white'}`}>
                                                 {module.title}
                                             </h3>
                                             <div className="flex items-center gap-2 mt-0.5 flex-wrap">
@@ -935,8 +935,8 @@ export default function LearnClient({ course, courseContent, session, enrollment
                                                                     ${module.isLocked
                                                                         ? 'opacity-60 cursor-not-allowed bg-oxford-50/40 dark:bg-oxford-950/40'
                                                                         : isActive 
-                                                                            ? 'bg-gold-100/50' 
-                                                                            : 'hover:bg-oxford-50 dark:hover:bg-oxford-950'
+                                                                            ? 'bg-gold-500/15 dark:bg-gold-500/20' 
+                                                                            : 'hover:bg-oxford-50 dark:hover:bg-oxford-900'
                                                                     }`}
                                                             >
                                                                 {isActive && !module.isLocked && (
@@ -958,10 +958,10 @@ export default function LearnClient({ course, courseContent, session, enrollment
                                                                     )}
                                                                 </div>
                                                                 <div className="flex-1 min-w-0">
-                                                                    <div className={`text-sm font-sans truncate ${isActive ? 'font-bold text-oxford-950' : 'text-oxford-700 dark:text-oxford-200'}`}>
+                                                                    <div className={`text-sm font-sans truncate ${isActive ? 'font-bold text-oxford-950 dark:text-white' : 'text-oxford-800 dark:text-oxford-200'}`}>
                                                                         {cleanLessonTitle(lesson.title, lesson.type)}
                                                                     </div>
-                                                                    <div className={`text-[11px] mt-0.5 flex flex-wrap items-center gap-1.5 ${isActive ? 'text-gold-700 font-medium' : 'text-oxford-400'}`}>
+                                                                    <div className={`text-[11px] mt-0.5 flex flex-wrap items-center gap-1.5 ${isActive ? 'text-gold-700 dark:text-gold-300 font-medium' : 'text-oxford-500 dark:text-oxford-400'}`}>
                                                                         <span>{getLessonTypeLabel(lesson.type)}</span>
                                                                         {isCompleted && <CheckCircle size={10} className="text-green-500" />}
                                                                         {isClassical && lesson.hasAttendance !== false && (
@@ -1008,8 +1008,8 @@ export default function LearnClient({ course, courseContent, session, enrollment
                                                 className="w-full text-left px-5 py-3 flex items-center justify-between gap-2 hover:bg-white dark:hover:bg-[#161B2A] transition-colors"
                                             >
                                                 <div className="flex items-center gap-2.5 min-w-0">
-                                                    <ClipboardCheck size={15} className={item.done ? "text-emerald-600 shrink-0" : "text-gold-600 shrink-0"} />
-                                                    <span className="text-xs font-bold text-oxford-800 dark:text-oxford-100 truncate">
+                                                    <ClipboardCheck size={15} className={item.done ? "text-emerald-500 shrink-0" : "text-gold-500 shrink-0"} />
+                                                    <span className="text-xs font-bold text-oxford-900 dark:text-white truncate">
                                                         {item.label}
                                                     </span>
                                                 </div>
@@ -1031,8 +1031,8 @@ export default function LearnClient({ course, courseContent, session, enrollment
                                         className="w-full px-5 py-3 border-t border-oxford-100 dark:border-oxford-800/80 flex items-center justify-between gap-2 hover:bg-white dark:hover:bg-[#161B2A] transition-colors"
                                     >
                                         <div className="flex items-center gap-2.5 min-w-0">
-                                            <Camera size={15} className="text-gold-600 shrink-0" />
-                                            <span className="text-xs font-bold text-oxford-800 dark:text-oxford-100 truncate">
+                                            <Camera size={15} className="text-gold-500 shrink-0" />
+                                            <span className="text-xs font-bold text-oxford-900 dark:text-white truncate">
                                                 Dokumentasi
                                             </span>
                                         </div>
@@ -1046,8 +1046,8 @@ export default function LearnClient({ course, courseContent, session, enrollment
                                         className="w-full px-5 py-3 border-t border-oxford-100 dark:border-oxford-800/80 flex items-center justify-between gap-2 hover:bg-white dark:hover:bg-[#161B2A] transition-colors"
                                     >
                                         <div className="flex items-center gap-2.5 min-w-0">
-                                            <Award size={15} className="text-gold-600 shrink-0" />
-                                            <span className="text-xs font-bold text-oxford-800 dark:text-oxford-100 truncate">
+                                            <Award size={15} className="text-gold-500 shrink-0" />
+                                            <span className="text-xs font-bold text-oxford-900 dark:text-white truncate">
                                                 Sertifikat
                                             </span>
                                         </div>

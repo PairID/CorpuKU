@@ -6,9 +6,8 @@ import { authClient } from "@/lib/auth-client";
 import { toast } from "sonner";
 import { Clock, ShieldAlert } from "lucide-react";
 
-// Waktu tidak aktif maksimal sebelum auto-logout (detik)
-// Admin / Instruktur: 2 Jam (7200 detik)
-const ADMIN_IDLE_TIMEOUT_MS = 2 * 60 * 60 * 1000;
+// Waktu tidak aktif maksimal sebelum auto-logout (8 jam)
+const IDLE_TIMEOUT_MS = 8 * 60 * 60 * 1000;
 // Peringatan sebelum logout: 3 menit sebelum timeout
 const WARNING_BEFORE_TIMEOUT_MS = 3 * 60 * 1000;
 
@@ -16,7 +15,7 @@ export function SessionIdleTracker() {
   const { data: sessionData } = authClient.useSession();
   const router = useRouter();
   const user = sessionData?.user;
-  const isAdminOrInstructor = user && (user.role === "admin" || user.role === "instructor");
+  const isLoggedIn = Boolean(user);
 
   const lastActivityRef = useRef<number>(0);
   const [showWarningModal, setShowWarningModal] = useState(false);
@@ -46,7 +45,7 @@ export function SessionIdleTracker() {
     }
 
     if (reason === "idle") {
-      toast.warning("Sesi Anda telah berakhir demi keamanan karena tidak ada aktivitas selama 2 jam.", {
+      toast.warning("Sesi Anda telah berakhir demi keamanan karena tidak ada aktivitas selama 8 jam.", {
         duration: 8000,
       });
       router.push("/login?reason=timeout");
@@ -56,8 +55,7 @@ export function SessionIdleTracker() {
   }, [router]);
 
   useEffect(() => {
-    // Hanya aktif jika pengguna adalah Admin atau Instruktur
-    if (!isAdminOrInstructor) return;
+    if (!isLoggedIn) return;
 
     lastActivityRef.current = Date.now();
 
@@ -90,15 +88,15 @@ export function SessionIdleTracker() {
       const now = Date.now();
       const elapsed = now - lastActivityRef.current;
 
-      // Cek apakah sudah melebihi 2 jam
-      if (elapsed >= ADMIN_IDLE_TIMEOUT_MS) {
+      // Cek apakah sudah melebihi 8 jam
+      if (elapsed >= IDLE_TIMEOUT_MS) {
         clearInterval(timerInterval);
         handleLogout("idle");
         return;
       }
 
       // Cek apakah masuk fase peringatan (3 menit terakhir)
-      const timeRemaining = ADMIN_IDLE_TIMEOUT_MS - elapsed;
+      const timeRemaining = IDLE_TIMEOUT_MS - elapsed;
       if (timeRemaining <= WARNING_BEFORE_TIMEOUT_MS) {
         setShowWarningModal(true);
         setCountdownSeconds(Math.max(1, Math.floor(timeRemaining / 1000)));
@@ -113,9 +111,9 @@ export function SessionIdleTracker() {
       });
       clearInterval(timerInterval);
     };
-  }, [isAdminOrInstructor, recordActivity, handleLogout]);
+  }, [isLoggedIn, recordActivity, handleLogout]);
 
-  if (!showWarningModal || !isAdminOrInstructor) {
+  if (!showWarningModal || !isLoggedIn) {
     return null;
   }
 
