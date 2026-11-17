@@ -94,7 +94,13 @@ export default function DataVerificationModal({
       }
     } catch (err: unknown) {
       console.error("Data verification error:", err);
-      showToast.error("Kesalahan Sistem", "Terjadi kesalahan saat memproses data.");
+      const msg = err instanceof Error ? err.message : "Terjadi kesalahan saat memproses data.";
+      if (msg.includes("Server Action") || msg.includes("Failed to fetch") || msg.includes("NetworkError")) {
+        showToast.error("Sesi / Build Diperbarui", "Sistem baru saja diperbarui di server. Memuat ulang halaman...");
+        setTimeout(() => window.location.reload(), 1500);
+      } else {
+        showToast.error("Kesalahan Sistem", msg);
+      }
     } finally {
       setIsSubmitting(false);
     }

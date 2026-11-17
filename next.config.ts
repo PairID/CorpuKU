@@ -5,6 +5,12 @@ const nextConfig: NextConfig = {
   experimental: {
     serverActions: {
       bodySizeLimit: "4mb",
+      allowedOrigins: [
+        "corpuku.learningpassport.space",
+        "*.learningpassport.space",
+        "localhost:3000",
+        "localhost:3001",
+      ],
     },
   },
   async headers() {
