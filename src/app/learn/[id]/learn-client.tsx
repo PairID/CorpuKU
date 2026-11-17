@@ -1332,15 +1332,24 @@ export default function LearnClient({ course, courseContent, session, enrollment
 
             {/* Modal Rangkaian 4 Tahap Evaluasi Pelatihan */}
             {showEvaluationWizard && (
-                <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-                    <div className="max-w-3xl w-full my-8 relative animate-in fade-in zoom-in-95 duration-200">
-                        <button
-                            type="button"
-                            onClick={() => setShowEvaluationWizard(false)}
-                            className="absolute -top-3 -right-3 z-10 w-9 h-9 bg-white dark:bg-oxford-800 text-oxford-700 dark:text-white rounded-full shadow-lg flex items-center justify-center font-bold hover:scale-105 transition-transform"
-                        >
-                            ✕
-                        </button>
+                <div
+                    onClick={(e) => {
+                        if (e.target === e.currentTarget) setShowEvaluationWizard(false);
+                    }}
+                    className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-start sm:items-center justify-center p-3 sm:p-4 overflow-y-auto"
+                >
+                    <div className="max-w-3xl w-full my-4 sm:my-8 relative animate-in fade-in zoom-in-95 duration-200">
+                        <div className="sticky top-2 z-20 flex justify-end mb-2 pointer-events-none">
+                            <button
+                                type="button"
+                                onClick={() => setShowEvaluationWizard(false)}
+                                aria-label="Tutup Evaluasi"
+                                className="pointer-events-auto inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-white dark:bg-oxford-800 text-oxford-800 dark:text-white border border-oxford-200 dark:border-oxford-600 rounded-full shadow-lg text-xs font-bold hover:scale-105 transition-transform"
+                            >
+                                <span>✕</span>
+                                <span>Tutup</span>
+                            </button>
+                        </div>
                         <FourStageEvaluationWizard
                             courseId={course.id}
                             courseTitle={course.title}
