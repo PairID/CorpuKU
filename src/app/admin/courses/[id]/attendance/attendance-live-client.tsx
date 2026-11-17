@@ -15,10 +15,12 @@ import {
   Award,
   Layers,
   Download,
+  QrCode,
 } from "lucide-react";
 import { getCourseAttendanceLive } from "@/app/actions/attendance";
 import { AdminSidebar } from "@/components/layout/AdminSidebar";
 import { exportExcel, type SpreadsheetRow } from "@/lib/excel-client";
+import CourseEnrollQrModal from "@/components/courses/CourseEnrollQrModal";
 
 interface AttendanceSessionItem {
   id: string;
@@ -88,6 +90,7 @@ export default function AttendanceLiveClient({
   const [searchQuery, setSearchQuery] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [showEnrollQr, setShowEnrollQr] = useState(false);
 
   const handleExportExcel = async () => {
     setIsExporting(true);
@@ -300,6 +303,15 @@ export default function AttendanceLiveClient({
               >
                 {isLive ? <Pause size={14} /> : <Play size={14} />}
                 <span>{isLive ? "Jeda" : "Lanjutkan Live"}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowEnrollQr(true)}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gold-500 hover:bg-gold-400 text-oxford-950 text-xs font-bold transition-colors shadow-sm"
+              >
+                <QrCode size={14} />
+                <span>QR Pendaftaran</span>
               </button>
 
               <button
@@ -532,6 +544,14 @@ export default function AttendanceLiveClient({
           </div>
         </div>
       </main>
+
+      {showEnrollQr && (
+        <CourseEnrollQrModal
+          courseId={courseId}
+          courseTitle={data.course.title}
+          onClose={() => setShowEnrollQr(false)}
+        />
+      )}
     </div>
   );
 }

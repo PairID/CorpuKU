@@ -1,6 +1,8 @@
 import { getAllCourses } from "../actions/courses";
 import SearchClient from "./search-client";
 
+export const dynamic = "force-dynamic";
+
 export default async function SearchPage() {
     const courses = await getAllCourses();
 

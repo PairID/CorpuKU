@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { Edit, Trash2, Layers, Award, Radio } from "lucide-react";
+import { Edit, Trash2, Layers, Award, Radio, QrCode } from "lucide-react";
 import { deleteCourse } from "@/app/actions/courses";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { showToast } from "@/lib/toast";
+import CourseEnrollQrModal from "@/components/courses/CourseEnrollQrModal";
 
 interface AdminCourse {
     id: string;
@@ -29,6 +30,7 @@ interface AdminCourseTableProps {
 export default function AdminCourseTable({ courses, searchQuery, statusFilter, basePath = "/admin" }: AdminCourseTableProps) {
     const [deletingId, setDeletingId] = useState<string | null>(null);
     const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+    const [qrCourse, setQrCourse] = useState<{ id: string; title: string } | null>(null);
     const router = useRouter();
 
     // Client-side filter
@@ -120,6 +122,14 @@ export default function AdminCourseTable({ courses, searchQuery, statusFilter, b
                                         </div>
                                     ) : (
                                         <div className="flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button
+                                                type="button"
+                                                onClick={() => setQrCourse({ id: course.id, title: course.title })}
+                                                className="p-2 text-oxford-400 hover:text-gold-600 hover:bg-gold-50 rounded-lg transition-colors"
+                                                title="QR Code Pendaftaran Kelas"
+                                            >
+                                                <QrCode size={16} />
+                                            </button>
                                             <Link href={`${basePath}/courses/${course.id}/content`} className="p-2 text-oxford-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="Kelola Materi/Konten">
                                                 <Layers size={16} />
                                             </Link>
@@ -161,6 +171,14 @@ export default function AdminCourseTable({ courses, searchQuery, statusFilter, b
             <div className="p-4 border-t border-oxford-200 dark:border-oxford-700 flex items-center justify-between text-sm text-oxford-600 dark:text-oxford-300 bg-oxford-50 dark:bg-oxford-950/50">
                 <p>Menampilkan {filteredCourses.length} dari {courses.length} kursus</p>
             </div>
+
+            {qrCourse && (
+                <CourseEnrollQrModal
+                    courseId={qrCourse.id}
+                    courseTitle={qrCourse.title}
+                    onClose={() => setQrCourse(null)}
+                />
+            )}
         </div>
     );
 }
