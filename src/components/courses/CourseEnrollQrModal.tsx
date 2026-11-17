@@ -15,6 +15,7 @@ import {
   QrCode,
   RefreshCw,
   Search,
+  Trash2,
   UserCheck,
   UserX,
   Users,
@@ -23,6 +24,7 @@ import {
 import { showToast } from "@/lib/toast";
 import {
   adminApproveAllPendingEnrollments,
+  adminRemoveCourseParticipant,
   adminUpdateEnrollmentApproval,
   adminUpdateParticipantRegistration,
   getCourseEnrollmentsLive,
@@ -49,6 +51,9 @@ export default function CourseEnrollQrModal({
   const [participants, setParticipants] = useState<LiveEnrolledParticipant[]>([]);
   const [lastUpdated, setLastUpdated] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState("");
+
+  // Delete confirmation state
+  const [deletingEnrollment, setDeletingEnrollment] = useState<{ id: string; name: string } | null>(null);
 
   // Edit participant modal state
   const [editingUser, setEditingUser] = useState<LiveEnrolledParticipant | null>(null);
@@ -236,6 +241,29 @@ export default function CourseEnrollQrModal({
         await fetchParticipants(true);
       } else {
         showToast.error("Gagal Menyetujui", res.error || "Terjadi kesalahan.");
+      }
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  const handleDeleteParticipant = async () => {
+    if (!deletingEnrollment) return;
+    setIsActionLoading(true);
+    try {
+      const res = await adminRemoveCourseParticipant({
+        courseId,
+        enrollmentId: deletingEnrollment.id,
+      });
+      if (res.success) {
+        showToast.success(
+          "Peserta Dihapus",
+          `${deletingEnrollment.name} telah berhasil dikeluarkan dari kelas.`
+        );
+        setDeletingEnrollment(null);
+        await fetchParticipants(true);
+      } else {
+        showToast.error("Gagal Menghapus", res.error || "Terjadi kesalahan.");
       }
     } finally {
       setIsActionLoading(false);
@@ -573,6 +601,15 @@ export default function CourseEnrollQrModal({
                         >
                           <Edit2 size={14} /> Edit
                         </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeletingEnrollment({ id: p.enrollmentId, name: p.name })}
+                          disabled={isActionLoading}
+                          title="Hapus / Keluarkan peserta dari kelas"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold border border-rose-200 dark:border-rose-900/60 bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/50 transition-colors disabled:opacity-50"
+                        >
+                          <Trash2 size={14} /> Hapus
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -687,6 +724,49 @@ export default function CourseEnrollQrModal({
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* Sub-modal Konfirmasi Hapus Peserta dari Kelas */}
+      {deletingEnrollment && (
+        <div className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-[#161B2A] border border-oxford-200 dark:border-oxford-700 rounded-2xl max-w-md w-full p-6 sm:p-7 shadow-2xl space-y-4 text-oxford-900 dark:text-white">
+            <div className="flex items-center gap-3.5 text-rose-600 dark:text-rose-400 pb-2">
+              <div className="w-11 h-11 rounded-xl bg-rose-500/15 flex items-center justify-center shrink-0">
+                <Trash2 size={24} />
+              </div>
+              <div>
+                <h4 className="font-bold text-lg text-oxford-950 dark:text-white">Hapus Peserta dari Kelas?</h4>
+                <p className="text-xs text-oxford-500 dark:text-oxford-400">Tindakan ini tidak dapat dibatalkan.</p>
+              </div>
+            </div>
+
+            <p className="text-sm text-oxford-700 dark:text-oxford-300 leading-relaxed">
+              Apakah Anda yakin ingin mengeluarkan dan menghapus peserta{" "}
+              <strong className="text-oxford-950 dark:text-white">{deletingEnrollment.name}</strong> dari kelas ini?
+              Seluruh data presensi dan evaluasi peserta pada kelas ini juga akan otomatis dibersihkan.
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-oxford-100 dark:border-oxford-800">
+              <button
+                type="button"
+                onClick={() => setDeletingEnrollment(null)}
+                disabled={isActionLoading}
+                className="px-4 py-2.5 rounded-xl border border-oxford-200 dark:border-oxford-700 text-sm font-bold text-oxford-700 dark:text-oxford-300 hover:bg-oxford-100 dark:hover:bg-oxford-800 transition-colors"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteParticipant}
+                disabled={isActionLoading}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-sm font-bold shadow-md transition-colors disabled:opacity-50"
+              >
+                {isActionLoading ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                Ya, Hapus Peserta
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>,

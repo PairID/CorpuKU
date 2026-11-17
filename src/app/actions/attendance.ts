@@ -768,6 +768,79 @@ export async function adminApproveAllPendingEnrollments(courseId: string) {
 }
 
 /**
+ * Menghapus/mengeluarkan peserta yang sudah terdaftar dari kelas
+ */
+export async function adminRemoveCourseParticipant(payload: {
+  courseId: string;
+  enrollmentId: string;
+}) {
+  try {
+    const { courseId, enrollmentId } = payload;
+    const session = await requireInstructorSession();
+    const isAdmin = session.user.role === "admin";
+
+    const courseRows = await sql`
+      SELECT id, instructor_id AS "instructorId"
+      FROM courses
+      WHERE id = ${courseId}
+      LIMIT 1
+    `;
+    const course = courseRows[0];
+    if (!course) return { success: false, error: "Kelas tidak ditemukan." };
+    if (!isAdmin && String(course.instructorId || "") !== session.user.id) {
+      return { success: false, error: "Anda tidak memiliki akses ke kelas ini." };
+    }
+
+    const enrollmentRows = await sql`
+      SELECT id, user_id AS "userId"
+      FROM enrollments
+      WHERE id = ${enrollmentId} AND course_id = ${courseId}
+      LIMIT 1
+    `;
+    const enrollment = enrollmentRows[0];
+    if (!enrollment) {
+      return { success: false, error: "Data pendaftaran peserta tidak ditemukan." };
+    }
+
+    // 1. Bersihkan riwayat presensi materi kelas ini
+    await sql`
+      DELETE FROM material_attendances
+      WHERE enrollment_id = ${enrollmentId} OR (course_id = ${courseId} AND user_id = ${enrollment.userId})
+    `;
+
+    // 2. Bersihkan evaluasi kelas jika ada
+    await sql`
+      DELETE FROM course_evaluations
+      WHERE enrollment_id = ${enrollmentId} OR (course_id = ${courseId} AND user_id = ${enrollment.userId})
+    `;
+
+    // 3. Bersihkan sertifikat kursus yang terbit jika ada
+    await sql`
+      DELETE FROM issued_course_certificates
+      WHERE enrollment_id = ${enrollmentId} OR (course_id = ${courseId} AND user_id = ${enrollment.userId})
+    `;
+
+    // 4. Hapus data enrollment peserta dari kelas
+    await sql`
+      DELETE FROM enrollments
+      WHERE id = ${enrollmentId} AND course_id = ${courseId}
+    `;
+
+    revalidatePath(`/courses/${courseId}`);
+    revalidatePath(`/admin/courses/${courseId}`);
+    revalidatePath(`/admin/courses`);
+
+    return { success: true };
+  } catch (err: unknown) {
+    console.error("adminRemoveCourseParticipant error:", err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Gagal menghapus peserta dari kelas.",
+    };
+  }
+}
+
+/**
  * Admin/Instruktur mengedit data registrasi/profil peserta langsung ke database
  */
 export async function adminUpdateParticipantRegistration(payload: {
