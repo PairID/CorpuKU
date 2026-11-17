@@ -143,3 +143,30 @@ body {
   -ms-overflow-style: none;  /* IE and Edge */
   scrollbar-width: none;  /* Firefox */
 }
+
+/* Toast Elegan Clean Progress Bar */
+@keyframes sonner-bar {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
+[data-sonner-toast]::after {
+  content: "";
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 0;
+  height: 1.5px;
+  background: rgba(17, 17, 17, 0.25);
+  transform-origin: left center;
+  animation: sonner-bar 3.8s linear forwards;
+  pointer-events: none;
+}
+
+.dark [data-sonner-toast]::after {
+  background: rgba(255, 255, 255, 0.35);
+}
