@@ -131,7 +131,7 @@ export async function submitTrainingEvaluation(payload: SubmitEvaluationPayload)
     const enrollmentRows = await sql`
       SELECT id, eval_narasumber_completed, eval_organizer_completed,
              eval_understanding_completed, eval_skm_completed, all_evaluations_completed,
-             attendance_percentage, progress, status
+             attendance_percentage, progress, status, completed_lessons
       FROM enrollments
       WHERE (course_id = ${courseId} OR id = ${courseId}) AND user_id = ${userId}
       LIMIT 1
@@ -139,6 +139,30 @@ export async function submitTrainingEvaluation(payload: SubmitEvaluationPayload)
     const enrollment = enrollmentRows[0];
     if (!enrollment) {
       return { success: false, error: "Pendaftaran tidak ditemukan." };
+    }
+
+    // 2. Gating Modul Terakhir: Evaluasi hanya dapat diakses setelah modul terakhir dikerjakan
+    if (session.user.role === "student") {
+      const lastModuleLessons = await sql`
+        SELECT l.id
+        FROM lessons l
+        JOIN modules m ON l.module_id = m.id
+        WHERE m.course_id = ${courseId}
+          AND m."order" = (SELECT MAX("order") FROM modules WHERE course_id = ${courseId})
+      `;
+      if (lastModuleLessons.length > 0) {
+        const completed = Array.isArray(enrollment.completed_lessons)
+          ? enrollment.completed_lessons
+          : (typeof enrollment.completed_lessons === "string" ? JSON.parse(enrollment.completed_lessons || "[]") : []);
+        const completedSet = new Set(completed);
+        const hasUnfinishedLastModule = lastModuleLessons.some((l) => !completedSet.has(l.id));
+        if (hasUnfinishedLastModule) {
+          return {
+            success: false,
+            error: "Evaluasi baru dapat diisi setelah Anda menyelesaikan seluruh materi pada modul terakhir.",
+          };
+        }
+      }
     }
 
     // 2. Sequential Stage Gating Check

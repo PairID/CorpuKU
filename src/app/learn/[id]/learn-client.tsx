@@ -148,6 +148,16 @@ export default function LearnClient({ course, courseContent, session, enrollment
     const user = session.user;
 
     const isClassical = course.trainingType === "classical_facilitation" || enrollment?.trainingType === "classical_facilitation";
+    
+    // Gating Evaluasi: Hanya dapat diakses setelah seluruh materi pada modul terakhir dikerjakan/selesai
+    const lastModule = courseContent.length > 0 ? courseContent[courseContent.length - 1] : null;
+    const isLastModuleCompleted = Boolean(
+        lastModule &&
+        lastModule.lessons.length > 0 &&
+        lastModule.lessons.every((lesson) => completedLessons[lesson.id])
+    );
+    const isEvaluationUnlocked = isLastModuleCompleted || session.user.role === "admin" || session.user.role === "instructor";
+
     const [isVerificationModalOpen, setIsVerificationModalOpen] = useState(
         Boolean(isClassical && !enrollment?.statementAccepted && session.user.role === "student")
     );
@@ -991,37 +1001,65 @@ export default function LearnClient({ course, courseContent, session, enrollment
                         {(isClassical || (course.documentationUrl && /^https?:\/\//i.test(course.documentationUrl.trim())) || enrollment?.id) && (
                             <div className="border-t border-oxford-200 dark:border-oxford-800 bg-oxford-50/50 dark:bg-oxford-950/40">
                                 {isClassical && (
-                                    <div className="divide-y divide-oxford-100 dark:divide-oxford-800/80">
-                                        {[
-                                            { key: "understanding" as const, label: "Evaluasi Pembelajaran", done: Boolean(enrollment?.evalUnderstandingCompleted) || attendanceStats.allEvaluationsCompleted },
-                                            { key: "narasumber" as const, label: "Evaluasi Narasumber", done: Boolean(enrollment?.evalNarasumberCompleted) || attendanceStats.allEvaluationsCompleted },
-                                            { key: "organizer" as const, label: "Evaluasi Penyelenggara", done: Boolean(enrollment?.evalOrganizerCompleted) || attendanceStats.allEvaluationsCompleted },
-                                            { key: "skm" as const, label: "SKM", done: Boolean(enrollment?.evalSkmCompleted) || attendanceStats.allEvaluationsCompleted },
-                                        ].map((item) => (
-                                            <button
-                                                key={item.key}
-                                                type="button"
-                                                onClick={() => {
-                                                    setRequestedEvalStage(item.key);
-                                                    setShowEvaluationWizard(true);
-                                                    setMobileSidebarOpen(false);
-                                                }}
-                                                className="w-full text-left px-5 py-3 flex items-center justify-between gap-2 hover:bg-white dark:hover:bg-[#161B2A] transition-colors"
-                                            >
-                                                <div className="flex items-center gap-2.5 min-w-0">
-                                                    <ClipboardCheck size={15} className={item.done ? "text-emerald-500 shrink-0" : "text-gold-500 shrink-0"} />
-                                                    <span className="text-xs font-bold text-oxford-900 dark:text-white truncate">
-                                                        {item.label}
-                                                    </span>
-                                                </div>
-                                                {item.done ? (
-                                                    <CheckCircle2 size={14} className="text-emerald-600 shrink-0" />
-                                                ) : (
-                                                    <ChevronRight size={14} className="text-oxford-400 shrink-0" />
-                                                )}
-                                            </button>
-                                        ))}
-                                    </div>
+                                    <>
+                                        <div className="px-5 py-2.5 bg-oxford-100/60 dark:bg-oxford-900/60 flex items-center justify-between border-b border-oxford-200 dark:border-oxford-800">
+                                            <span className="text-xs font-bold text-oxford-600 dark:text-oxford-400 uppercase tracking-wider">
+                                                Evaluasi Pelatihan
+                                            </span>
+                                            {!isEvaluationUnlocked && (
+                                                <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30">
+                                                    <Lock size={11} /> Modul Terakhir
+                                                </span>
+                                            )}
+                                        </div>
+                                        <div className="divide-y divide-oxford-100 dark:divide-oxford-800/80">
+                                            {[
+                                                { key: "understanding" as const, label: "Evaluasi Pembelajaran", done: Boolean(enrollment?.evalUnderstandingCompleted) || attendanceStats.allEvaluationsCompleted },
+                                                { key: "narasumber" as const, label: "Evaluasi Narasumber", done: Boolean(enrollment?.evalNarasumberCompleted) || attendanceStats.allEvaluationsCompleted },
+                                                { key: "organizer" as const, label: "Evaluasi Penyelenggara", done: Boolean(enrollment?.evalOrganizerCompleted) || attendanceStats.allEvaluationsCompleted },
+                                                { key: "skm" as const, label: "SKM", done: Boolean(enrollment?.evalSkmCompleted) || attendanceStats.allEvaluationsCompleted },
+                                            ].map((item) => (
+                                                <button
+                                                    key={item.key}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        if (!isEvaluationUnlocked) {
+                                                            toast.info(`Evaluasi ${item.label} terkunci. Silakan selesaikan seluruh materi pada modul terakhir (${lastModule?.title || "modul penutup"}) terlebih dahulu.`);
+                                                            return;
+                                                        }
+                                                        setRequestedEvalStage(item.key);
+                                                        setShowEvaluationWizard(true);
+                                                        setMobileSidebarOpen(false);
+                                                    }}
+                                                    className={`w-full text-left px-5 py-3 flex items-center justify-between gap-2 transition-colors ${
+                                                        !isEvaluationUnlocked
+                                                            ? "opacity-65 hover:bg-oxford-100/40 dark:hover:bg-oxford-900/30 cursor-pointer"
+                                                            : "hover:bg-white dark:hover:bg-[#161B2A]"
+                                                    }`}
+                                                >
+                                                    <div className="flex items-center gap-2.5 min-w-0">
+                                                        {!isEvaluationUnlocked ? (
+                                                            <Lock size={15} className="text-oxford-400 shrink-0" />
+                                                        ) : (
+                                                            <ClipboardCheck size={15} className={item.done ? "text-emerald-500 shrink-0" : "text-gold-500 shrink-0"} />
+                                                        )}
+                                                        <span className={`text-xs font-bold truncate ${!isEvaluationUnlocked ? "text-oxford-500 dark:text-oxford-400" : "text-oxford-900 dark:text-white"}`}>
+                                                            {item.label}
+                                                        </span>
+                                                    </div>
+                                                    {item.done ? (
+                                                        <CheckCircle2 size={14} className="text-emerald-600 shrink-0" />
+                                                    ) : !isEvaluationUnlocked ? (
+                                                        <span className="text-[10px] font-semibold text-oxford-400 px-1.5 py-0.5 rounded bg-oxford-200/50 dark:bg-oxford-800">
+                                                            Terkunci
+                                                        </span>
+                                                    ) : (
+                                                        <ChevronRight size={14} className="text-oxford-400 shrink-0" />
+                                                    )}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </>
                                 )}
 
                                 {course.documentationUrl && /^https?:\/\//i.test(course.documentationUrl.trim()) && (

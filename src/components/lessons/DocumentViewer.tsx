@@ -27,7 +27,7 @@ function parseDocumentUrl(rawUrl: string): ParsedDoc {
   if (!rawUrl || typeof rawUrl !== "string") {
     return { embedUrl: "", originalUrl: "", sourceType: "other", canEmbed: false };
   }
-  const url = rawUrl.trim();
+  const url = rawUrl.trim().replace(/&amp;/g, '&');
 
   // 1. Google Drive direct file link: drive.google.com/file/d/{id}/...
   const driveFileMatch = url.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
@@ -40,8 +40,8 @@ function parseDocumentUrl(rawUrl: string): ParsedDoc {
     };
   }
 
-  // Google Drive link with ?id= or uc?id=
-  const driveIdMatch = url.match(/drive\.google\.com\/(?:open\?id=|uc\?id=|file\?id=)([a-zA-Z0-9_-]+)/);
+  // Google Drive link with ?id=, uc?id=, open?id=
+  const driveIdMatch = url.match(/drive\.google\.com\/[^\s"'<>]*[?&]id=([a-zA-Z0-9_-]+)/);
   if (driveIdMatch && driveIdMatch[1]) {
     return {
       embedUrl: `https://drive.google.com/file/d/${driveIdMatch[1]}/preview`,
@@ -135,11 +135,11 @@ export default function DocumentViewer({ url, title }: DocumentViewerProps) {
               <span className="font-bold text-sm text-oxford-900 dark:text-white truncate">
                 {title || "Materi Pembelajaran"}
               </span>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-oxford-200/70 dark:bg-oxford-800 text-oxford-700 dark:text-oxford-300 shrink-0">
+              <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-oxford-200/70 dark:bg-oxford-800 text-oxford-700 dark:text-oxford-300 shrink-0">
                 {badgeLabel}
               </span>
             </div>
-            <p className="text-[11px] text-oxford-500 truncate">
+            <p className="text-xs text-oxford-500 truncate">
               Pratinjau dokumen langsung di dalam kelas
             </p>
           </div>
