@@ -601,3 +601,171 @@ export async function getCourseAttendanceLive(courseId: string) {
     };
   }
 }
+
+export interface LiveEnrolledParticipant {
+  enrollmentId: string;
+  userId: string;
+  name: string;
+  email: string;
+  nip: string;
+  instansiAsal: string;
+  jabatan: string;
+  pangkat: string;
+  phone: string;
+  statementAccepted: boolean;
+  enrolledAt: string;
+}
+
+/**
+ * Mengambil daftar peserta terdaftar secara live untuk modal QR pendaftaran kelas
+ */
+export async function getCourseEnrollmentsLive(courseId: string) {
+  try {
+    const session = await requireInstructorSession();
+    const isAdmin = session.user.role === "admin";
+
+    const courseRows = await sql`
+      SELECT id, instructor_id AS "instructorId"
+      FROM courses
+      WHERE id = ${courseId}
+      LIMIT 1
+    `;
+    const course = courseRows[0];
+    if (!course) {
+      return { success: false, error: "Kelas tidak ditemukan." };
+    }
+    if (!isAdmin && String(course.instructorId || "") !== session.user.id) {
+      return { success: false, error: "Anda tidak memiliki akses ke kelas ini." };
+    }
+
+    const rows = await sql`
+      SELECT e.id AS "enrollmentId", e.user_id AS "userId",
+             e.statement_accepted AS "statementAccepted", e.enrolled_at AS "enrolledAt",
+             u.name, u.email, u.nip, u.instansi_asal AS "instansiAsal",
+             u.jabatan, u.pangkat, u.phone
+      FROM enrollments e
+      JOIN users u ON u.id = e.user_id
+      WHERE e.course_id = ${courseId}
+      ORDER BY e.enrolled_at DESC
+    `;
+
+    const participants: LiveEnrolledParticipant[] = rows.map((r) => ({
+      enrollmentId: String(r.enrollmentId),
+      userId: String(r.userId),
+      name: String(r.name || ""),
+      email: String(r.email || ""),
+      nip: r.nip ? String(r.nip) : "",
+      instansiAsal: r.instansiAsal ? String(r.instansiAsal) : "",
+      jabatan: r.jabatan ? String(r.jabatan) : "",
+      pangkat: r.pangkat ? String(r.pangkat) : "",
+      phone: r.phone ? String(r.phone) : "",
+      statementAccepted: Boolean(r.statementAccepted),
+      enrolledAt: r.enrolledAt ? new Date(String(r.enrolledAt)).toISOString() : new Date().toISOString(),
+    }));
+
+    return {
+      success: true,
+      fetchedAt: new Date().toISOString(),
+      participants,
+    };
+  } catch (err: unknown) {
+    console.error("getCourseEnrollmentsLive error:", err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Gagal memuat daftar peserta live.",
+    };
+  }
+}
+
+/**
+ * Admin/Instruktur mengedit data registrasi/profil peserta langsung ke database
+ */
+export async function adminUpdateParticipantRegistration(payload: {
+  courseId: string;
+  userId: string;
+  name: string;
+  nip?: string;
+  instansiAsal?: string;
+  jabatan?: string;
+  pangkat?: string;
+  phone?: string;
+}) {
+  try {
+    const session = await requireInstructorSession();
+    const isAdmin = session.user.role === "admin";
+    const { courseId, userId, name, nip, instansiAsal, jabatan, pangkat, phone } = payload;
+
+    const courseRows = await sql`
+      SELECT id, instructor_id AS "instructorId"
+      FROM courses
+      WHERE id = ${courseId}
+      LIMIT 1
+    `;
+    const course = courseRows[0];
+    if (!course) {
+      return { success: false, error: "Kelas tidak ditemukan." };
+    }
+    if (!isAdmin && String(course.instructorId || "") !== session.user.id) {
+      return { success: false, error: "Anda tidak memiliki akses ke kelas ini." };
+    }
+
+    const enrollmentRows = await sql`
+      SELECT id FROM enrollments
+      WHERE course_id = ${courseId} AND user_id = ${userId}
+      LIMIT 1
+    `;
+    if (!enrollmentRows[0]) {
+      return { success: false, error: "Peserta tidak terdaftar pada kelas ini." };
+    }
+
+    const cleanName = (name || "").trim();
+    if (!cleanName) {
+      return { success: false, error: "Nama lengkap peserta wajib diisi." };
+    }
+
+    const cleanNip = nip && nip.trim() ? sanitizeParticipantNip(nip) : null;
+    if (cleanNip && cleanNip.length < 16) {
+      return { success: false, error: "NIP/NIK minimal 16 digit jika diisi." };
+    }
+
+    const cleanPhone = phone ? phone.replace(/[^\d+]/g, "") : null;
+    const cleanInstansi = instansiAsal?.trim() || null;
+    const cleanJabatan = jabatan?.trim() || null;
+    const cleanPangkat = pangkat?.trim() || null;
+
+    await sql`
+      UPDATE users
+      SET name = ${cleanName},
+          nip = ${cleanNip},
+          instansi_asal = ${cleanInstansi},
+          jabatan = ${cleanJabatan},
+          pangkat = ${cleanPangkat},
+          phone = ${cleanPhone || null}
+      WHERE id = ${userId}
+    `;
+
+    // Sinkronkan ke sertifikat terbit apabila sudah ada untuk kelas ini
+    await sql`
+      UPDATE issued_course_certificates
+      SET participant_name = ${cleanName},
+          participant_nip = ${cleanNip},
+          participant_rank = ${cleanPangkat},
+          participant_position = ${cleanJabatan},
+          participant_institution = ${cleanInstansi}
+      WHERE course_id = ${courseId}
+        AND user_id = ${userId}
+        AND revoked_at IS NULL
+    `;
+
+    revalidatePath(`/admin/courses/${courseId}/attendance`);
+    revalidatePath(`/admin/courses/${courseId}/certificates`);
+
+    return { success: true, message: "Data registrasi peserta berhasil diperbarui." };
+  } catch (err: unknown) {
+    console.error("adminUpdateParticipantRegistration error:", err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Gagal memperbarui data peserta.",
+    };
+  }
+}
