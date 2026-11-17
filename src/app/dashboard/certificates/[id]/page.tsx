@@ -41,7 +41,58 @@ export default async function CertificatePage({ params }: { params: Promise<{ id
     }
 
     const issuedCertificate = await issueCourseCertificate(user.id, String(enrollment.courseId));
-    if (!issuedCertificate) notFound();
+    if (!issuedCertificate) {
+        const attendancePct = Number((enrollment as { attendancePercentage?: number }).attendancePercentage || 0);
+        const threshold = Number(course.attendanceThreshold ?? 80);
+        const evalDone = Boolean((enrollment as { allEvaluationsCompleted?: boolean }).allEvaluationsCompleted);
+        const statementDone = Boolean((enrollment as { statementAccepted?: boolean }).statementAccepted);
+        return (
+            <div className="min-h-screen bg-oxford-50 dark:bg-oxford-950 flex items-center justify-center p-6">
+                <div className="max-w-lg w-full bg-white dark:bg-[#161B2A] rounded-2xl border border-oxford-200 dark:border-oxford-800 p-8 shadow-sm text-center space-y-4">
+                    <h1 className="text-xl font-serif font-bold text-oxford-950 dark:text-white">
+                        Sertifikat Belum Tersedia
+                    </h1>
+                    <p className="text-sm text-oxford-600 dark:text-oxford-300">
+                        Sertifikat untuk kelas <strong>{course.title}</strong> akan diterbitkan otomatis setelah seluruh syarat kelulusan terpenuhi:
+                    </p>
+                    {isClassical ? (
+                        <div className="text-left space-y-2 bg-oxford-50 dark:bg-oxford-900/60 p-4 rounded-xl border border-oxford-200 dark:border-oxford-800 text-xs">
+                            <div className="flex justify-between">
+                                <span>1. Konfirmasi Data Diri</span>
+                                <span className={statementDone ? "font-bold text-emerald-600" : "font-bold text-amber-600"}>
+                                    {statementDone ? "Selesai" : "Belum"}
+                                </span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span>2. Kehadiran JP (Min. {threshold}%)</span>
+                                <span className={attendancePct >= threshold ? "font-bold text-emerald-600" : "font-bold text-amber-600"}>
+                                    {attendancePct}%
+                                </span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span>3. Evaluasi 4 Tahap &amp; SKM</span>
+                                <span className={evalDone ? "font-bold text-emerald-600" : "font-bold text-amber-600"}>
+                                    {evalDone ? "Tuntas" : "Belum Tuntas"}
+                                </span>
+                            </div>
+                        </div>
+                    ) : (
+                        <p className="text-xs text-oxford-500">
+                            Pastikan Anda telah menyelesaikan seluruh materi dan evaluasi kelas ini, atau penerbitan sertifikat sedang dinonaktifkan oleh Admin.
+                        </p>
+                    )}
+                    <div className="pt-2">
+                        <a
+                            href={`/learn/${enrollment.courseId}`}
+                            className="inline-flex items-center justify-center px-5 py-2.5 rounded-xl bg-gold-500 hover:bg-gold-400 text-oxford-950 font-bold text-xs shadow-sm transition-colors"
+                        >
+                            Kembali ke Kelas
+                        </a>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     // Format issue date (tanggal terbit sertifikat)
     const issueDate = new Date(issuedCertificate.issuedAt).toLocaleDateString('id-ID', {

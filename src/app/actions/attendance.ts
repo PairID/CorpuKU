@@ -312,6 +312,149 @@ export async function getDistinctInstansiList(): Promise<string[]> {
   }
 }
 
+let ensuredOverrideCols = false;
+async function ensureAttendanceOverrideColumns() {
+  if (ensuredOverrideCols) return;
+  await sql`ALTER TABLE material_attendances ADD COLUMN IF NOT EXISTS override_note TEXT`;
+  await sql`ALTER TABLE material_attendances ADD COLUMN IF NOT EXISTS override_by TEXT`;
+  ensuredOverrideCols = true;
+}
+
+/**
+ * Manual override presensi peserta oleh Admin / Instruktur dengan catatan wajib
+ */
+export async function adminOverrideAttendance(payload: {
+  courseId: string;
+  userId: string;
+  lessonId: string;
+  markPresent: boolean;
+  note: string;
+}) {
+  try {
+    const session = await requireInstructorSession();
+    const isAdmin = session.user.role === "admin";
+    const { courseId, userId, lessonId, markPresent, note } = payload;
+
+    const cleanNote = (note || "").trim();
+    if (cleanNote.length < 3) {
+      return { success: false, error: "Catatan override wajib diisi (minimal 3 karakter)." };
+    }
+
+    const courseRows = await sql`
+      SELECT id, instructor_id AS "instructorId", jp, attendance_threshold AS "attendanceThreshold"
+      FROM courses WHERE id = ${courseId} LIMIT 1
+    `;
+    const course = courseRows[0];
+    if (!course) return { success: false, error: "Kelas tidak ditemukan." };
+    if (!isAdmin && String(course.instructorId || "") !== session.user.id) {
+      return { success: false, error: "Anda tidak memiliki akses ke kelas ini." };
+    }
+
+    const lessonRows = await sql`
+      SELECT l.id, l.jp
+      FROM lessons l
+      JOIN modules m ON m.id = l.module_id
+      WHERE l.id = ${lessonId} AND m.course_id = ${courseId}
+      LIMIT 1
+    `;
+    const lesson = lessonRows[0];
+    if (!lesson) return { success: false, error: "Sesi materi tidak ditemukan pada kelas ini." };
+
+    await ensureAttendanceOverrideColumns();
+    const actorLabel = session.user.name || session.user.email || session.user.id;
+    const lessonJp = Number(lesson.jp || 2);
+
+    if (markPresent) {
+      const attId = `att_${crypto.randomUUID()}`;
+      await sql`
+        INSERT INTO material_attendances (id, user_id, course_id, lesson_id, jp, qr_code_used, attended_at, override_note, override_by)
+        VALUES (${attId}, ${userId}, ${courseId}, ${lessonId}, ${lessonJp}, 'ADMIN_OVERRIDE', CURRENT_TIMESTAMP, ${cleanNote}, ${actorLabel})
+        ON CONFLICT (user_id, lesson_id)
+        DO UPDATE SET
+          jp = EXCLUDED.jp,
+          qr_code_used = 'ADMIN_OVERRIDE',
+          attended_at = CURRENT_TIMESTAMP,
+          override_note = EXCLUDED.override_note,
+          override_by = EXCLUDED.override_by
+      `;
+    } else {
+      await sql`
+        DELETE FROM material_attendances
+        WHERE user_id = ${userId} AND lesson_id = ${lessonId} AND course_id = ${courseId}
+      `;
+    }
+
+    // Recalculate total attended JP & percentage on enrollment
+    const [attSumRows, totalJpRows, enrollmentRows] = await Promise.all([
+      sql`
+        SELECT COALESCE(SUM(jp), 0) AS total_jp
+        FROM material_attendances
+        WHERE user_id = ${userId} AND course_id = ${courseId}
+      `,
+      sql`
+        SELECT COALESCE(SUM(l.jp), 0) AS total_class_jp
+        FROM lessons l
+        JOIN modules m ON m.id = l.module_id
+        WHERE m.course_id = ${courseId} AND l.has_attendance = TRUE
+      `,
+      sql`
+        SELECT id, completed_lessons, all_evaluations_completed
+        FROM enrollments
+        WHERE user_id = ${userId} AND course_id = ${courseId}
+        LIMIT 1
+      `,
+    ]);
+
+    const attendedJp = Number(attSumRows[0]?.total_jp || 0);
+    const computedClassJp = Number(totalJpRows[0]?.total_class_jp || 0);
+    const totalClassJp = computedClassJp > 0 ? computedClassJp : Number(course.jp || 0);
+    const attendancePercentage = calculateAttendancePercentage(attendedJp, totalClassJp);
+
+    const enrollment = enrollmentRows[0];
+    if (enrollment) {
+      let existingCompleted: string[] = [];
+      try {
+        existingCompleted = Array.isArray(enrollment.completed_lessons)
+          ? enrollment.completed_lessons
+          : JSON.parse(String(enrollment.completed_lessons || "[]"));
+      } catch {
+        existingCompleted = [];
+      }
+
+      const updatedSet = new Set(existingCompleted.map(String));
+      if (markPresent) updatedSet.add(lessonId);
+      else updatedSet.delete(lessonId);
+
+      const threshold = Number(course.attendanceThreshold ?? 80);
+      const canComplete = attendancePercentage >= threshold && Boolean(enrollment.all_evaluations_completed);
+
+      await sql`
+        UPDATE enrollments
+        SET attended_jp = ${attendedJp},
+            attendance_percentage = ${attendancePercentage},
+            completed_lessons = ${JSON.stringify(Array.from(updatedSet))},
+            status = CASE WHEN ${canComplete} THEN 'completed' ELSE status END
+        WHERE id = ${enrollment.id}
+      `;
+    }
+
+    revalidatePath(`/admin/courses/${courseId}/attendance`);
+    revalidatePath(`/learn/${courseId}`);
+    return {
+      success: true,
+      message: markPresent
+        ? "Presensi peserta berhasil ditandai hadir (Manual Override)."
+        : "Status kehadiran peserta berhasil dibatalkan.",
+    };
+  } catch (err: unknown) {
+    console.error("adminOverrideAttendance error:", err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Gagal melakukan override presensi.",
+    };
+  }
+}
+
 /**
  * Mengambil data monitoring presensi live untuk menu Admin / Penyelenggara
  */
@@ -319,6 +462,7 @@ export async function getCourseAttendanceLive(courseId: string) {
   try {
     const session = await requireInstructorSession();
     const isAdmin = session.user.role === "admin";
+    await ensureAttendanceOverrideColumns();
 
     const courseRows = await sql`
       SELECT id, title, instructor_id AS "instructorId", training_type AS "trainingType",
@@ -358,7 +502,8 @@ export async function getCourseAttendanceLive(courseId: string) {
         ORDER BY u.name ASC
       `,
       sql`
-        SELECT user_id AS "userId", lesson_id AS "lessonId", jp, attended_at AS "attendedAt"
+        SELECT user_id AS "userId", lesson_id AS "lessonId", jp, attended_at AS "attendedAt",
+               override_note AS "overrideNote", override_by AS "overrideBy"
         FROM material_attendances
         WHERE course_id = ${courseId}
         ORDER BY attended_at DESC
@@ -413,6 +558,8 @@ export async function getCourseAttendanceLive(courseId: string) {
             lessonId: String(a.lessonId),
             jp: Number(a.jp || 0),
             attendedAt: new Date(String(a.attendedAt)).toISOString(),
+            overrideNote: a.overrideNote ? String(a.overrideNote) : null,
+            overrideBy: a.overrideBy ? String(a.overrideBy) : null,
           })),
           evaluations: evaluationRows
             .filter((ev) => String(ev.userId) === String(p.userId))

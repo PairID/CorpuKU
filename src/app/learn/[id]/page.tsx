@@ -20,7 +20,7 @@ export default async function LearnPage({ params }: { params: Promise<{ id: stri
     let courseId = paramId;
     let enrollment = null;
 
-    if (paramId.startsWith("enr_")) {
+    if (paramId.startsWith("enr_") || paramId.startsWith("enroll_")) {
         // Find enrollment first to get courseId
         enrollment = await getEnrollment(paramId);
         if (enrollment) {

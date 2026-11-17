@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { QrCode, Camera, Upload, Keyboard, X, Loader2, CheckCircle2, AlertTriangle, Sparkles } from "lucide-react";
-import { submitMaterialAttendance } from "@/app/actions/attendance";
+import { submitMaterialAttendance, getMaterialAttendances } from "@/app/actions/attendance";
 import { showToast } from "@/lib/toast";
 
 interface LessonOption {
@@ -17,6 +17,7 @@ interface MobileAttendanceFABProps {
   courseId: string;
   courseTitle?: string;
   lessons?: LessonOption[];
+  attendedLessonIds?: string[];
   onAttendanceSuccess?: (data: {
     attendedJp: number;
     totalClassJp: number;
@@ -29,10 +30,12 @@ export default function MobileAttendanceFAB({
   courseId,
   courseTitle,
   lessons = [],
+  attendedLessonIds = [],
   onAttendanceSuccess,
 }: MobileAttendanceFABProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"camera" | "upload" | "code">("camera");
+  const [attendedSet, setAttendedSet] = useState<Set<string>>(() => new Set(attendedLessonIds));
   const [selectedLessonId, setSelectedLessonId] = useState<string>(
     lessons.find((l) => l.hasAttendance !== false)?.id || lessons[0]?.id || ""
   );
@@ -47,6 +50,19 @@ export default function MobileAttendanceFAB({
 
   // Filter lessons that require attendance
   const attendanceLessons = lessons.filter((l) => l.hasAttendance !== false);
+  const pendingAttendanceCount = attendanceLessons.filter((l) => !attendedSet.has(l.id)).length;
+
+  useEffect(() => {
+    let active = true;
+    getMaterialAttendances(courseId).then((res) => {
+      if (active && res.success && Array.isArray(res.attendedLessonIds)) {
+        setAttendedSet(new Set(res.attendedLessonIds));
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [courseId]);
 
   // Stop camera stream cleanly
   const stopCamera = () => {
@@ -178,6 +194,7 @@ export default function MobileAttendanceFAB({
       });
 
       if (res.success) {
+        setAttendedSet((prev) => new Set(prev).add(lessonId));
         showToast.success("Presensi Berhasil! 🎉", res.message || "Presensi Anda telah dicatat.");
         stopCamera();
         setIsOpen(false);
@@ -214,11 +231,16 @@ export default function MobileAttendanceFAB({
         <button
           type="button"
           onClick={() => setIsOpen(true)}
-          className="w-14 h-14 flex items-center justify-center bg-gold-500 hover:bg-gold-400 text-oxford-950 rounded-full shadow-[0_10px_25px_-5px_rgba(239,177,25,0.5)] active:scale-95 transition-all group"
+          className="relative w-14 h-14 flex items-center justify-center bg-gold-500 hover:bg-gold-400 text-oxford-950 rounded-full shadow-[0_10px_25px_-5px_rgba(239,177,25,0.5)] active:scale-95 transition-all group"
           aria-label="Scan QR Presensi Materi"
           title="Scan QR Presensi"
         >
           <QrCode size={26} className="stroke-[2.25] group-hover:scale-110 transition-transform" />
+          {pendingAttendanceCount > 0 && (
+            <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 rounded-full bg-crimson-600 text-white text-[10px] font-extrabold flex items-center justify-center shadow">
+              {pendingAttendanceCount}
+            </span>
+          )}
         </button>
       </div>
 
@@ -253,6 +275,50 @@ export default function MobileAttendanceFAB({
               </button>
             </div>
 
+            {/* Status Notifikasi Presensi Per Sesi */}
+            {attendanceLessons.length > 0 && (
+              <div className="mb-4 p-3 rounded-xl bg-oxford-50 dark:bg-oxford-900/70 border border-oxford-200 dark:border-oxford-800 space-y-2">
+                <div className="flex items-center justify-between text-[11px] font-bold">
+                  <span className="text-oxford-700 dark:text-oxford-200">Status Presensi Kelas Ini</span>
+                  <span className={pendingAttendanceCount === 0 ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}>
+                    {pendingAttendanceCount === 0
+                      ? "Semua Sesi Sudah Presensi"
+                      : `${pendingAttendanceCount} Sesi Belum Presensi`}
+                  </span>
+                </div>
+                <div className="space-y-1.5 max-h-28 overflow-y-auto">
+                  {attendanceLessons.map((l, idx) => {
+                    const isDone = attendedSet.has(l.id);
+                    return (
+                      <div
+                        key={l.id}
+                        className={`flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-[11px] ${
+                          isDone
+                            ? "bg-emerald-50 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-200"
+                            : "bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200"
+                        }`}
+                      >
+                        <span className="truncate font-semibold">
+                          {idx + 1}. {l.title} ({l.jp || 2} JP)
+                        </span>
+                        <span className="inline-flex items-center gap-1 font-bold shrink-0">
+                          {isDone ? (
+                            <>
+                              <CheckCircle2 size={12} className="text-emerald-600" /> Sudah
+                            </>
+                          ) : (
+                            <>
+                              <AlertTriangle size={12} className="text-amber-600" /> Belum
+                            </>
+                          )}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Session Selector */}
             <div className="mb-4">
               <label className="block text-xs font-bold text-oxford-700 dark:text-oxford-300 mb-1">
@@ -265,7 +331,7 @@ export default function MobileAttendanceFAB({
               >
                 {attendanceLessons.map((l, i) => (
                   <option key={l.id} value={l.id}>
-                    {i + 1}. {l.title} ({l.jp || 2} JP)
+                    {i + 1}. {l.title} ({l.jp || 2} JP) {attendedSet.has(l.id) ? "✓ Sudah" : "• Belum"}
                   </option>
                 ))}
               </select>

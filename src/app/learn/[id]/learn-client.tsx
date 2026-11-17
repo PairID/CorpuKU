@@ -1319,6 +1319,7 @@ export default function LearnClient({ course, courseContent, session, enrollment
                     courseId={course.id}
                     courseTitle={course.title}
                     lessons={allLessons}
+                    attendedLessonIds={Object.keys(completedLessons).filter((k) => completedLessons[k])}
                     onAttendanceSuccess={(att) => {
                         setAttendanceStats((prev) => ({
                             ...prev,

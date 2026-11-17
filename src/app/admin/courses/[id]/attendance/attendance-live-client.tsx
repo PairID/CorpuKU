@@ -16,11 +16,14 @@ import {
   Layers,
   Download,
   QrCode,
+  Edit3,
+  X,
 } from "lucide-react";
-import { getCourseAttendanceLive } from "@/app/actions/attendance";
+import { getCourseAttendanceLive, adminOverrideAttendance } from "@/app/actions/attendance";
 import { AdminSidebar } from "@/components/layout/AdminSidebar";
 import { exportExcel, type SpreadsheetRow } from "@/lib/excel-client";
 import CourseEnrollQrModal from "@/components/courses/CourseEnrollQrModal";
+import { showToast } from "@/lib/toast";
 
 interface AttendanceSessionItem {
   id: string;
@@ -35,6 +38,8 @@ interface ParticipantAttendanceItem {
   lessonId: string;
   jp: number;
   attendedAt: string;
+  overrideNote?: string | null;
+  overrideBy?: string | null;
 }
 
 interface ParticipantEvaluationItem {
@@ -91,6 +96,66 @@ export default function AttendanceLiveClient({
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [showEnrollQr, setShowEnrollQr] = useState(false);
+  const [overrideTarget, setOverrideTarget] = useState<{
+    userId: string;
+    userName: string;
+    userNip: string;
+    lessonId: string;
+    sessionTitle: string;
+    currentlyPresent: boolean;
+    existingNote?: string | null;
+  } | null>(null);
+  const [overrideAction, setOverrideAction] = useState<boolean>(true);
+  const [overrideNote, setOverrideNote] = useState("");
+  const [isSavingOverride, setIsSavingOverride] = useState(false);
+
+  const handleOpenOverride = (
+    p: ParticipantRow,
+    s: AttendanceSessionItem,
+    att: ParticipantAttendanceItem | undefined
+  ) => {
+    const currentlyPresent = Boolean(att);
+    setOverrideTarget({
+      userId: p.userId,
+      userName: p.name,
+      userNip: p.nip,
+      lessonId: s.id,
+      sessionTitle: s.title,
+      currentlyPresent,
+      existingNote: att?.overrideNote || null,
+    });
+    setOverrideAction(!currentlyPresent);
+    setOverrideNote(att?.overrideNote || "");
+  };
+
+  const handleSubmitOverride = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!overrideTarget || isSavingOverride) return;
+    if (overrideNote.trim().length < 3) {
+      showToast.warning("Catatan Wajib", "Harap tuliskan alasan/catatan override minimal 3 karakter.");
+      return;
+    }
+    setIsSavingOverride(true);
+    try {
+      const res = await adminOverrideAttendance({
+        courseId,
+        userId: overrideTarget.userId,
+        lessonId: overrideTarget.lessonId,
+        markPresent: overrideAction,
+        note: overrideNote.trim(),
+      });
+      if (res.success) {
+        showToast.success("Override Berhasil", res.message || "Status presensi diperbarui.");
+        setOverrideTarget(null);
+        setOverrideNote("");
+        await refreshData();
+      } else {
+        showToast.error("Gagal Override", res.error || "Gagal memperbarui status presensi.");
+      }
+    } finally {
+      setIsSavingOverride(false);
+    }
+  };
 
   const handleExportExcel = async () => {
     setIsExporting(true);
@@ -112,7 +177,7 @@ export default function AttendanceLiveClient({
         data.sessions.forEach((s, sIdx) => {
           const att = p.attendances.find((a) => a.lessonId === s.id);
           row[`Sesi ${sIdx + 1}: ${s.title}`] = att
-            ? `Hadir (${new Date(att.attendedAt).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })})`
+            ? `Hadir (${new Date(att.attendedAt).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })})${att.overrideNote ? ` [Override: ${att.overrideNote}]` : ""}`
             : "Belum Hadir";
         });
         row["Total JP Hadir"] = p.attendedJp;
@@ -478,20 +543,43 @@ export default function AttendanceLiveClient({
                           );
                           return (
                             <td key={s.id} className="p-4 whitespace-nowrap">
-                              {att ? (
-                                <div className="inline-flex flex-col">
-                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 text-xs font-bold w-fit">
-                                    <CheckCircle2 size={12} /> Hadir
-                                  </span>
-                                  <span className="text-[11px] text-oxford-500 dark:text-oxford-400 mt-1 font-mono">
-                                    {formatTime(att.attendedAt)}
-                                  </span>
-                                </div>
-                              ) : (
-                                <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-oxford-100 dark:bg-oxford-900 text-oxford-500 dark:text-oxford-400 text-xs font-medium">
-                                  Belum
-                                </span>
-                              )}
+                              <button
+                                type="button"
+                                onClick={() => handleOpenOverride(p, s, att)}
+                                title={att?.overrideNote ? `Override Manual: ${att.overrideNote} (Klik untuk ubah)` : "Klik untuk Manual Override presensi"}
+                                className="text-left group/cell rounded-lg p-1 -m-1 hover:bg-oxford-100/70 dark:hover:bg-oxford-800/60 transition-colors"
+                              >
+                                {att ? (
+                                  <div className="inline-flex flex-col">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 text-xs font-bold w-fit">
+                                        <CheckCircle2 size={12} /> Hadir
+                                      </span>
+                                      {att.overrideNote && (
+                                        <span className="px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 text-[10px] font-bold">
+                                          Manual
+                                        </span>
+                                      )}
+                                      <Edit3 size={12} className="text-oxford-400 opacity-0 group-hover/cell:opacity-100 transition-opacity" />
+                                    </div>
+                                    <span className="text-[11px] text-oxford-500 dark:text-oxford-400 mt-1 font-mono">
+                                      {formatTime(att.attendedAt)}
+                                    </span>
+                                    {att.overrideNote && (
+                                      <span className="text-[10px] text-amber-700 dark:text-amber-300 max-w-[160px] truncate">
+                                        {att.overrideNote}
+                                      </span>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div className="inline-flex items-center gap-1.5">
+                                    <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-oxford-100 dark:bg-oxford-900 text-oxford-500 dark:text-oxford-400 text-xs font-medium group-hover/cell:border group-hover/cell:border-gold-500">
+                                      Belum
+                                    </span>
+                                    <Edit3 size={12} className="text-oxford-400 opacity-0 group-hover/cell:opacity-100 transition-opacity" />
+                                  </div>
+                                )}
+                              </button>
                             </td>
                           );
                         })}
@@ -551,6 +639,91 @@ export default function AttendanceLiveClient({
           courseTitle={data.course.title}
           onClose={() => setShowEnrollQr(false)}
         />
+      )}
+
+      {overrideTarget && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-[#161B2A] border border-oxford-200 dark:border-oxford-700 rounded-2xl max-w-md w-full p-6 shadow-2xl relative">
+            <button
+              type="button"
+              onClick={() => setOverrideTarget(null)}
+              className="absolute top-4 right-4 p-1.5 rounded-lg text-oxford-500 hover:bg-oxford-100 dark:hover:bg-oxford-800"
+            >
+              <X size={18} />
+            </button>
+
+            <h3 className="text-base font-bold text-oxford-950 dark:text-white mb-1">
+              Manual Override Presensi
+            </h3>
+            <p className="text-xs text-oxford-500 dark:text-oxford-400 mb-4">
+              {overrideTarget.userName} ({overrideTarget.userNip}) &bull; {overrideTarget.sessionTitle}
+            </p>
+
+            <form onSubmit={handleSubmitOverride} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-oxford-700 dark:text-oxford-200 mb-1.5">
+                  Tindakan Status Kehadiran
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setOverrideAction(true)}
+                    className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all ${
+                      overrideAction
+                        ? "bg-emerald-600 text-white border-emerald-600 shadow-sm"
+                        : "bg-oxford-50 dark:bg-oxford-900 text-oxford-700 dark:text-oxford-300 border-oxford-200 dark:border-oxford-700"
+                    }`}
+                  >
+                    Tandai Hadir
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setOverrideAction(false)}
+                    className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all ${
+                      !overrideAction
+                        ? "bg-rose-600 text-white border-rose-600 shadow-sm"
+                        : "bg-oxford-50 dark:bg-oxford-900 text-oxford-700 dark:text-oxford-300 border-oxford-200 dark:border-oxford-700"
+                    }`}
+                  >
+                    Batalkan Hadir
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-oxford-700 dark:text-oxford-200 mb-1">
+                  Catatan / Alasan Override <span className="text-crimson-500">*</span>
+                </label>
+                <textarea
+                  rows={3}
+                  required
+                  minLength={3}
+                  value={overrideNote}
+                  onChange={(e) => setOverrideNote(e.target.value)}
+                  placeholder="Contoh: Peserta hadir fisik di kelas namun kendala kamera HP saat scan QR."
+                  className="w-full px-3 py-2 bg-oxford-50 dark:bg-oxford-900 border border-oxford-200 dark:border-oxford-700 rounded-xl text-xs text-oxford-900 dark:text-white focus:outline-none focus:border-gold-500"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setOverrideTarget(null)}
+                  className="px-4 py-2 rounded-xl border border-oxford-200 dark:border-oxford-700 text-xs font-bold text-oxford-700 dark:text-oxford-200"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingOverride || overrideNote.trim().length < 3}
+                  className="px-4 py-2 rounded-xl bg-gold-500 hover:bg-gold-400 text-oxford-950 text-xs font-bold disabled:opacity-50"
+                >
+                  {isSavingOverride ? "Menyimpan..." : "Simpan Override"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );
