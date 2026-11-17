@@ -1079,7 +1079,7 @@ export default function LearnClient({ course, courseContent, session, enrollment
                             </div>
                         </div>
                     ) : activeLesson ? (
-                        <div className="max-w-4xl mx-auto w-full p-4 md:p-8 flex-1 flex flex-col">
+                        <div className="max-w-4xl mx-auto w-full p-4 pb-28 md:p-8 flex-1 flex flex-col">
                             {activeLesson.type === 'quiz' ? (
                                 // Quiz content
                                 <div className="flex-1 flex flex-col justify-start pt-2">
