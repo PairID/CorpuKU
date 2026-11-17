@@ -1337,10 +1337,10 @@ export default function LearnClient({ course, courseContent, session, enrollment
                     onClick={(e) => {
                         if (e.target === e.currentTarget) setShowEvaluationWizard(false);
                     }}
-                    className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-start sm:items-center justify-center p-3 sm:p-4 overflow-y-auto"
+                    className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-start justify-center p-3 sm:p-6 overflow-y-auto"
                 >
-                    <div className="max-w-3xl w-full my-4 sm:my-8 relative animate-in fade-in zoom-in-95 duration-200">
-                        <div className="sticky top-2 z-20 flex justify-end mb-2 pointer-events-none">
+                    <div className="max-w-3xl w-full my-auto relative animate-in fade-in zoom-in-95 duration-200">
+                        <div className="sticky top-0 z-20 flex justify-end pb-2 pointer-events-none">
                             <button
                                 type="button"
                                 onClick={() => setShowEvaluationWizard(false)}
