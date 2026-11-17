@@ -20,7 +20,7 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export function ThemeProvider({
     children,
-    defaultTheme = "system",
+    defaultTheme = "light",
     storageKey = "corpuku-theme",
 }: ThemeProviderProps) {
     const [theme, setTheme] = useState<Theme>(defaultTheme);
@@ -28,8 +28,12 @@ export function ThemeProvider({
 
     useEffect(() => {
         const storedTheme = localStorage.getItem(storageKey);
-        if (storedTheme === "light" || storedTheme === "dark" || storedTheme === "system") {
+        if (storedTheme === "light" || storedTheme === "dark") {
             setTheme(storedTheme);
+        } else if (storedTheme === "system") {
+            setTheme("system");
+        } else {
+            setTheme("light");
         }
     }, [storageKey]);
 

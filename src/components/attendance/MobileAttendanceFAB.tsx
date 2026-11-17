@@ -19,6 +19,8 @@ interface MobileAttendanceFABProps {
   courseTitle?: string;
   lessons?: LessonOption[];
   attendedLessonIds?: string[];
+  isOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
   onAttendanceSuccess?: (data: {
     attendedJp: number;
     totalClassJp: number;
@@ -32,10 +34,17 @@ export default function MobileAttendanceFAB({
   courseTitle,
   lessons = [],
   attendedLessonIds = [],
+  isOpen: propIsOpen,
+  onOpenChange,
   onAttendanceSuccess,
 }: MobileAttendanceFABProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<"camera" | "upload" | "code">("camera");
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isOpen = propIsOpen !== undefined ? propIsOpen : internalOpen;
+  const setIsOpen = (val: boolean) => {
+    if (onOpenChange) onOpenChange(val);
+    setInternalOpen(val);
+  };
+  const [activeTab, setActiveTab] = useState<"camera" | "upload" | "code">("code");
   const [attendedSet, setAttendedSet] = useState<Set<string>>(() => new Set(attendedLessonIds));
   const [attendanceCode, setAttendanceCode] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -254,19 +263,24 @@ export default function MobileAttendanceFAB({
 
   return (
     <>
-      {/* Persistent Bottom-Right Floating Action Button (Mobile Only) */}
-      <div className="fixed bottom-5 right-4 z-50 md:hidden pointer-events-auto">
+      {/* Persistent Bottom-Right Floating Action Button (Mobile & Laptop/Desktop) */}
+      <div className="fixed bottom-5 right-4 md:bottom-6 md:right-6 z-40 pointer-events-auto">
         <button
           type="button"
           onClick={() => setIsOpen(true)}
-          className="relative w-14 h-14 flex items-center justify-center bg-gold-500 hover:bg-gold-400 text-oxford-950 rounded-full shadow-[0_10px_25px_-5px_rgba(239,177,25,0.5)] active:scale-95 transition-all group"
+          className="relative flex items-center gap-2 px-3.5 py-3 md:px-4 md:py-3 bg-gold-500 hover:bg-gold-400 text-oxford-950 font-bold text-xs rounded-full shadow-[0_10px_25px_-5px_rgba(239,177,25,0.5)] active:scale-95 transition-all group border border-gold-300"
           aria-label="Scan QR Presensi Materi"
-          title="Scan QR Presensi"
+          title="Buka form presensi materi (Scan QR / Upload Foto / Input Token)"
         >
-          <QrCode size={26} className="stroke-[2.25] group-hover:scale-110 transition-transform" />
-          {pendingAttendanceCount > 0 && (
-            <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 rounded-full bg-crimson-600 text-white text-[10px] font-extrabold flex items-center justify-center shadow">
-              {pendingAttendanceCount}
+          <QrCode size={20} className="stroke-[2.25] group-hover:scale-110 transition-transform shrink-0" />
+          <span className="hidden sm:inline font-sans">Presensi Kehadiran</span>
+          {pendingAttendanceCount > 0 ? (
+            <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-crimson-600 text-white text-[10px] font-extrabold flex items-center justify-center shadow">
+              {pendingAttendanceCount} Sesi Belum
+            </span>
+          ) : (
+            <span className="hidden md:inline-flex items-center text-[10px] text-emerald-900 font-extrabold bg-emerald-300/80 px-2 py-0.5 rounded-full">
+              Lengkap
             </span>
           )}
         </button>
@@ -351,39 +365,45 @@ export default function MobileAttendanceFAB({
             <div className="grid grid-cols-3 gap-1 bg-oxford-100 dark:bg-oxford-900/80 p-1 rounded-xl mb-4 text-xs font-bold">
               <button
                 type="button"
-                onClick={() => setActiveTab("camera")}
-                className={`py-2 rounded-lg flex items-center justify-center gap-1.5 transition-all ${
-                  activeTab === "camera"
-                    ? "bg-white dark:bg-[#161B2A] text-oxford-950 dark:text-white shadow-xs"
-                    : "text-oxford-500 dark:text-oxford-400 hover:text-oxford-900"
-                }`}
-              >
-                <Camera size={14} />
-                <span>Kamera</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab("upload")}
-                className={`py-2 rounded-lg flex items-center justify-center gap-1.5 transition-all ${
-                  activeTab === "upload"
-                    ? "bg-white dark:bg-[#161B2A] text-oxford-950 dark:text-white shadow-xs"
-                    : "text-oxford-500 dark:text-oxford-400 hover:text-oxford-900"
-                }`}
-              >
-                <Upload size={14} />
-                <span>Upload QR</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab("code")}
+                onClick={() => {
+                  stopCamera();
+                  setActiveTab("code");
+                }}
                 className={`py-2 rounded-lg flex items-center justify-center gap-1.5 transition-all ${
                   activeTab === "code"
                     ? "bg-white dark:bg-[#161B2A] text-oxford-950 dark:text-white shadow-xs"
-                    : "text-oxford-500 dark:text-oxford-400 hover:text-oxford-900"
+                    : "text-oxford-500 dark:text-oxford-400 hover:text-oxford-900 dark:hover:text-white"
                 }`}
               >
                 <Keyboard size={14} />
                 <span>Input Token</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab("camera")}
+                className={`py-2 rounded-lg flex items-center justify-center gap-1.5 transition-all ${
+                  activeTab === "camera"
+                    ? "bg-white dark:bg-[#161B2A] text-oxford-950 dark:text-white shadow-xs"
+                    : "text-oxford-500 dark:text-oxford-400 hover:text-oxford-900 dark:hover:text-white"
+                }`}
+              >
+                <Camera size={14} />
+                <span>Kamera / Webcam</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  stopCamera();
+                  setActiveTab("upload");
+                }}
+                className={`py-2 rounded-lg flex items-center justify-center gap-1.5 transition-all ${
+                  activeTab === "upload"
+                    ? "bg-white dark:bg-[#161B2A] text-oxford-950 dark:text-white shadow-xs"
+                    : "text-oxford-500 dark:text-oxford-400 hover:text-oxford-900 dark:hover:text-white"
+                }`}
+              >
+                <Upload size={14} />
+                <span>Upload QR</span>
               </button>
             </div>
 

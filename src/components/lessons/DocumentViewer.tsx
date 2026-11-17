@@ -150,7 +150,7 @@ export default function DocumentViewer({ url, title }: DocumentViewerProps) {
             <button
               type="button"
               onClick={() => setUseGoogleViewerFallback((prev) => !prev)}
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border border-oxford-200 dark:border-oxford-700 bg-white dark:bg-oxford-800 text-oxford-700 dark:text-oxford-200 hover:bg-oxford-50"
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border border-oxford-200 dark:border-oxford-700 bg-white dark:bg-oxford-800 text-oxford-700 dark:text-white hover:bg-oxford-50 dark:hover:bg-oxford-700 transition-colors"
               title="Beralih antara mode viewer native & Google Docs viewer"
             >
               <RefreshCw size={12} />
@@ -164,7 +164,7 @@ export default function DocumentViewer({ url, title }: DocumentViewerProps) {
             href={parsed.originalUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border border-oxford-200 dark:border-oxford-700 bg-white dark:bg-oxford-800 text-oxford-800 dark:text-oxford-100 hover:bg-oxford-100 dark:hover:bg-oxford-700 transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border border-oxford-200 dark:border-oxford-700 bg-white dark:bg-oxford-800 text-oxford-900 dark:text-white hover:bg-oxford-100 dark:hover:bg-oxford-700 transition-colors shadow-xs"
             title="Buka file di tab baru"
           >
             <ExternalLink size={13} />
@@ -184,7 +184,7 @@ export default function DocumentViewer({ url, title }: DocumentViewerProps) {
           <button
             type="button"
             onClick={() => setIsFullscreen((prev) => !prev)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-oxford-900 hover:bg-oxford-800 text-white transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-oxford-900 hover:bg-oxford-800 dark:bg-oxford-800 dark:hover:bg-oxford-700 dark:border dark:border-oxford-600 text-white transition-colors"
             title={isFullscreen ? "Keluar layar penuh" : "Tampilkan layar penuh"}
           >
             {isFullscreen ? <Minimize2 size={13} /> : <Maximize2 size={13} />}

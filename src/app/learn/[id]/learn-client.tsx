@@ -14,6 +14,7 @@ import DataVerificationModal from "@/components/profile/DataVerificationModal";
 import MobileAttendanceFAB from "@/components/attendance/MobileAttendanceFAB";
 import FourStageEvaluationWizard from "@/components/evaluations/FourStageEvaluationWizard";
 import DocumentViewer from "@/components/lessons/DocumentViewer";
+import ThemeToggle from "@/components/ThemeToggle";
 import { CourseEvaluationConfig } from "@/lib/skm-constants";
 
 interface Lesson {
@@ -161,6 +162,7 @@ export default function LearnClient({ course, courseContent, session, enrollment
     const [isVerificationModalOpen, setIsVerificationModalOpen] = useState(
         Boolean(isClassical && !enrollment?.statementAccepted && session.user.role === "student")
     );
+    const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
     const [showEvaluationWizard, setShowEvaluationWizard] = useState(false);
     const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
     const [requestedEvalStage, setRequestedEvalStage] = useState<"narasumber" | "organizer" | "understanding" | "skm" | null>(null);
@@ -345,6 +347,9 @@ export default function LearnClient({ course, courseContent, session, enrollment
     
     // Navigation helpers
     const allLessons = courseContent.flatMap(m => m.lessons);
+    const pendingAttendanceCount = isClassical
+        ? allLessons.filter((l) => l.hasAttendance !== false && !completedLessons[l.id]).length
+        : 0;
     const currentLessonIndex = allLessons.findIndex(l => l.id === activeLesson?.id);
     const nextLesson = allLessons[currentLessonIndex + 1];
     const prevLesson = allLessons[currentLessonIndex - 1];
@@ -838,26 +843,50 @@ export default function LearnClient({ course, courseContent, session, enrollment
                 </Link>
                 <div className="w-px h-6 bg-oxford-800 mx-4 hidden sm:block"></div>
                 <h1 className="text-sm md:text-base font-serif font-bold truncate flex-1">{activeLesson ? cleanLessonTitle(activeLesson.title, activeLesson.type) : course.title}</h1>
+                
+                {/* Presensi Kehadiran Button (Direct shortcut for laptop / desktop) */}
+                {isClassical && (
+                    <button
+                        type="button"
+                        onClick={() => setIsAttendanceModalOpen(true)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-gold-500 hover:bg-gold-400 text-oxford-950 transition-colors shadow-xs shrink-0 active:scale-95"
+                        title="Isi presensi materi (Input Token / Scan QR)"
+                    >
+                        <QrCode size={14} className="stroke-[2.5]" />
+                        <span className="hidden sm:inline">Presensi</span>
+                        {pendingAttendanceCount > 0 && (
+                            <span className="px-1.5 py-0.2 rounded-full bg-crimson-600 text-white text-[10px] font-extrabold">
+                                {pendingAttendanceCount}
+                            </span>
+                        )}
+                    </button>
+                )}
+
                 {enrollment?.id && (
                     <Link
                         href={`/dashboard/courses/${enrollment.id}/progress`}
-                        className="hidden sm:inline-flex items-center gap-2 rounded-full border border-oxford-700 px-3 py-1.5 text-xs font-bold text-oxford-200 transition-colors hover:border-gold-500 hover:text-gold-400"
+                        className="hidden sm:inline-flex items-center gap-2 rounded-full border border-oxford-700 px-3 py-1.5 text-xs font-bold text-oxford-200 transition-colors hover:border-gold-500 hover:text-gold-400 shrink-0"
                     >
                         <ClipboardCheck size={15} /> Progres &amp; Sertifikat
                     </Link>
                 )}
-                <div className="flex items-center ml-4">
-                    <div className="text-right mr-3 hidden md:block">
-                        <div className="text-xs text-oxford-400 font-sans">Progress</div>
+
+                <div className="flex items-center ml-2 md:ml-4 gap-3 shrink-0">
+                    <div className="text-right mr-1 hidden md:block">
+                        <div className="text-[11px] text-oxford-400 font-sans">Progress</div>
                         <div className="text-sm font-bold font-sans">{progressPercent}%</div>
                     </div>
-                    <div className="w-24 h-2 bg-oxford-800 rounded-full overflow-hidden">
+                    <div className="w-20 md:w-24 h-2 bg-oxford-800 rounded-full overflow-hidden hidden sm:block">
                         <motion.div
                             className="h-full bg-gold-500"
                             initial={{ width: 0 }}
                             animate={{ width: `${progressPercent}%` }}
                             transition={{ duration: 0.5 }}
                         />
+                    </div>
+                    {/* Theme Toggle Switch - Always on top */}
+                    <div className="shrink-0">
+                        <ThemeToggle />
                     </div>
                 </div>
             </div>
@@ -1139,6 +1168,56 @@ export default function LearnClient({ course, courseContent, session, enrollment
                                         </h1>
                                     </div>
 
+                                    {/* Presensi Kehadiran Sesi (Khusus Pelatihan Klasikal) */}
+                                    {isClassical && activeLesson.hasAttendance !== false && (
+                                        <div className={`mb-6 p-4 md:p-5 rounded-2xl border flex flex-col sm:flex-row items-center justify-between gap-4 transition-all shadow-xs ${
+                                            completedLessons[activeLesson.id]
+                                                ? "bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200"
+                                                : "bg-amber-50/80 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200"
+                                        }`}>
+                                            <div className="flex items-center gap-3.5 w-full sm:w-auto">
+                                                <div className={`p-3 rounded-xl shrink-0 ${
+                                                    completedLessons[activeLesson.id]
+                                                        ? "bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300"
+                                                        : "bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300"
+                                                }`}>
+                                                    <QrCode size={22} className="stroke-[2.25]" />
+                                                </div>
+                                                <div>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-[11px] font-bold uppercase tracking-wider">
+                                                            Presensi Sesi Materi ({activeLesson.jp || 2} JP)
+                                                        </span>
+                                                        {completedLessons[activeLesson.id] ? (
+                                                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50 px-2 py-0.5 rounded-full">
+                                                                <CheckCircle2 size={12} /> Hadir
+                                                            </span>
+                                                        ) : (
+                                                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/50 px-2 py-0.5 rounded-full">
+                                                                Belum Presensi
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <p className="text-xs mt-0.5 text-oxford-600 dark:text-oxford-300 font-sans">
+                                                        {completedLessons[activeLesson.id]
+                                                            ? "Kehadiran Anda pada sesi ini telah tercatat dan tervalidasi."
+                                                            : "Bagi pengguna laptop, Anda bisa memasukkan kode token sesi atau menggunakan kamera webcam / upload foto QR."}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            {!completedLessons[activeLesson.id] && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setIsAttendanceModalOpen(true)}
+                                                    className="w-full sm:w-auto px-5 py-2.5 bg-gradient-to-r from-gold-500 to-gold-400 hover:from-gold-400 hover:to-gold-300 text-oxford-950 font-bold text-xs rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 shrink-0 active:scale-95"
+                                                >
+                                                    <QrCode size={16} />
+                                                    <span>Isi Presensi Sesi Ini</span>
+                                                </button>
+                                            )}
+                                        </div>
+                                    )}
+
                                     {/* Video Content */}
                                     {activeLesson.type === 'video' && activeLesson.videoUrl && (
                                         <div className="mb-8 md:mb-10 rounded-xl md:rounded-2xl overflow-hidden shadow-lg bg-black aspect-video relative">
@@ -1357,13 +1436,15 @@ export default function LearnClient({ course, courseContent, session, enrollment
                 }}
             />
 
-            {/* Mobile Persistent Floating Action Button untuk Presensi QR */}
+            {/* Persistent Action Widget untuk Presensi QR / Token (Mobile & Laptop) */}
             {isClassical && !isVerificationModalOpen && !showEvaluationWizard && (
                 <MobileAttendanceFAB
                     courseId={course.id}
                     courseTitle={course.title}
                     lessons={allLessons}
                     attendedLessonIds={Object.keys(completedLessons).filter((k) => completedLessons[k])}
+                    isOpen={isAttendanceModalOpen}
+                    onOpenChange={setIsAttendanceModalOpen}
                     onAttendanceSuccess={(att) => {
                         setAttendanceStats((prev) => ({
                             ...prev,

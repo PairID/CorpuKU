@@ -22,7 +22,7 @@ export default function RootLayout({
       <body
         className="font-sans bg-background text-foreground antialiased min-h-screen flex flex-col"
       >
-        <ThemeProvider storageKey="corpuku-theme">
+        <ThemeProvider defaultTheme="light" storageKey="corpuku-theme">
           <AppToaster />
           <SessionIdleTracker />
           <Header />
