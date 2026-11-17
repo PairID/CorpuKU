@@ -31,6 +31,7 @@ interface AdminCourseTableProps {
 export default function AdminCourseTable({ courses, searchQuery, statusFilter, basePath = "/admin" }: AdminCourseTableProps) {
     const [deletingId, setDeletingId] = useState<string | null>(null);
     const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+    const [deletedIds, setDeletedIds] = useState<string[]>([]);
     const [qrCourse, setQrCourse] = useState<{ id: string; title: string } | null>(null);
     const [attendanceQrCourse, setAttendanceQrCourse] = useState<{ id: string; title: string } | null>(null);
     const router = useRouter();
@@ -38,18 +39,20 @@ export default function AdminCourseTable({ courses, searchQuery, statusFilter, b
     // Client-side filter
     const filteredCourses = useMemo(() => {
         return courses.filter(c => {
+            if (deletedIds.includes(c.id)) return false;
             const matchesSearch = searchQuery === "" ||
                 c.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 (c.instructorName || "").toLowerCase().includes(searchQuery.toLowerCase());
             const matchesStatus = statusFilter === "all" || c.status === statusFilter;
             return matchesSearch && matchesStatus;
         });
-    }, [courses, searchQuery, statusFilter]);
+    }, [courses, deletedIds, searchQuery, statusFilter]);
 
     const handleDelete = async (courseId: string) => {
         setDeletingId(courseId);
         const result = await deleteCourse(courseId);
         if (result.success) {
+            setDeletedIds(prev => [...prev, courseId]);
             setConfirmDeleteId(null);
             showToast.success("Kursus Berhasil Dihapus", "Data kursus telah dihapus dari sistem.");
             router.refresh();
