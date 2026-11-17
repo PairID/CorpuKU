@@ -951,7 +951,10 @@ export async function deleteCourse(id: string) {
         if (course[0]?.thumbnailUrl) {
             await deleteAsset(course[0].thumbnailUrl);
         }
-        
+
+        // Remove RESTRICT foreign-key dependents before deleting the course
+        await sql`DELETE FROM learning_path_items WHERE course_id = ${id}`;
+        await sql`DELETE FROM issued_course_certificates WHERE course_id = ${id}`;
         await sql`DELETE FROM courses WHERE id = ${id}`;
         return { success: true };
     } catch (err) {
