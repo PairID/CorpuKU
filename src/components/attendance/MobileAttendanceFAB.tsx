@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { QrCode, Camera, Upload, Keyboard, X, Loader2, CheckCircle2, AlertTriangle, Sparkles } from "lucide-react";
+import jsQR from "jsqr";
+import { QrCode, Camera, Upload, Keyboard, X, Loader2, CheckCircle2, AlertTriangle } from "lucide-react";
 import { submitMaterialAttendance, getMaterialAttendances } from "@/app/actions/attendance";
 import { showToast } from "@/lib/toast";
 
@@ -36,17 +37,15 @@ export default function MobileAttendanceFAB({
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"camera" | "upload" | "code">("camera");
   const [attendedSet, setAttendedSet] = useState<Set<string>>(() => new Set(attendedLessonIds));
-  const [selectedLessonId, setSelectedLessonId] = useState<string>(
-    lessons.find((l) => l.hasAttendance !== false)?.id || lessons[0]?.id || ""
-  );
   const [attendanceCode, setAttendanceCode] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isCameraActive, setIsCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const scanLockRef = useRef(false);
 
   // Filter lessons that require attendance
   const attendanceLessons = lessons.filter((l) => l.hasAttendance !== false);
@@ -64,124 +63,16 @@ export default function MobileAttendanceFAB({
     };
   }, [courseId]);
 
-  // Stop camera stream cleanly
   const stopCamera = () => {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     }
-    setIsCameraActive(false);
   };
 
-  // Start camera stream when tab is "camera" and modal is open
-  useEffect(() => {
-    if (!isOpen || activeTab !== "camera") {
-      stopCamera();
-      return;
-    }
-
-    let isMounted = true;
-    const startCamera = async () => {
-      setCameraError(null);
-      try {
-        if (!navigator.mediaDevices?.getUserMedia) {
-          throw new Error("Kamera tidak didukung pada browser ini.");
-        }
-
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "environment" },
-        });
-
-        if (!isMounted) {
-          stream.getTracks().forEach((t) => t.stop());
-          return;
-        }
-
-        streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.play();
-        }
-        setIsCameraActive(true);
-
-        // Native BarcodeDetector API if available
-        if ("BarcodeDetector" in window) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const barcodeDetector = new (window as any).BarcodeDetector({ formats: ["qr_code"] });
-          const intervalId = setInterval(async () => {
-            if (!videoRef.current || !streamRef.current) {
-              clearInterval(intervalId);
-              return;
-            }
-            try {
-              const barcodes = await barcodeDetector.detect(videoRef.current);
-              if (barcodes.length > 0 && barcodes[0].rawValue) {
-                clearInterval(intervalId);
-                handleQrScanned(barcodes[0].rawValue);
-              }
-            } catch {
-              // frame detection pass
-            }
-          }, 400);
-        }
-      } catch (err: unknown) {
-        if (isMounted) {
-          const msg = err instanceof Error ? err.message : "Tidak dapat mengakses kamera.";
-          setCameraError(msg);
-          setIsCameraActive(false);
-        }
-      }
-    };
-
-    startCamera();
-
-    return () => {
-      isMounted = false;
-      stopCamera();
-    };
-  }, [isOpen, activeTab]);
-
-  const handleQrScanned = async (rawCode: string) => {
-    let targetLessonId = selectedLessonId;
-    let codeStr = rawCode.trim();
-
-    // Check if rawCode is JSON with courseId, lessonId, code
-    if (codeStr.startsWith("{") && codeStr.endsWith("}")) {
-      try {
-        const parsed = JSON.parse(codeStr);
-        if (parsed.lessonId) targetLessonId = parsed.lessonId;
-        if (parsed.code) codeStr = parsed.code;
-      } catch {
-        // fallback to raw string
-      }
-    }
-
-    await executeAttendance(targetLessonId, codeStr);
-  };
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    // Simulate / decode QR image
-    // In headless test or image upload fallback, filename or prompt can supply test code
-    showToast.info("Memproses Gambar QR", "Menganalisis barcode dari gambar...");
-    const reader = new FileReader();
-    reader.onload = () => {
-      // Prompt user or use input
-      setActiveTab("code");
-      showToast.info("Pindai Kode Selesai", "Masukkan atau konfirmasi token presensi di bawah ini.");
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const executeAttendance = async (lessonId: string, code: string) => {
-    if (!lessonId) {
-      showToast.warning("Pilih Sesi Materi", "Silakan pilih sesi materi yang dihadiri.");
-      return;
-    }
-    if (!code.trim()) {
-      showToast.warning("Kode Presensi Kosong", "Masukkan kode QR presensi sesi materi.");
+  const executeAttendance = async (rawCode: string, explicitLessonId?: string) => {
+    if (!rawCode.trim()) {
+      showToast.warning("Kode Presensi Kosong", "Scan QR Code atau masukkan token presensi.");
       return;
     }
 
@@ -189,12 +80,15 @@ export default function MobileAttendanceFAB({
     try {
       const res = await submitMaterialAttendance({
         courseId,
-        lessonId,
-        attendanceCode: code.trim(),
+        lessonId: explicitLessonId,
+        attendanceCode: rawCode.trim(),
       });
 
       if (res.success) {
-        setAttendedSet((prev) => new Set(prev).add(lessonId));
+        const matchedLessonId = res.lessonId || explicitLessonId || "";
+        if (matchedLessonId) {
+          setAttendedSet((prev) => new Set(prev).add(matchedLessonId));
+        }
         showToast.success("Presensi Berhasil! 🎉", res.message || "Presensi Anda telah dicatat.");
         stopCamera();
         setIsOpen(false);
@@ -205,23 +99,157 @@ export default function MobileAttendanceFAB({
             attendedJp: res.attendedJp,
             totalClassJp: res.totalClassJp || 0,
             attendancePercentage: res.attendancePercentage || 0,
-            lessonId,
+            lessonId: matchedLessonId,
           });
         }
       } else {
         showToast.error("Presensi Gagal", res.error || "Kode QR presensi tidak valid.");
+        scanLockRef.current = false;
       }
     } catch (err: unknown) {
       console.error("Attendance submission error:", err);
       showToast.error("Kesalahan Sistem", "Gagal menghubungi server presensi.");
+      scanLockRef.current = false;
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleManualSubmit = (e: React.FormEvent) => {
+  const handleQrScanned = async (rawCode: string) => {
+    if (scanLockRef.current) return;
+    scanLockRef.current = true;
+
+    let targetLessonId: string | undefined;
+    let codeStr = rawCode.trim();
+
+    if (codeStr.startsWith("{") && codeStr.endsWith("}")) {
+      try {
+        const parsed = JSON.parse(codeStr);
+        if (parsed.lessonId) targetLessonId = String(parsed.lessonId);
+        if (parsed.code) codeStr = String(parsed.code);
+      } catch {
+        // fallback to raw string
+      }
+    }
+
+    await executeAttendance(codeStr, targetLessonId);
+  };
+
+  // Start camera & cross-browser jsQR frame loop (works on iOS Safari/Brave, Android, Desktop)
+  useEffect(() => {
+    if (!isOpen || activeTab !== "camera") {
+      stopCamera();
+      scanLockRef.current = false;
+      return;
+    }
+
+    let isMounted = true;
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+    scanLockRef.current = false;
+
+    const startCamera = async () => {
+      setCameraError(null);
+      try {
+        if (!navigator.mediaDevices?.getUserMedia) {
+          throw new Error("Kamera tidak didukung pada browser ini.");
+        }
+
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+          audio: false,
+        });
+
+        if (!isMounted) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.setAttribute("playsinline", "true");
+          await videoRef.current.play().catch(() => {});
+        }
+
+        intervalId = setInterval(() => {
+          const video = videoRef.current;
+          if (!video || !streamRef.current || scanLockRef.current) return;
+          if (video.readyState < 2 || video.videoWidth === 0 || video.videoHeight === 0) return;
+
+          const canvas = canvasRef.current || document.createElement("canvas");
+          canvasRef.current = canvas;
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          const ctx = canvas.getContext("2d", { willReadFrequently: true });
+          if (!ctx) return;
+
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const decoded = jsQR(imageData.data, imageData.width, imageData.height, {
+            inversionAttempts: "dontInvert",
+          });
+
+          if (decoded?.data) {
+            if (intervalId) clearInterval(intervalId);
+            void handleQrScanned(decoded.data);
+          }
+        }, 250);
+      } catch (err: unknown) {
+        if (isMounted) {
+          const msg = err instanceof Error ? err.message : "Tidak dapat mengakses kamera.";
+          setCameraError(msg);
+        }
+      }
+    };
+
+    void startCamera();
+
+    return () => {
+      isMounted = false;
+      if (intervalId) clearInterval(intervalId);
+      stopCamera();
+    };
+  }, [isOpen, activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+        ctx.drawImage(img, 0, 0);
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const decoded = jsQR(imageData.data, imageData.width, imageData.height);
+        if (decoded?.data) {
+          void handleQrScanned(decoded.data);
+        } else {
+          setActiveTab("code");
+          showToast.warning(
+            "QR Tidak Terbaca",
+            "Gambar QR tidak terbaca jelas. Silakan masukkan token presensi secara manual."
+          );
+        }
+      };
+      img.src = String(reader.result);
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
+
+  const handleManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    executeAttendance(selectedLessonId, attendanceCode);
+    await executeAttendance(attendanceCode);
   };
 
   return (
@@ -319,24 +347,6 @@ export default function MobileAttendanceFAB({
               </div>
             )}
 
-            {/* Session Selector */}
-            <div className="mb-4">
-              <label className="block text-xs font-bold text-oxford-700 dark:text-oxford-300 mb-1">
-                Pilih Sesi Materi Pelatihan:
-              </label>
-              <select
-                value={selectedLessonId}
-                onChange={(e) => setSelectedLessonId(e.target.value)}
-                className="w-full px-3 py-2 bg-oxford-50 dark:bg-oxford-900 border border-oxford-200 dark:border-oxford-700 rounded-xl text-xs font-medium text-oxford-900 dark:text-white focus:outline-none focus:border-gold-500"
-              >
-                {attendanceLessons.map((l, i) => (
-                  <option key={l.id} value={l.id}>
-                    {i + 1}. {l.title} ({l.jp || 2} JP) {attendedSet.has(l.id) ? "✓ Sudah" : "• Belum"}
-                  </option>
-                ))}
-              </select>
-            </div>
-
             {/* Multi-Mode Tabs */}
             <div className="grid grid-cols-3 gap-1 bg-oxford-100 dark:bg-oxford-900/80 p-1 rounded-xl mb-4 text-xs font-bold">
               <button
@@ -384,6 +394,7 @@ export default function MobileAttendanceFAB({
                   <video
                     ref={videoRef}
                     playsInline
+                    autoPlay
                     muted
                     className="w-full h-full object-cover"
                   />
@@ -396,6 +407,12 @@ export default function MobileAttendanceFAB({
                       <div className="absolute bottom-0 right-0 w-4 h-4 border-b-4 border-r-4 border-gold-400 -mb-1 -mr-1"></div>
                     </div>
                   </div>
+                  {isSubmitting && (
+                    <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center text-white text-xs gap-2">
+                      <Loader2 size={28} className="animate-spin text-gold-400" />
+                      <span>Mencatat presensi...</span>
+                    </div>
+                  )}
                   {cameraError && (
                     <div className="absolute inset-0 bg-oxford-950/90 p-4 flex flex-col items-center justify-center text-center text-xs text-oxford-300">
                       <AlertTriangle size={28} className="text-amber-400 mb-2" />
@@ -412,7 +429,7 @@ export default function MobileAttendanceFAB({
                   )}
                 </div>
                 <p className="text-[11px] text-center text-oxford-500 dark:text-oxford-400">
-                  Arahkan kamera smartphone ke QR Code yang ditampilkan narasumber/panitia di layar presentasi.
+                  Arahkan kamera ke QR Code dari Admin. Sesi/modul akan terdeteksi otomatis.
                 </p>
               </div>
             )}
@@ -434,7 +451,6 @@ export default function MobileAttendanceFAB({
                     ref={fileInputRef}
                     type="file"
                     accept="image/*"
-                    capture="environment"
                     onChange={handleFileUpload}
                     className="hidden"
                   />
@@ -461,11 +477,11 @@ export default function MobileAttendanceFAB({
                     required
                     value={attendanceCode}
                     onChange={(e) => setAttendanceCode(e.target.value.toUpperCase())}
-                    placeholder="Contoh: CLF-less_1-A3B9"
+                    placeholder="Contoh: CLF-1794872162-CDE6B1"
                     className="w-full px-4 py-3 bg-oxford-50 dark:bg-oxford-900 border border-oxford-200 dark:border-oxford-700 rounded-xl text-sm font-mono tracking-wider text-center uppercase font-bold text-oxford-900 dark:text-white focus:outline-none focus:border-gold-500"
                   />
                   <p className="text-[10px] text-oxford-500 mt-1 text-center">
-                    Kode alfanumerik tertera di bawah QR Code yang ditampilkan panitia di depan kelas.
+                    Masukkan kode di bawah QR Code. Sistem otomatis mencocokkan modul/sesinya.
                   </p>
                 </div>
 

@@ -9,7 +9,7 @@ import { issueCourseCertificate } from "@/lib/course-certificates";
 
 interface SubmitAttendancePayload {
   courseId: string;
-  lessonId: string;
+  lessonId?: string;
   attendanceCode: string;
 }
 
@@ -33,10 +33,23 @@ export async function submitMaterialAttendance(payload: SubmitAttendancePayload)
   try {
     const session = await requireUserSession();
     const userId = session.user.id;
-    const { courseId, lessonId, attendanceCode } = payload;
+    const { courseId, attendanceCode } = payload;
 
-    if (!courseId || !lessonId || !attendanceCode) {
+    if (!courseId || !attendanceCode?.trim()) {
       return { success: false, error: "Data presensi tidak lengkap." };
+    }
+
+    // Parse JSON QR payload if present
+    let rawInputCode = attendanceCode.trim();
+    let targetLessonId = (payload.lessonId || "").trim();
+    if (rawInputCode.startsWith("{") && rawInputCode.endsWith("}")) {
+      try {
+        const parsed = JSON.parse(rawInputCode);
+        if (parsed.code) rawInputCode = String(parsed.code).trim();
+        if (parsed.lessonId) targetLessonId = String(parsed.lessonId).trim();
+      } catch {
+        // use raw string
+      }
     }
 
     // 1. Cek pendaftaran kursus
@@ -59,38 +72,41 @@ export async function submitMaterialAttendance(payload: SubmitAttendancePayload)
       };
     }
 
-    // 2. Ambil data sesi materi
-    const lessonRows = await sql`
+    // 2. Ambil data sesi materi — utamakan pencocokan kode QR di kelas ini agar otomatis mengarah ke modul/sesi terkait
+    const lessonByCodeRows = await sql`
       SELECT lesson.id, lesson.jp, lesson.has_attendance, lesson.attendance_qr_code, lesson.title,
              module.course_id AS "courseId"
       FROM lessons lesson
       JOIN modules module ON module.id = lesson.module_id
-      WHERE lesson.id = ${lessonId} AND module.course_id = ${courseId}
+      WHERE module.course_id = ${courseId}
+        AND UPPER(TRIM(COALESCE(lesson.attendance_qr_code, ''))) = ${rawInputCode.toUpperCase()}
       LIMIT 1
     `;
-    const lesson = lessonRows[0];
-    if (!lesson) {
-      return { success: false, error: "Materi tidak ditemukan pada kelas ini." };
+    let lesson = lessonByCodeRows[0];
+
+    if (!lesson && targetLessonId) {
+      const lessonRows = await sql`
+        SELECT lesson.id, lesson.jp, lesson.has_attendance, lesson.attendance_qr_code, lesson.title,
+               module.course_id AS "courseId"
+        FROM lessons lesson
+        JOIN modules module ON module.id = lesson.module_id
+        WHERE lesson.id = ${targetLessonId} AND module.course_id = ${courseId}
+        LIMIT 1
+      `;
+      lesson = lessonRows[0];
     }
+
+    if (!lesson) {
+      return { success: false, error: "Kode QR / token presensi tidak ditemukan pada kelas ini." };
+    }
+
+    const lessonId = String(lesson.id);
 
     if (lesson.has_attendance === false) {
       return { success: false, error: "Materi ini tidak memerlukan presensi kehadiran." };
     }
 
     // 3. Verifikasi kode presensi
-    // Support either raw code string or JSON encoded payload: { type: "material_attendance", code: "..." }
-    let rawInputCode = attendanceCode.trim();
-    if (rawInputCode.startsWith("{") && rawInputCode.endsWith("}")) {
-      try {
-        const parsed = JSON.parse(rawInputCode);
-        if (parsed.code) {
-          rawInputCode = String(parsed.code).trim();
-        }
-      } catch {
-        // use raw string
-      }
-    }
-
     const expectedCode = String(lesson.attendance_qr_code || "").trim();
     if (!expectedCode || rawInputCode.toUpperCase() !== expectedCode.toUpperCase()) {
       return { success: false, error: "Kode QR presensi tidak sesuai dengan sesi ini." };
@@ -179,7 +195,8 @@ export async function submitMaterialAttendance(payload: SubmitAttendancePayload)
 
     return {
       success: true,
-      message: `Presensi berhasil dicatat! (+${lessonJp} JP)`,
+      message: `Presensi berhasil dicatat! (+${lessonJp} JP) - ${lesson.title}`,
+      lessonId,
       attendedJp,
       totalClassJp,
       attendancePercentage,
