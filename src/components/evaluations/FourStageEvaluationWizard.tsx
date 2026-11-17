@@ -157,9 +157,17 @@ export default function FourStageEvaluationWizard({
       });
 
       if (res.success) {
-        showToast.success("Tahap 1 Selesai!", "Evaluasi narasumber berhasil disimpan.");
-        setStagesStatus((prev) => ({ ...prev, narasumber: true }));
-        setCurrentStage("organizer");
+        if (res.nextStage === "narasumber") {
+          const nextSess = narasumberSessions.find((s) => s.id !== selectedSessionId);
+          if (nextSess) setSelectedSessionId(nextSess.id);
+          setNarasumberRatings({});
+          setNarasumberNotes("");
+          showToast.success("Evaluasi Narasumber Disimpan", "Silakan lanjut menilai narasumber sesi berikutnya.");
+        } else {
+          showToast.success("Tahap 1 Selesai!", "Seluruh evaluasi narasumber berhasil disimpan.");
+          setStagesStatus((prev) => ({ ...prev, narasumber: true }));
+          setCurrentStage("organizer");
+        }
       } else {
         showToast.error("Gagal Menyimpan", res.error || "Gagal menyimpan evaluasi.");
       }
