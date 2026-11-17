@@ -169,7 +169,7 @@ export function Header() {
                                     className="absolute top-full mt-3 right-0 w-[400px] bg-white dark:bg-[#161B2A] rounded-2xl shadow-2xl border border-oxford-100 dark:border-oxford-800 overflow-hidden z-50"
                                 >
                                     <div className="p-3 bg-oxford-50 dark:bg-oxford-950 border-b border-oxford-100 dark:border-oxford-800 flex items-center justify-between">
-                                        <span className="text-[10px] font-bold uppercase tracking-wider text-oxford-500 dark:text-oxford-400">Hasil Pencarian</span>
+                                        <span className="text-xs font-bold uppercase tracking-wider text-oxford-500 dark:text-oxford-400">Hasil Pencarian</span>
                                         <button onClick={() => setShowSuggestions(false)} className="text-oxford-400 hover:text-oxford-600 dark:hover:text-oxford-300">
                                             <X size={14} />
                                         </button>
@@ -199,16 +199,16 @@ export function Header() {
                                                         )}
                                                         <div className="flex-1 min-w-0">
                                                             <div className="flex items-center gap-2 mb-1">
-                                                                <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${
+                                                                <span className={`text-xs font-bold uppercase px-1.5 py-0.5 rounded ${
                                                                     result.type === 'course' ? 'bg-blue-100 text-blue-700' : 
                                                                     result.type === 'news' ? 'bg-amber-100 text-amber-700' : 
                                                                     result.type === 'webinar' ? 'bg-purple-100 text-purple-700' : 'bg-emerald-100 text-emerald-700'
                                                                  }`}>
                                                                      {result.type === 'course' ? 'Kursus' : result.type === 'news' ? 'Berita' : result.type === 'webinar' ? 'Webinar' : result.type === 'path' ? 'Learning Path' : 'Pengetahuan'}
                                                                 </span>
-                                                                <span className="text-[10px] text-oxford-400 font-bold uppercase">{result.category}</span>
+                                                                <span className="text-xs text-oxford-400 font-bold uppercase">{result.category}</span>
                                                             </div>
-                                                            <h4 className="text-sm font-bold text-oxford-900 dark:text-white group-hover:text-gold-600 transition-colors line-clamp-1">
+                                                            <h4 className="text-base font-bold text-oxford-900 dark:text-white group-hover:text-gold-600 transition-colors line-clamp-1">
                                                                 {result.title}
                                                             </h4>
                                                         </div>
@@ -216,7 +216,7 @@ export function Header() {
                                                 ))}
                                             </div>
                                         ) : (
-                                            <div className="p-8 text-center text-oxford-400 text-sm">Tidak ada hasil ditemukan.</div>
+                                            <div className="p-8 text-center text-oxford-400 text-base">Tidak ada hasil ditemukan.</div>
                                         )}
                                     </div>
                                 </motion.div>
@@ -247,7 +247,7 @@ export function Header() {
                                     </div>
                                     <div className="flex flex-col items-start min-w-0">
                                         <span className="truncate w-full leading-tight font-bold">{user.name}</span>
-                                        <span className="text-[8px] md:text-[10px] uppercase text-oxford-400 font-bold tracking-wider">{getDashboardLabel()}</span>
+                                        <span className="text-xs uppercase text-oxford-400 font-bold tracking-wider">{getDashboardLabel()}</span>
                                     </div>
                                 </Link>
                                 <button

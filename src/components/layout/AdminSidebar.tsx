@@ -147,7 +147,7 @@ export function AdminSidebar({ activePage, isOpen, onClose }: AdminSidebarProps)
                     ))}
 
                     <div className="pt-4 mt-2 border-t border-oxford-800">
-                        <p className="px-4 text-[10px] font-bold text-oxford-500 dark:text-oxford-400 uppercase tracking-widest mb-2">Content Editor</p>
+                        <p className="px-4 text-xs font-bold text-oxford-500 dark:text-oxford-400 uppercase tracking-widest mb-2">Content Editor</p>
                         <Link 
                             href="/admin/news" 
                             onClick={onClose}
@@ -201,10 +201,10 @@ export function AdminSidebar({ activePage, isOpen, onClose }: AdminSidebarProps)
 
                 {/* Footer mini */}
                 <div className="p-6 text-center">
-                    <p className="text-[10px] text-oxford-600 dark:text-oxford-300 font-medium">BPSDM Kaltara &copy; 2026</p>
+                    <p className="text-xs text-oxford-600 dark:text-oxford-300 font-medium">BPSDM Kaltara &copy; 2026</p>
                     <div className="flex items-center justify-center gap-1 mt-1">
-                        <span className="text-[8px] text-oxford-700 dark:text-oxford-200 uppercase tracking-tighter">Powered by</span>
-                        <span className="text-[8px] text-gold-600/50 font-bold">CorpuKU</span>
+                        <span className="text-xs text-oxford-700 dark:text-oxford-200 uppercase tracking-tighter">Powered by</span>
+                        <span className="text-xs text-gold-600/50 font-bold">CorpuKU</span>
                     </div>
                 </div>
             </aside>

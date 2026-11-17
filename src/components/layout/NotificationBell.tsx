@@ -90,7 +90,7 @@ export function NotificationBell({ userId }: { userId: string }) {
             >
                 <Bell size={20} />
                 {unreadCount > 0 && (
-                    <span className="absolute top-1.5 right-1.5 w-4 h-4 bg-crimson-500 text-white text-[10px] font-bold flex items-center justify-center rounded-full border-2 border-white shadow-sm">
+                    <span className="absolute top-1 right-1 min-w-[20px] h-[20px] px-1 bg-crimson-500 text-white text-xs font-bold flex items-center justify-center rounded-full border-2 border-white dark:border-[#161B2A] shadow-sm leading-none">
                         {unreadCount > 9 ? '9+' : unreadCount}
                     </span>
                 )}
@@ -106,7 +106,7 @@ export function NotificationBell({ userId }: { userId: string }) {
                     >
                         <div className="p-4 bg-white dark:bg-[#161B2A] border-b border-oxford-100 dark:border-oxford-800 flex items-center justify-between">
                             <h3 className="font-sans font-bold text-oxford-900 dark:text-white">Notifikasi</h3>
-                            <span className="text-[10px] font-bold uppercase bg-oxford-100 dark:bg-[#161B2A] text-oxford-500 dark:text-oxford-400 px-2.5 py-1 rounded-full">{unreadCount} Belum dibaca</span>
+                            <span className="text-xs font-bold uppercase bg-oxford-100 dark:bg-[#161B2A] text-oxford-500 dark:text-oxford-400 px-2.5 py-1 rounded-full">{unreadCount} Belum dibaca</span>
                         </div>
 
                         <div className="max-h-[400px] overflow-y-auto bg-oxford-50 dark:bg-oxford-950/30">
@@ -132,8 +132,8 @@ export function NotificationBell({ userId }: { userId: string }) {
                                                     {!notif.isRead && <div className="w-2 h-2 bg-gold-500 rounded-full shadow-sm" />}
                                                 </div>
                                                 <p className="text-xs text-oxford-600 dark:text-oxford-300 line-clamp-2 mb-2 leading-relaxed">{notif.message}</p>
-                                                <div className="flex items-center gap-1.5 text-[10px] text-oxford-400 font-medium">
-                                                    <Clock size={10} />
+                                                <div className="flex items-center gap-1.5 text-xs text-oxford-400 font-medium">
+                                                    <Clock size={12} />
                                                     {formatDate(notif.createdAt)}
                                                 </div>
                                             </div>

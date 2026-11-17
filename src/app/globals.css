@@ -64,38 +64,17 @@
   --font-sans: 'Ubuntu', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   --font-serif: 'Ubuntu', 'Bookman Old Style', Georgia, Cambria, serif;
 
-  --font-size-xs: 1rem;
-  --font-size-xs--line-height: 1.5rem;
-  --font-size-sm: 1rem;
-  --font-size-sm--line-height: 1.5rem;
+  --text-xs: 0.875rem;
+  --text-xs--line-height: 1.25rem;
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.25rem;
+  --text-base: 1rem;
+  --text-base--line-height: 1.5rem;
 }
 
-/* ==========================================================================
-   MINIMUM FONT SIZE ENFORCEMENT (MINIMAL 14px / 1rem)
-   Memastikan seluruh teks kecil di aplikasi minimal 14px atau 1rem (16px)
-   ========================================================================== */
+/* Base font scale */
 html, body {
   font-size: 16px;
-}
-
-.text-xs {
-  font-size: 1rem !important;
-  line-height: 1.5rem !important;
-}
-
-.text-sm {
-  font-size: 1rem !important;
-  line-height: 1.5rem !important;
-}
-
-.text-\[8px\], [class*="text-[8px]"],
-.text-\[9px\], [class*="text-[9px]"],
-.text-\[10px\], [class*="text-[10px]"],
-.text-\[11px\], [class*="text-[11px]"],
-.text-\[12px\], [class*="text-[12px]"],
-.text-\[13px\], [class*="text-[13px]"] {
-  font-size: 0.9375rem !important; /* 15px, aman di atas 14px */
-  line-height: 1.4rem !important;
 }
 
 /* Dark Mode Variants */
