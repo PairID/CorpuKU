@@ -8,6 +8,7 @@ import { awardPoints } from "@/lib/gamification";
 import { getAuthSession, requireAdminSession, requireInstructorSession, requireUserSession } from "./auth";
 import { requireCourseEditor } from "@/lib/course-authorization";
 import { sanitizePlainText, sanitizeRichText } from "@/lib/content-security";
+import { evaluateModuleAccess, type ModuleAccessMode } from "@/lib/module-access";
 import { issueCourseCertificate } from "@/lib/course-certificates";
 import { syncLearningPathCompletions } from "@/lib/learning-paths";
 import { revalidatePath } from "next/cache";
@@ -35,6 +36,16 @@ async function ensureEvaluationConfigColumn() {
     if (ensuredEvaluationConfigCol) return;
     await sql`ALTER TABLE courses ADD COLUMN IF NOT EXISTS evaluation_config JSONB`;
     ensuredEvaluationConfigCol = true;
+}
+
+let ensuredModuleAccessCols = false;
+export async function ensureModuleAccessColumns() {
+    if (ensuredModuleAccessCols) return;
+    await sql`ALTER TABLE modules ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true`;
+    await sql`ALTER TABLE modules ADD COLUMN IF NOT EXISTS access_mode TEXT NOT NULL DEFAULT 'manual'`;
+    await sql`ALTER TABLE modules ADD COLUMN IF NOT EXISTS active_from TIMESTAMPTZ`;
+    await sql`ALTER TABLE modules ADD COLUMN IF NOT EXISTS active_until TIMESTAMPTZ`;
+    ensuredModuleAccessCols = true;
 }
 
 const courseMutationSchema = z.object({
@@ -188,6 +199,12 @@ interface CourseContentModule {
     courseId: string;
     title: string;
     order: string;
+    isActive?: boolean;
+    accessMode?: ModuleAccessMode;
+    activeFrom?: string | null;
+    activeUntil?: string | null;
+    isLocked?: boolean;
+    lockReason?: string | null;
     lessons: CourseContentLesson[];
 }
 
@@ -574,17 +591,33 @@ export async function getCourseOutline(courseId: string): Promise<CourseOutlineM
     }
 }
 
-export async function getCourseContent(courseId: string): Promise<CourseContentModule[]> {
+export async function getCourseContent(
+    courseId: string,
+    options?: { includeLockedContent?: boolean }
+): Promise<CourseContentModule[]> {
     try {
         await requireCourseAccess(courseId);
+        await ensureModuleAccessColumns();
         const modules = await sql`
-            SELECT id, title, "order" 
+            SELECT id, title, "order",
+                   COALESCE(is_active, true) AS "isActive",
+                   COALESCE(access_mode, 'manual') AS "accessMode",
+                   active_from AS "activeFrom",
+                   active_until AS "activeUntil"
             FROM modules 
             WHERE course_id = ${courseId} 
             ORDER BY "order" ASC
         `;
 
         return await Promise.all(modules.map(async (mod) => {
+            const accessMode: ModuleAccessMode = mod.accessMode === "scheduled" ? "scheduled" : "manual";
+            const isActive = mod.isActive !== false;
+            const activeFrom = mod.activeFrom ? new Date(String(mod.activeFrom)).toISOString() : null;
+            const activeUntil = mod.activeUntil ? new Date(String(mod.activeUntil)).toISOString() : null;
+            const access = evaluateModuleAccess({ isActive, accessMode, activeFrom, activeUntil });
+            const isLocked = !access.accessible;
+            const hideContent = isLocked && !options?.includeLockedContent;
+
             const lessons = await sql`
                 SELECT id, title, type, video_url as "videoUrl", content, "order",
                        jp, has_attendance as "hasAttendance", attendance_qr_code as "attendanceQrCode",
@@ -598,17 +631,23 @@ export async function getCourseContent(courseId: string): Promise<CourseContentM
                 courseId,
                 title: String(mod.title),
                 order: String(mod.order),
+                isActive,
+                accessMode,
+                activeFrom,
+                activeUntil,
+                isLocked,
+                lockReason: isLocked ? access.reason : null,
                 lessons: lessons.map((lesson) => ({
                     id: String(lesson.id),
                     moduleId: String(mod.id),
                     title: String(lesson.title),
-                    videoUrl: lesson.videoUrl ? String(lesson.videoUrl) : null,
+                    videoUrl: hideContent ? null : (lesson.videoUrl ? String(lesson.videoUrl) : null),
                     type: String(lesson.type),
                     order: String(lesson.order),
-                    content: lesson.content ? sanitizeRichText(String(lesson.content)) : null,
+                    content: hideContent ? null : (lesson.content ? sanitizeRichText(String(lesson.content)) : null),
                     jp: Number(lesson.jp || 0),
                     hasAttendance: lesson.hasAttendance !== false,
-                    attendanceQrCode: lesson.attendanceQrCode ? String(lesson.attendanceQrCode) : null,
+                    attendanceQrCode: hideContent ? null : (lesson.attendanceQrCode ? String(lesson.attendanceQrCode) : null),
                     narasumberName: lesson.narasumberName ? String(lesson.narasumberName) : null,
                     sessionDate: lesson.sessionDate ? String(lesson.sessionDate) : null,
                 }))

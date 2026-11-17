@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { PlusCircle, Trash2, Edit2, PlayCircle, FileText, CheckCircle2, Save, Loader2, ListPlus, FileUp, Sparkles, Search, QrCode, Copy, Check, HelpCircle, Camera, Link2 } from "lucide-react";
-import { saveCourseContent, generateMaterialAttendanceQr, getMaterialAttendanceQr, getCourseContentForBuilder } from "@/app/actions/builder";
+import { PlusCircle, Trash2, Edit2, PlayCircle, FileText, CheckCircle2, Save, Loader2, ListPlus, FileUp, Sparkles, Search, QrCode, Copy, Check, HelpCircle, Camera, Link2, Lock, Unlock, Clock } from "lucide-react";
+import { saveCourseContent, generateMaterialAttendanceQr, getMaterialAttendanceQr, getCourseContentForBuilder, updateModuleAccess } from "@/app/actions/builder";
+import { evaluateModuleAccess, toDateTimeLocalValue, type ModuleAccessMode } from "@/lib/module-access";
 import { updateCourseDocumentationUrl } from "@/app/actions/courses";
 import { generateAIQuiz } from "@/app/actions/ai";
 import { useRouter } from "next/navigation";
@@ -43,6 +44,10 @@ export interface CourseContentModule {
     id: string;
     title: string;
     order: string | number;
+    isActive?: boolean;
+    accessMode?: ModuleAccessMode;
+    activeFrom?: string | null;
+    activeUntil?: string | null;
     lessons: CourseLesson[];
 }
 
@@ -124,7 +129,41 @@ export default function ContentBuilder({ courseId, initialData, initialDocumenta
     });
 
     const addModule = () => {
-        setModules([...modules, { id: "", title: "Modul Baru", order: "0", lessons: [] }]);
+        setModules([...modules, { id: "", title: "Modul Baru", order: "0", isActive: true, accessMode: "manual", activeFrom: null, activeUntil: null, lessons: [] }]);
+    };
+
+    const handleModuleAccessChange = async (
+        modIndex: number,
+        patch: Partial<Pick<CourseContentModule, "isActive" | "accessMode" | "activeFrom" | "activeUntil">>,
+        instantSave = false
+    ) => {
+        const current = modules[modIndex];
+        if (!current) return;
+        const nextMod = { ...current, ...patch };
+        setModules((prev) => prev.map((m, i) => (i === modIndex ? nextMod : m)));
+
+        if (instantSave && current.id && !current.id.startsWith("temp_")) {
+            const res = await updateModuleAccess(courseId, current.id, {
+                isActive: nextMod.isActive !== false,
+                accessMode: nextMod.accessMode === "scheduled" ? "scheduled" : "manual",
+                activeFrom: nextMod.activeFrom || null,
+                activeUntil: nextMod.activeUntil || null,
+            });
+            if (res.success) {
+                const status = evaluateModuleAccess({
+                    isActive: nextMod.isActive !== false,
+                    accessMode: nextMod.accessMode,
+                    activeFrom: nextMod.activeFrom,
+                    activeUntil: nextMod.activeUntil,
+                });
+                showToast.success(
+                    status.accessible ? "Modul Diaktifkan" : "Modul Dinonaktifkan",
+                    status.reason
+                );
+            } else {
+                showToast.error("Gagal Memperbarui Akses", res.error || "Gagal menyimpan status modul.");
+            }
+        }
     };
 
     const deleteModule = (modIndex: number) => {
@@ -317,21 +356,121 @@ export default function ContentBuilder({ courseId, initialData, initialDocumenta
                 </div>
             </div>
 
-            {modules.map((mod, mIndex) => (
+            {modules.map((mod, mIndex) => {
+                const accessStatus = evaluateModuleAccess({
+                    isActive: mod.isActive !== false,
+                    accessMode: mod.accessMode,
+                    activeFrom: mod.activeFrom,
+                    activeUntil: mod.activeUntil,
+                });
+                const isScheduled = mod.accessMode === "scheduled";
+                const isManualOn = mod.isActive !== false;
+
+                return (
                 <div key={mIndex} className="bg-white dark:bg-[#161B2A] rounded-xl border-2 border-oxford-200 dark:border-oxford-700 p-6 flex flex-col shadow-sm">
-                    <div className="flex justify-between items-start gap-4 mb-4 pb-4 border-b border-oxford-100 dark:border-oxford-800">
-                        <div className="flex-1">
-                            <label className="text-xs uppercase tracking-wider font-bold text-oxford-400 mb-1 block">Nama Modul {mIndex + 1}</label>
-                            <input
-                                value={mod.title}
-                                onChange={e => updateModule(mIndex, 'title', e.target.value)}
-                                className="w-full text-xl font-bold font-serif text-oxford-900 dark:text-white focus:outline-none focus:border-b-2 focus:border-gold-500 bg-transparent placeholder-oxford-300"
-                                placeholder="Misal: Pendahuluan"
-                            />
+                    <div className="flex flex-col gap-3 mb-4 pb-4 border-b border-oxford-100 dark:border-oxford-800">
+                        <div className="flex justify-between items-start gap-4">
+                            <div className="flex-1">
+                                <div className="flex flex-wrap items-center gap-2 mb-1">
+                                    <label className="text-xs uppercase tracking-wider font-bold text-oxford-400">Nama Modul {mIndex + 1}</label>
+                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                        accessStatus.accessible
+                                            ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300"
+                                            : "bg-rose-100 text-rose-800 dark:bg-rose-950/70 dark:text-rose-300"
+                                    }`}>
+                                        {accessStatus.accessible ? <Unlock size={10} /> : <Lock size={10} />}
+                                        {accessStatus.accessible ? "Terbuka untuk Peserta" : "Terkunci"}
+                                    </span>
+                                </div>
+                                <input
+                                    value={mod.title}
+                                    onChange={e => updateModule(mIndex, 'title', e.target.value)}
+                                    className="w-full text-xl font-bold font-serif text-oxford-900 dark:text-white focus:outline-none focus:border-b-2 focus:border-gold-500 bg-transparent placeholder-oxford-300"
+                                    placeholder="Misal: Pendahuluan"
+                                />
+                            </div>
+                            <button onClick={() => deleteModule(mIndex)} className="text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 p-2 rounded-lg transition-colors" title="Hapus Modul">
+                                <Trash2 size={20} />
+                            </button>
                         </div>
-                        <button onClick={() => deleteModule(mIndex)} className="text-red-400 hover:bg-red-50 p-2 rounded-lg transition-colors" title="Hapus Modul">
-                            <Trash2 size={20} />
-                        </button>
+
+                        {/* Kontrol Akses Modul: Manual On/Off atau Terjadwal (Jam) */}
+                        <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl bg-oxford-50/80 dark:bg-oxford-950/80 border border-oxford-200/80 dark:border-oxford-800">
+                            <div className="flex items-center gap-2">
+                                <span className="text-[11px] font-bold text-oxford-600 dark:text-oxford-300">Akses Modul:</span>
+                                <div className="inline-flex rounded-lg bg-white dark:bg-[#161B2A] p-0.5 border border-oxford-200 dark:border-oxford-700">
+                                    <button
+                                        type="button"
+                                        onClick={() => void handleModuleAccessChange(mIndex, { accessMode: "manual" }, true)}
+                                        className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-colors ${
+                                            !isScheduled
+                                                ? "bg-oxford-900 text-gold-400 shadow-sm"
+                                                : "text-oxford-500 hover:text-oxford-800 dark:text-oxford-400 dark:hover:text-white"
+                                        }`}
+                                    >
+                                        Manual (On/Off)
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => void handleModuleAccessChange(mIndex, { accessMode: "scheduled" }, false)}
+                                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold transition-colors ${
+                                            isScheduled
+                                                ? "bg-oxford-900 text-gold-400 shadow-sm"
+                                                : "text-oxford-500 hover:text-oxford-800 dark:text-oxford-400 dark:hover:text-white"
+                                        }`}
+                                    >
+                                        <Clock size={11} />
+                                        Terjadwal (Jam)
+                                    </button>
+                                </div>
+                            </div>
+
+                            {!isScheduled ? (
+                                <button
+                                    type="button"
+                                    role="switch"
+                                    aria-checked={isManualOn}
+                                    onClick={() => void handleModuleAccessChange(mIndex, { isActive: !isManualOn, accessMode: "manual" }, true)}
+                                    className={`inline-flex items-center gap-2.5 px-3 py-1.5 rounded-full text-xs font-bold border transition-all shadow-sm active:scale-95 ${
+                                        isManualOn
+                                            ? "bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-500"
+                                            : "bg-oxford-200 hover:bg-oxford-300 dark:bg-oxford-800 dark:hover:bg-oxford-700 text-oxford-700 dark:text-oxford-200 border-oxford-300 dark:border-oxford-600"
+                                    }`}
+                                >
+                                    <span className={`w-8 h-4 rounded-full relative transition-colors ${isManualOn ? "bg-emerald-800/50" : "bg-oxford-400/50"}`}>
+                                        <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-all ${isManualOn ? "left-4" : "left-0.5"}`} />
+                                    </span>
+                                    <span>{isManualOn ? "Modul Aktif" : "Modul Nonaktif"}</span>
+                                </button>
+                            ) : (
+                                <div className="flex flex-wrap items-center gap-2 text-xs">
+                                    <label className="flex items-center gap-1.5 text-oxford-600 dark:text-oxford-300 font-semibold">
+                                        <span>Mulai:</span>
+                                        <input
+                                            type="datetime-local"
+                                            value={toDateTimeLocalValue(mod.activeFrom)}
+                                            onChange={(e) => {
+                                                const iso = e.target.value ? new Date(e.target.value).toISOString() : null;
+                                                void handleModuleAccessChange(mIndex, { accessMode: "scheduled", activeFrom: iso }, true);
+                                            }}
+                                            className="px-2 py-1 rounded-lg bg-white dark:bg-[#161B2A] border border-oxford-200 dark:border-oxford-700 text-xs text-oxford-900 dark:text-white"
+                                        />
+                                    </label>
+                                    <label className="flex items-center gap-1.5 text-oxford-600 dark:text-oxford-300 font-semibold">
+                                        <span>Selesai:</span>
+                                        <input
+                                            type="datetime-local"
+                                            value={toDateTimeLocalValue(mod.activeUntil)}
+                                            onChange={(e) => {
+                                                const iso = e.target.value ? new Date(e.target.value).toISOString() : null;
+                                                void handleModuleAccessChange(mIndex, { accessMode: "scheduled", activeUntil: iso }, true);
+                                            }}
+                                            className="px-2 py-1 rounded-lg bg-white dark:bg-[#161B2A] border border-oxford-200 dark:border-oxford-700 text-xs text-oxford-900 dark:text-white"
+                                        />
+                                    </label>
+                                </div>
+                            )}
+                        </div>
                     </div>
 
                     <div className="space-y-4 pl-4 md:pl-8 border-l-2 border-oxford-100 dark:border-oxford-800">
@@ -698,7 +837,8 @@ export default function ContentBuilder({ courseId, initialData, initialDocumenta
                         </div>
                     </div>
                 </div>
-            ))}
+                );
+            })}
 
             <button
                 onClick={addModule}

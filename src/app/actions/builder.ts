@@ -3,9 +3,10 @@
 import crypto from "crypto";
 import QRCode from "qrcode";
 import { sql } from "@/lib/db";
-import { getCourseContent } from "./courses";
+import { getCourseContent, ensureModuleAccessColumns } from "./courses";
 import { requireCourseEditor, requireLessonEditor, requireModuleEditor, requireQuestionEditor } from "@/lib/course-authorization";
 import { sanitizeRichText } from "@/lib/content-security";
+import type { ModuleAccessConfig } from "@/lib/module-access";
 
 interface ModuleInput {
     courseId: string;
@@ -59,6 +60,10 @@ interface BuilderLesson {
 interface BuilderModule {
     id?: string;
     title?: string;
+    isActive?: boolean;
+    accessMode?: "manual" | "scheduled";
+    activeFrom?: string | null;
+    activeUntil?: string | null;
     lessons?: BuilderLesson[];
 }
 
@@ -182,15 +187,44 @@ export async function deleteQuizQuestion(id: string) {
 export async function getCourseContentForBuilder(courseId: string) {
     try {
         await requireCourseEditor(courseId);
-        return getCourseContent(courseId);
+        return getCourseContent(courseId, { includeLockedContent: true });
     } catch {
         return [];
+    }
+}
+
+export async function updateModuleAccess(
+    courseId: string,
+    moduleId: string,
+    config: ModuleAccessConfig
+) {
+    try {
+        await requireCourseEditor(courseId);
+        await ensureModuleAccessColumns();
+        const isActive = config.isActive !== false;
+        const accessMode = config.accessMode === "scheduled" ? "scheduled" : "manual";
+        const activeFrom = config.activeFrom ? new Date(config.activeFrom).toISOString() : null;
+        const activeUntil = config.activeUntil ? new Date(config.activeUntil).toISOString() : null;
+
+        await sql`
+            UPDATE modules
+            SET is_active = ${isActive},
+                access_mode = ${accessMode},
+                active_from = ${activeFrom}::timestamptz,
+                active_until = ${activeUntil}::timestamptz
+            WHERE id = ${moduleId} AND course_id = ${courseId}
+        `;
+        return { success: true };
+    } catch (err: unknown) {
+        console.error("updateModuleAccess error:", err);
+        return { success: false, error: errorMessage(err, "Gagal memperbarui akses modul.") };
     }
 }
 
 export async function saveCourseContent(courseId: string, modulesData: BuilderModule[], deletions: BuilderDeletions) {
     try {
         await requireCourseEditor(courseId);
+        await ensureModuleAccessColumns();
 
         // Handle Deletions
         const deletedModules = deletions.modules || [];
@@ -218,16 +252,26 @@ export async function saveCourseContent(courseId: string, modulesData: BuilderMo
         for (let mIdx = 0; mIdx < modulesData.length; mIdx++) {
             const mod = modulesData[mIdx];
             let moduleId = mod.id;
+            const isActive = mod.isActive !== false;
+            const accessMode = mod.accessMode === "scheduled" ? "scheduled" : "manual";
+            const activeFrom = mod.activeFrom ? new Date(mod.activeFrom).toISOString() : null;
+            const activeUntil = mod.activeUntil ? new Date(mod.activeUntil).toISOString() : null;
 
             if (!moduleId || moduleId.startsWith('temp_')) {
                 moduleId = `mod_${Date.now()}_${mIdx}`;
                 await sql`
-                    INSERT INTO modules (id, course_id, title, "order")
-                    VALUES (${moduleId}, ${courseId}, ${mod.title}, ${mIdx})
+                    INSERT INTO modules (id, course_id, title, "order", is_active, access_mode, active_from, active_until)
+                    VALUES (${moduleId}, ${courseId}, ${mod.title}, ${mIdx}, ${isActive}, ${accessMode}, ${activeFrom}::timestamptz, ${activeUntil}::timestamptz)
                 `;
             } else {
                 await sql`
-                    UPDATE modules SET title = ${mod.title}, "order" = ${mIdx}
+                    UPDATE modules
+                    SET title = ${mod.title},
+                        "order" = ${mIdx},
+                        is_active = ${isActive},
+                        access_mode = ${accessMode},
+                        active_from = ${activeFrom}::timestamptz,
+                        active_until = ${activeUntil}::timestamptz
                     WHERE id = ${moduleId} AND course_id = ${courseId}
                 `;
             }

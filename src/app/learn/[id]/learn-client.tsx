@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { PlayCircle, FileText, CheckCircle, ChevronLeft, ChevronDown, ChevronUp, CheckCircle2, ClipboardCheck, Loader2, XCircle, ChevronRight, RotateCcw, AlertCircle, Trophy, FileUp, MessageSquare, Send, Trash2, Award, QrCode, ShieldCheck, Camera, ExternalLink } from "lucide-react";
+import { PlayCircle, FileText, CheckCircle, ChevronLeft, ChevronDown, ChevronUp, CheckCircle2, ClipboardCheck, Loader2, XCircle, ChevronRight, RotateCcw, AlertCircle, Trophy, FileUp, MessageSquare, Send, Trash2, Award, QrCode, ShieldCheck, Camera, ExternalLink, Lock } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { UserSession } from "@/app/dashboard/dashboard-client";
@@ -35,6 +35,8 @@ interface Module {
     courseId: string;
     title: string;
     order: string;
+    isLocked?: boolean;
+    lockReason?: string | null;
     lessons: Lesson[];
 }
 
@@ -125,8 +127,12 @@ interface QuizResult {
 type QuizPhase = "start" | "question" | "review-before-submit" | "submitting" | "results";
 
 export default function LearnClient({ course, courseContent, session, enrollment }: LearnClientProps) {
-    const [activeLesson, setActiveLesson] = useState<Lesson | null>(
-        courseContent[0]?.lessons[0] || null
+    const [activeLesson, setActiveLesson] = useState<Lesson | null>(() => {
+        const firstUnlocked = courseContent.find((m) => !m.isLocked && m.lessons.length > 0);
+        return firstUnlocked?.lessons[0] || courseContent[0]?.lessons[0] || null;
+    });
+    const activeModule = courseContent.find((m) =>
+        m.lessons.some((l) => l.id === activeLesson?.id)
     );
     const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>(
         courseContent.reduce((acc, mod) => ({ ...acc, [mod.id]: true }), {})
@@ -164,7 +170,11 @@ export default function LearnClient({ course, courseContent, session, enrollment
         setExpandedModules(prev => ({ ...prev, [moduleId]: !prev[moduleId] }));
     };
 
-    const handleLessonClick = (lesson: Lesson) => {
+    const handleLessonClick = (lesson: Lesson, modIsLocked?: boolean, lockReason?: string | null) => {
+        if (modIsLocked) {
+            toast.info(lockReason || "Modul ini belum diaktifkan oleh Admin.");
+            return;
+        }
         setActiveLesson(lesson);
         // Reset quiz state when switching lessons
         if (lesson.type === "quiz") {
@@ -861,14 +871,24 @@ export default function LearnClient({ course, courseContent, session, enrollment
                                             <h3 className={`font-sans font-bold text-sm truncate ${hasActiveLesson ? 'text-gold-700' : 'text-oxford-900 dark:text-white'}`}>
                                                 {module.title}
                                             </h3>
-                                            <div className="flex items-center gap-2 mt-0.5">
+                                            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                                                 <span className="text-[10px] text-oxford-400 font-sans uppercase tracking-wider">
                                                     {module.lessons.length} Materi
                                                 </span>
-                                                {hasActiveLesson && (
+                                                {module.isLocked && (
+                                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-100 dark:bg-rose-950/70 text-rose-700 dark:text-rose-300 text-[10px] font-bold">
+                                                        <Lock size={10} /> Terkunci
+                                                    </span>
+                                                )}
+                                                {hasActiveLesson && !module.isLocked && (
                                                     <span className="flex h-1.5 w-1.5 rounded-full bg-gold-500 animate-pulse" />
                                                 )}
                                             </div>
+                                            {module.isLocked && module.lockReason && (
+                                                <p className="text-[10px] text-rose-600 dark:text-rose-400 mt-1 truncate">
+                                                    {module.lockReason}
+                                                </p>
+                                            )}
                                         </div>
                                         {isExpanded ? (
                                             <ChevronUp size={16} className={hasActiveLesson ? 'text-gold-500' : 'text-oxford-400'} />
@@ -894,18 +914,22 @@ export default function LearnClient({ course, courseContent, session, enrollment
                                                     return (
                                                         <li key={lesson.id}>
                                                             <button
-                                                                onClick={() => handleLessonClick(lesson)}
+                                                                onClick={() => handleLessonClick(lesson, module.isLocked, module.lockReason)}
                                                                 className={`w-full text-left px-5 py-3 pl-8 flex items-start transition-all relative group
-                                                                    ${isActive 
-                                                                        ? 'bg-gold-100/50' 
-                                                                        : 'hover:bg-oxford-50 dark:hover:bg-oxford-950'
+                                                                    ${module.isLocked
+                                                                        ? 'opacity-60 cursor-not-allowed bg-oxford-50/40 dark:bg-oxford-950/40'
+                                                                        : isActive 
+                                                                            ? 'bg-gold-100/50' 
+                                                                            : 'hover:bg-oxford-50 dark:hover:bg-oxford-950'
                                                                     }`}
                                                             >
-                                                                {isActive && (
+                                                                {isActive && !module.isLocked && (
                                                                     <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-gold-500 rounded-r-full" />
                                                                 )}
-                                                                <div className={`mt-0.5 mr-3 flex-shrink-0 transition-colors ${isCompleted ? 'text-green-500' : (isActive ? 'text-gold-600' : 'text-oxford-400 group-hover:text-oxford-600 dark:group-hover:text-oxford-300')}`}>
-                                                                    {isCompleted ? (
+                                                                <div className={`mt-0.5 mr-3 flex-shrink-0 transition-colors ${module.isLocked ? 'text-rose-500' : isCompleted ? 'text-green-500' : (isActive ? 'text-gold-600' : 'text-oxford-400 group-hover:text-oxford-600 dark:group-hover:text-oxford-300')}`}>
+                                                                    {module.isLocked ? (
+                                                                        <Lock size={16} />
+                                                                    ) : isCompleted ? (
                                                                         <CheckCircle2 size={16} />
                                                                     ) : lesson.type === 'video' ? (
                                                                         <PlayCircle size={16} />
@@ -973,7 +997,24 @@ export default function LearnClient({ course, courseContent, session, enrollment
 
                 {/* Main Content Area */}
                 <div className="flex-1 flex flex-col overflow-y-auto relative bg-white dark:bg-[#161B2A] md:bg-oxford-50 dark:md:bg-oxford-950">
-                    {activeLesson ? (
+                    {activeLesson && activeModule?.isLocked ? (
+                        <div className="max-w-2xl mx-auto w-full p-6 md:p-12 my-auto">
+                            <div className="bg-white dark:bg-[#161B2A] rounded-2xl border border-oxford-200 dark:border-oxford-800 p-8 text-center shadow-sm">
+                                <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-rose-100 dark:bg-rose-950/70 text-rose-600 dark:text-rose-300 flex items-center justify-center">
+                                    <Lock size={30} />
+                                </div>
+                                <h2 className="text-xl font-serif font-bold text-oxford-950 dark:text-white mb-2">
+                                    Modul Belum Diaktifkan
+                                </h2>
+                                <p className="text-sm text-oxford-600 dark:text-oxford-300 mb-4">
+                                    {activeModule.lockReason || "Materi pada modul ini belum dibuka oleh Admin."}
+                                </p>
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-oxford-100 dark:bg-oxford-900 text-xs font-semibold text-oxford-700 dark:text-oxford-300">
+                                    {activeModule.title}
+                                </span>
+                            </div>
+                        </div>
+                    ) : activeLesson ? (
                         <div className="max-w-4xl mx-auto w-full p-4 md:p-8 flex-1 flex flex-col">
                             {activeLesson.type === 'quiz' ? (
                                 // Quiz content
