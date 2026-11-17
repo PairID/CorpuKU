@@ -810,7 +810,7 @@ export async function adminRemoveCourseParticipant(payload: {
 
     // 2. Bersihkan evaluasi kelas jika ada
     await sql`
-      DELETE FROM course_evaluations
+      DELETE FROM training_evaluations
       WHERE enrollment_id = ${enrollmentId} OR (course_id = ${courseId} AND user_id = ${enrollment.userId})
     `;
 
