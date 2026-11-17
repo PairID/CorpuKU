@@ -612,6 +612,7 @@ export interface LiveEnrolledParticipant {
   jabatan: string;
   pangkat: string;
   phone: string;
+  status: string;
   statementAccepted: boolean;
   enrolledAt: string;
 }
@@ -640,6 +641,7 @@ export async function getCourseEnrollmentsLive(courseId: string) {
 
     const rows = await sql`
       SELECT e.id AS "enrollmentId", e.user_id AS "userId",
+             COALESCE(e.status, 'active') AS "status",
              e.statement_accepted AS "statementAccepted", e.enrolled_at AS "enrolledAt",
              u.name, u.email, u.nip, u.instansi_asal AS "instansiAsal",
              u.jabatan, u.pangkat, u.phone
@@ -659,6 +661,7 @@ export async function getCourseEnrollmentsLive(courseId: string) {
       jabatan: r.jabatan ? String(r.jabatan) : "",
       pangkat: r.pangkat ? String(r.pangkat) : "",
       phone: r.phone ? String(r.phone) : "",
+      status: String(r.status || "active"),
       statementAccepted: Boolean(r.statementAccepted),
       enrolledAt: r.enrolledAt ? new Date(String(r.enrolledAt)).toISOString() : new Date().toISOString(),
     }));
@@ -673,6 +676,93 @@ export async function getCourseEnrollmentsLive(courseId: string) {
     return {
       success: false,
       error: err instanceof Error ? err.message : "Gagal memuat daftar peserta live.",
+    };
+  }
+}
+
+/**
+ * Update status persetujuan pendaftaran peserta (active / rejected)
+ */
+export async function adminUpdateEnrollmentApproval(payload: {
+  courseId: string;
+  enrollmentId: string;
+  status: "active" | "rejected";
+}) {
+  try {
+    const session = await requireInstructorSession();
+    const isAdmin = session.user.role === "admin";
+    const { courseId, enrollmentId, status } = payload;
+
+    const courseRows = await sql`
+      SELECT id, instructor_id AS "instructorId", title
+      FROM courses
+      WHERE id = ${courseId}
+      LIMIT 1
+    `;
+    const course = courseRows[0];
+    if (!course) return { success: false, error: "Kelas tidak ditemukan." };
+    if (!isAdmin && String(course.instructorId || "") !== session.user.id) {
+      return { success: false, error: "Anda tidak memiliki akses ke kelas ini." };
+    }
+
+    const updated = await sql`
+      UPDATE enrollments
+      SET status = ${status}
+      WHERE id = ${enrollmentId} AND course_id = ${courseId}
+      RETURNING user_id AS "userId"
+    `;
+
+    if (!updated[0]) {
+      return { success: false, error: "Pendaftaran peserta tidak ditemukan." };
+    }
+
+    revalidatePath(`/courses/${courseId}`);
+    revalidatePath(`/admin/courses/${courseId}`);
+
+    return { success: true };
+  } catch (err: unknown) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Gagal memperbarui status pendaftaran.",
+    };
+  }
+}
+
+/**
+ * Setujui semua pendaftaran berstatus pending_approval sekaligus
+ */
+export async function adminApproveAllPendingEnrollments(courseId: string) {
+  try {
+    const session = await requireInstructorSession();
+    const isAdmin = session.user.role === "admin";
+
+    const courseRows = await sql`
+      SELECT id, instructor_id AS "instructorId"
+      FROM courses
+      WHERE id = ${courseId}
+      LIMIT 1
+    `;
+    const course = courseRows[0];
+    if (!course) return { success: false, error: "Kelas tidak ditemukan." };
+    if (!isAdmin && String(course.instructorId || "") !== session.user.id) {
+      return { success: false, error: "Anda tidak memiliki akses ke kelas ini." };
+    }
+
+    const updated = await sql`
+      UPDATE enrollments
+      SET status = 'active'
+      WHERE course_id = ${courseId} AND status = 'pending_approval'
+      RETURNING id
+    `;
+
+    revalidatePath(`/courses/${courseId}`);
+    revalidatePath(`/admin/courses/${courseId}`);
+
+    return { success: true, count: updated.length };
+  } catch (err: unknown) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Gagal menyetujui semua pendaftaran.",
     };
   }
 }

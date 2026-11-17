@@ -42,6 +42,8 @@ export interface CourseFormData {
         organizerName?: string | null;
         deliveryMode?: DeliveryMode;
         locationName?: string | null;
+        accessMode?: "open" | "passcode" | "approval";
+        passcode?: string | null;
         evaluationConfig?: CourseEvaluationConfig | null;
 }
 
@@ -87,6 +89,8 @@ export default function CourseForm({ initialData, instructors, mode, basePath = 
     const [organizerName, setOrganizerName] = useState(initialData?.organizerName || DEFAULT_ORGANIZER_NAME);
     const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>(initialData?.deliveryMode || "daring");
     const [locationName, setLocationName] = useState(initialData?.locationName || "");
+    const [accessMode, setAccessMode] = useState<"open" | "passcode" | "approval">(initialData?.accessMode || "open");
+    const [passcode, setPasscode] = useState(initialData?.passcode || "");
     const [evaluationConfig, setEvaluationConfig] = useState<Required<CourseEvaluationConfig>>(() => {
         const defaults = getDefaultCourseEvaluationConfig();
         return {
@@ -167,6 +171,8 @@ export default function CourseForm({ initialData, instructors, mode, basePath = 
             organizerName: organizerName.trim() || DEFAULT_ORGANIZER_NAME,
             deliveryMode,
             locationName: deliveryMode === "daring" ? null : locationName.trim(),
+            accessMode,
+            passcode: accessMode === "passcode" ? passcode.trim() : null,
             evaluationConfig: trainingType === "classical_facilitation" ? evaluationConfig : undefined,
         };
 
@@ -537,6 +543,51 @@ export default function CourseForm({ initialData, instructors, mode, basePath = 
                                 <option key={cat} value={cat}>{cat}</option>
                             ))}
                         </select>
+                    </div>
+
+                    <div className="bg-oxford-50 dark:bg-oxford-950 p-5 rounded-xl border border-oxford-100 dark:border-oxford-800">
+                        <h4 className="text-sm font-bold text-oxford-900 dark:text-white mb-1">Akses &amp; Pendaftaran Kelas</h4>
+                        <p className="text-xs text-oxford-500 dark:text-oxford-400 mb-4">Tentukan cara peserta mendaftar ke dalam kelas ini.</p>
+                        
+                        <div className="space-y-3">
+                            <div>
+                                <label className="block text-xs font-bold text-oxford-700 dark:text-oxford-200 mb-1">Metode Akses</label>
+                                <select
+                                    value={accessMode}
+                                    onChange={(e) => setAccessMode(e.target.value as typeof accessMode)}
+                                    className="w-full px-4 py-2.5 bg-white dark:bg-[#161B2A] border border-oxford-200 dark:border-oxford-700 rounded-lg text-sm focus:outline-none focus:border-gold-500 text-oxford-900 dark:text-white"
+                                >
+                                    <option value="open">Terbuka (Langsung Terdaftar)</option>
+                                    <option value="passcode">Kunci Pendaftaran (Wajib Passcode)</option>
+                                    <option value="approval">Persetujuan Admin (Pending Approval)</option>
+                                </select>
+                            </div>
+
+                            {accessMode === "passcode" && (
+                                <div className="space-y-1">
+                                    <label className="block text-xs font-bold text-oxford-700 dark:text-oxford-200">
+                                        Kunci Pendaftaran (Passcode) *
+                                    </label>
+                                    <input
+                                        type="text"
+                                        required
+                                        value={passcode}
+                                        onChange={(e) => setPasscode(e.target.value)}
+                                        placeholder="Contoh: KELAS-2026 atau PIN rahasia"
+                                        className="w-full px-4 py-2 bg-white dark:bg-[#161B2A] border border-oxford-200 dark:border-oxford-700 rounded-lg text-sm font-mono focus:outline-none focus:border-gold-500 text-oxford-900 dark:text-white"
+                                    />
+                                    <p className="text-[11px] text-oxford-400">
+                                        Peserta wajib memasukkan kode ini saat klik daftar.
+                                    </p>
+                                </div>
+                            )}
+
+                            {accessMode === "approval" && (
+                                <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-700 dark:text-amber-300">
+                                    Peserta mengajukan pendaftaran secara mandiri, namun statusnya menunggu persetujuan admin/pengajar sebelum dapat mengakses kelas.
+                                </div>
+                            )}
+                        </div>
                     </div>
 
                     <div className="bg-oxford-50 dark:bg-oxford-950 p-5 rounded-xl border border-oxford-100 dark:border-oxford-800">

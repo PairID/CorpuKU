@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import DataVerificationModal from "@/components/profile/DataVerificationModal";
 import MobileAttendanceFAB from "@/components/attendance/MobileAttendanceFAB";
 import FourStageEvaluationWizard from "@/components/evaluations/FourStageEvaluationWizard";
+import DocumentViewer from "@/components/lessons/DocumentViewer";
 import { CourseEvaluationConfig } from "@/lib/skm-constants";
 
 interface Lesson {
@@ -1129,33 +1130,12 @@ export default function LearnClient({ course, courseContent, session, enrollment
                                         </div>
                                     )}
 
-                                    {/* File / Download Content */}
+                                    {/* File / Document Viewer Content */}
                                     {activeLesson.type === 'file' && (
-                                        <div className="bg-white dark:bg-[#161B2A] rounded-2xl p-8 md:p-12 shadow-sm border-2 border-dashed border-oxford-200 dark:border-oxford-700 mb-8 font-sans flex flex-col items-center text-center animate-fade-in">
-                                            <div className="w-20 h-20 bg-blue-50 text-blue-500 rounded-2xl flex items-center justify-center mb-6 shadow-inner">
-                                                <FileUp size={40} />
-                                            </div>
-                                            <h2 className="text-2xl font-serif font-bold text-oxford-900 dark:text-white mb-2">Materi Pendukung</h2>
-                                            <p className="text-oxford-500 dark:text-oxford-400 max-w-md mb-8">
-                                                Silakan unduh file materi ini sebagai referensi belajar tambahan untuk modul ini.
-                                            </p>
-                                            
-                                            {activeLesson.content ? (
-                                                <a 
-                                                    href={activeLesson.content} 
-                                                    target="_blank" 
-                                                    rel="noopener noreferrer"
-                                                    className="inline-flex items-center gap-3 px-8 py-4 bg-oxford-900 text-gold-400 hover:text-gold-300 font-bold rounded-xl shadow-lg transition-all active:scale-95 group"
-                                                >
-                                                    <FileUp size={24} className="group-hover:translate-y-[-2px] transition-transform" />
-                                                    Unduh / Lihat File Materi
-                                                </a>
-                                            ) : (
-                                                <div className="p-4 bg-amber-50 text-amber-600 rounded-lg text-sm border border-amber-100">
-                                                    File belum tersedia atau tautan rusak.
-                                                </div>
-                                            )}
-                                        </div>
+                                        <DocumentViewer
+                                            url={activeLesson.content || ""}
+                                            title={cleanLessonTitle(activeLesson.title, activeLesson.type)}
+                                        />
                                     )}
 
                                     {/* Action Area */}

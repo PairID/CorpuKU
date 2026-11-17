@@ -2,11 +2,11 @@
 
 import { useState, useEffect } from "react";
 import Image from "next/image";
-import { BookOpen, Clock, Globe, Award, Shield, CheckCircle, ChevronDown, ChevronUp, PlayCircle, Loader2, CalendarDays } from "lucide-react";
-import { enrollInCourse, checkEnrollment } from "@/app/actions/courses";
+import { BookOpen, Clock, Globe, Award, Shield, CheckCircle, ChevronDown, ChevronUp, PlayCircle, Loader2, CalendarDays, Lock, KeyRound, AlertCircle, X } from "lucide-react";
+import { enrollInCourse, getEnrollmentStatus } from "@/app/actions/courses";
 import { useRouter } from "next/navigation";
 import { optimizeImage } from "@/lib/utils";
-import { toast } from "sonner";
+import { showToast } from "@/lib/toast";
 
 export interface CourseLesson {
     id: string;
@@ -36,6 +36,7 @@ export interface CourseProp {
     endDate: string | null;
     certificateEnabled: boolean;
     certificateType: string | null;
+    accessMode?: "open" | "passcode" | "approval";
     createdAt: string | null;
     updatedAt: string | null;
 }
@@ -43,18 +44,24 @@ export interface CourseProp {
 export default function CourseClient({ course, courseContent }: { course: CourseProp, courseContent: CourseModule[] }) {
     const [expandedWeek, setExpandedWeek] = useState<string | null>(courseContent[0]?.id || null);
     const [isEnrolled, setIsEnrolled] = useState<boolean>(false);
+    const [enrollmentStatus, setEnrollmentStatus] = useState<"active" | "completed" | "pending_approval" | "rejected" | null>(null);
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const [isChecking, setIsChecking] = useState<boolean>(true);
+    const [showPasscodeModal, setShowPasscodeModal] = useState<boolean>(false);
+    const [passcodeInput, setPasscodeInput] = useState<string>("");
+    const [passcodeError, setPasscodeError] = useState<string>("");
     const router = useRouter();
 
     useEffect(() => {
         async function fetchEnrollment() {
             try {
-                const enrolled = await checkEnrollment(course.id);
-                setIsEnrolled(enrolled);
+                const res = await getEnrollmentStatus(course.id);
+                setIsEnrolled(res.enrolled && (res.status === "active" || res.status === "completed"));
+                setEnrollmentStatus(res.status);
             } catch (err) {
                 console.error("Failed to check enrollment:", err);
                 setIsEnrolled(false);
+                setEnrollmentStatus(null);
             } finally {
                 setIsChecking(false);
             }
@@ -63,18 +70,38 @@ export default function CourseClient({ course, courseContent }: { course: Course
         return () => window.clearTimeout(timer);
     }, [course.id]);
 
-    const handleEnroll = async () => {
+    const handleEnroll = async (passcodeToSubmit?: string) => {
+        if (course.accessMode === "passcode" && !passcodeToSubmit) {
+            setPasscodeError("");
+            setPasscodeInput("");
+            setShowPasscodeModal(true);
+            return;
+        }
+
         setIsLoading(true);
-        const result = await enrollInCourse(course.id);
+        setPasscodeError("");
+        const result = await enrollInCourse(course.id, passcodeToSubmit);
 
         if (result.success) {
-            setIsEnrolled(true);
-            toast.success("Berhasil mendaftar di kursus!");
+            if (result.status === "pending_approval") {
+                setEnrollmentStatus("pending_approval");
+                setShowPasscodeModal(false);
+                showToast.success("Pendaftaran Diajukan", "Pengajuan pendaftaran berhasil dikirim. Mohon menunggu persetujuan admin.");
+            } else {
+                setIsEnrolled(true);
+                setEnrollmentStatus("active");
+                setShowPasscodeModal(false);
+                showToast.success("Pendaftaran Berhasil", "Selamat belajar di kelas ini!");
+            }
             router.refresh();
         } else if (result.error) {
             const errString = String(result.error);
-            toast.error(errString);
-            if (errString.includes("logged in")) {
+            if (showPasscodeModal) {
+                setPasscodeError(errString);
+            } else {
+                showToast.error("Pendaftaran Gagal", errString);
+            }
+            if (errString.toLowerCase().includes("logged in") || errString.toLowerCase().includes("login")) {
                 router.push("/login");
             }
         }
@@ -180,9 +207,31 @@ export default function CourseClient({ course, courseContent }: { course: Course
                                 </div>
 
                                 <div className="mb-6">
-                                    <p className="text-xs font-bold uppercase tracking-widest text-oxford-400">Akses pelatihan</p>
-                                    <p className="mt-1 text-xl font-bold text-oxford-900 dark:text-white">Daftar melalui akun CorpuKU</p>
+                                    <div className="flex items-center justify-between mb-1">
+                                        <p className="text-xs font-bold uppercase tracking-widest text-oxford-400">Akses pelatihan</p>
+                                        {course.accessMode === "passcode" ? (
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[11px] font-bold">
+                                                <Lock size={12} /> Kunci Passcode
+                                            </span>
+                                        ) : course.accessMode === "approval" ? (
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-600 dark:text-blue-400 text-[11px] font-bold">
+                                                <Shield size={12} /> Perlu Persetujuan
+                                            </span>
+                                        ) : (
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 text-[11px] font-bold">
+                                                <Globe size={12} /> Terbuka
+                                            </span>
+                                        )}
+                                    </div>
+                                    <p className="text-xl font-bold text-oxford-900 dark:text-white">Daftar melalui akun CorpuKU</p>
                                 </div>
+
+                                {enrollmentStatus === "rejected" && (
+                                    <div className="mb-4 p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-700 dark:text-rose-300 text-xs flex items-start gap-2">
+                                        <AlertCircle size={16} className="shrink-0 mt-0.5" />
+                                        <span>Pendaftaran Anda sebelumnya ditolak oleh admin. Anda dapat mengajukan pendaftaran ulang.</span>
+                                    </div>
+                                )}
 
                                 {isEnrolled ? (
                                     <button
@@ -191,14 +240,28 @@ export default function CourseClient({ course, courseContent }: { course: Course
                                     >
                                         <CheckCircle size={20} /> Lanjutkan Belajar
                                     </button>
+                                ) : enrollmentStatus === "pending_approval" ? (
+                                    <div className="w-full py-4 px-4 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-700 dark:text-amber-300 font-bold text-sm text-center mb-4 flex items-center justify-center gap-2 shadow-sm">
+                                        <span>⏳</span> Menunggu Persetujuan Admin
+                                    </div>
                                 ) : (
                                     <button
-                                        onClick={handleEnroll}
+                                        onClick={() => handleEnroll()}
                                         disabled={isLoading || isChecking}
                                         className={`w-full py-4 font-bold font-sans rounded-xl text-lg transition-all shadow-lg active:scale-95 mb-4 flex items-center justify-center gap-2 bg-gold-500 text-oxford-950 hover:bg-gold-400 shadow-gold-500/20 disabled:opacity-70`}
                                     >
                                         {isLoading ? (
                                             <Loader2 className="animate-spin" size={20} />
+                                        ) : course.accessMode === "passcode" ? (
+                                            <>
+                                                <KeyRound size={20} />
+                                                <span>Daftar dengan Kunci</span>
+                                            </>
+                                        ) : course.accessMode === "approval" ? (
+                                            <>
+                                                <Shield size={20} />
+                                                <span>Ajukan Pendaftaran</span>
+                                            </>
                                         ) : (
                                             "Daftar Sekarang"
                                         )}
@@ -349,6 +412,71 @@ export default function CourseClient({ course, courseContent }: { course: Course
                 </div>
             </section>
 
+            {/* Modal Input Passcode */}
+            {showPasscodeModal && (
+                <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="bg-white dark:bg-[#161B2A] border border-oxford-200 dark:border-oxford-700 rounded-2xl max-w-md w-full p-6 shadow-2xl relative text-oxford-900 dark:text-white animate-fade-in">
+                        <button
+                            type="button"
+                            onClick={() => setShowPasscodeModal(false)}
+                            className="absolute top-4 right-4 p-1.5 rounded-lg text-oxford-400 hover:bg-oxford-100 dark:hover:bg-oxford-800"
+                        >
+                            <X size={18} />
+                        </button>
+
+                        <div className="w-12 h-12 rounded-2xl bg-amber-500/15 text-amber-500 flex items-center justify-center mb-4">
+                            <Lock size={24} />
+                        </div>
+
+                        <h3 className="text-lg font-bold mb-1">Kelas Terkunci</h3>
+                        <p className="text-xs text-oxford-500 dark:text-oxford-400 mb-4">
+                            Kelas ini memerlukan kunci pendaftaran (passcode) dari penyelenggara / pengajar untuk bergabung.
+                        </p>
+
+                        <form
+                            onSubmit={(e) => {
+                                e.preventDefault();
+                                handleEnroll(passcodeInput);
+                            }}
+                            className="space-y-4"
+                        >
+                            <div>
+                                <label className="block text-xs font-bold mb-1">Kunci Pendaftaran (Passcode)</label>
+                                <input
+                                    type="text"
+                                    autoFocus
+                                    required
+                                    value={passcodeInput}
+                                    onChange={(e) => setPasscodeInput(e.target.value)}
+                                    placeholder="Masukkan passcode kelas..."
+                                    className="w-full px-4 py-2.5 rounded-xl border border-oxford-200 dark:border-oxford-700 bg-oxford-50 dark:bg-oxford-900 text-sm font-mono focus:outline-none focus:border-gold-500"
+                                />
+                                {passcodeError && (
+                                    <p className="text-xs text-rose-500 mt-1 font-semibold">{passcodeError}</p>
+                                )}
+                            </div>
+
+                            <div className="flex items-center justify-end gap-2 pt-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPasscodeModal(false)}
+                                    className="px-4 py-2 rounded-xl text-xs font-bold text-oxford-600 dark:text-oxford-300 hover:bg-oxford-100 dark:hover:bg-oxford-800"
+                                >
+                                    Batal
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={isLoading || !passcodeInput.trim()}
+                                    className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-gold-500 hover:bg-gold-400 text-oxford-950 font-bold text-xs shadow-sm transition-colors disabled:opacity-50"
+                                >
+                                    {isLoading ? <Loader2 size={14} className="animate-spin" /> : <KeyRound size={14} />}
+                                    <span>Verifikasi &amp; Daftar</span>
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

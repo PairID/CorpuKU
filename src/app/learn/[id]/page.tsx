@@ -44,6 +44,13 @@ export default async function LearnPage({ params }: { params: Promise<{ id: stri
         enrollment = await getEnrollment(courseId);
     }
 
+    // Restrict student access if not approved
+    if (authUser.role === "student") {
+        if (!enrollment || enrollment.status === "pending_approval" || enrollment.status === "rejected") {
+            redirect(`/courses/${courseId}`);
+        }
+    }
+
     return (
         <LearnClient
             course={course}

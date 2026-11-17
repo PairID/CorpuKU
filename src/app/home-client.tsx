@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { motion, type Variants, AnimatePresence } from "framer-motion";
-import { ArrowRight, BookOpen, Calendar, Layers3, ChevronRight, Award, Radio, PlayCircle, Clock, Video } from "lucide-react";
+import { ArrowRight, BookOpen, Calendar, Layers3, ChevronRight, Award, Radio, PlayCircle, Clock, Video, Lock, Shield } from "lucide-react";
 import { optimizeImage } from "@/lib/utils";
 import type { Webinar } from "@/lib/types";
 
@@ -77,6 +77,7 @@ interface CourseProp {
   description: string | null;
   category: string;
   thumbnailUrl: string | null;
+  accessMode?: "open" | "passcode" | "approval";
   startDate: string | null;
   endDate: string | null;
   createdAt: string | null;
@@ -357,6 +358,16 @@ export default function HomeClient({ courses, featuredWebinar }: { courses: Cour
                     <Image src={optimizeImage(course.thumbnailUrl, 600)} alt={course.title} fill sizes="(min-width: 1024px) 25vw, (min-width: 768px) 50vw, 100vw" unoptimized className="object-cover group-hover:scale-110 transition-transform duration-500 opacity-80" />
                   ) : (
                     <div className="absolute inset-0 bg-mesh opacity-30" />
+                  )}
+                  {course.accessMode === "passcode" && (
+                    <div className="absolute top-3 right-3 px-2 py-0.5 rounded-md bg-amber-500/90 text-oxford-950 font-bold text-[10px] flex items-center gap-1 shadow-md">
+                      <Lock size={11} /> Passcode
+                    </div>
+                  )}
+                  {course.accessMode === "approval" && (
+                    <div className="absolute top-3 right-3 px-2 py-0.5 rounded-md bg-blue-600/90 text-white font-bold text-[10px] flex items-center gap-1 shadow-md">
+                      <Shield size={11} /> Persetujuan
+                    </div>
                   )}
                 </div>
                 <div className="p-6 flex flex-col flex-1">

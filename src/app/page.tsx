@@ -23,6 +23,7 @@ export default async function HomePage() {
       description: c.description,
       category: c.category,
       thumbnailUrl: c.thumbnailUrl,
+      accessMode: c.accessMode || "open",
       startDate: safeDate(c.startDate),
       endDate: safeDate(c.endDate),
       createdAt: safeDate(c.createdAt)

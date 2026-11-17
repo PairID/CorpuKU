@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import QRCode from "qrcode";
 import {
+  Check,
   CheckCircle2,
   Copy,
   Download,
@@ -10,17 +11,18 @@ import {
   Loader2,
   Maximize2,
   Minimize2,
-  Pause,
-  Play,
   QrCode,
-  Radio,
   RefreshCw,
   Search,
+  UserCheck,
+  UserX,
   Users,
   X,
 } from "lucide-react";
 import { showToast } from "@/lib/toast";
 import {
+  adminApproveAllPendingEnrollments,
+  adminUpdateEnrollmentApproval,
   adminUpdateParticipantRegistration,
   getCourseEnrollmentsLive,
   type LiveEnrolledParticipant,
@@ -57,11 +59,27 @@ export default function CourseEnrollQrModal({
     phone: "",
   });
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [isActionLoading, setIsActionLoading] = useState(false);
 
   const enrollUrl =
     typeof window !== "undefined"
       ? `${window.location.origin}/courses/${courseId}`
       : `/courses/${courseId}`;
+
+  // Keyboard shortcut ESC to exit fullscreen or close modal
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (isFullscreen) {
+          setIsFullscreen(false);
+        } else if (!editingUser) {
+          onClose();
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isFullscreen, editingUser, onClose]);
 
   useEffect(() => {
     QRCode.toDataURL(enrollUrl, {
@@ -116,12 +134,72 @@ export default function CourseEnrollQrModal({
     );
   }, [participants, searchQuery]);
 
+  const pendingParticipants = useMemo(() => {
+    return participants.filter((p) => p.status === "pending_approval");
+  }, [participants]);
+
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(enrollUrl);
       showToast.success("Tautan Disalin", "Link pendaftaran kelas siap dibagikan.");
     } catch {
       showToast.error("Gagal Menyalin", "Silakan salin tautan secara manual.");
+    }
+  };
+
+  const handleApprove = async (enrollmentId: string) => {
+    setIsActionLoading(true);
+    try {
+      const res = await adminUpdateEnrollmentApproval({
+        courseId,
+        enrollmentId,
+        status: "active",
+      });
+      if (res.success) {
+        showToast.success("Pendaftaran Disetujui", "Peserta kini aktif dan dapat mengakses materi kelas.");
+        await fetchParticipants(true);
+      } else {
+        showToast.error("Gagal Menyetujui", res.error || "Terjadi kesalahan.");
+      }
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  const handleReject = async (enrollmentId: string) => {
+    setIsActionLoading(true);
+    try {
+      const res = await adminUpdateEnrollmentApproval({
+        courseId,
+        enrollmentId,
+        status: "rejected",
+      });
+      if (res.success) {
+        showToast.info("Pendaftaran Ditolak", "Status pendaftaran peserta diubah menjadi ditolak.");
+        await fetchParticipants(true);
+      } else {
+        showToast.error("Gagal Menolak", res.error || "Terjadi kesalahan.");
+      }
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  const handleApproveAll = async () => {
+    setIsActionLoading(true);
+    try {
+      const res = await adminApproveAllPendingEnrollments(courseId);
+      if (res.success) {
+        showToast.success(
+          "Semua Disetujui",
+          `${res.count || 0} pengajuan pendaftaran berhasil disetujui.`
+        );
+        await fetchParticipants(true);
+      } else {
+        showToast.error("Gagal Menyetujui", res.error || "Terjadi kesalahan.");
+      }
+    } finally {
+      setIsActionLoading(false);
     }
   };
 
@@ -159,46 +237,57 @@ export default function CourseEnrollQrModal({
     }
   };
 
-  return (
-    <div
-      className={
-        isFullscreen
-          ? "fixed inset-0 z-50 bg-oxford-950 text-white p-5 md:p-8 overflow-y-auto flex flex-col"
-          : "fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto"
-      }
-    >
-      <div
-        className={
-          isFullscreen
-            ? "max-w-7xl w-full mx-auto flex-1 flex flex-col"
-            : "bg-white dark:bg-[#161B2A] border border-oxford-200 dark:border-oxford-700 rounded-2xl max-w-5xl w-full p-6 shadow-2xl relative max-h-[92vh] flex flex-col overflow-hidden"
-        }
-      >
-        {/* Top Bar */}
-        <div
-          className={`flex flex-wrap items-center justify-between gap-3 pb-4 border-b ${
-            isFullscreen
-              ? "border-oxford-800"
-              : "border-oxford-200 dark:border-oxford-700"
-          }`}
+  // FULLSCREEN MODE: Hanya tampilkan petunjuk scan & QR Code besar
+  if (isFullscreen) {
+    return (
+      <div className="fixed inset-0 z-50 bg-oxford-950 flex flex-col items-center justify-center p-6 select-none animate-fade-in relative">
+        <button
+          type="button"
+          onClick={() => setIsFullscreen(false)}
+          aria-label="Keluar Layar Penuh"
+          className="absolute top-6 right-6 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-oxford-900/90 hover:bg-oxford-800 text-oxford-300 hover:text-white border border-oxford-700/70 text-xs font-semibold backdrop-blur-md transition-all active:scale-95 shadow-lg group"
         >
+          <Minimize2 size={16} className="group-hover:scale-90 transition-transform text-gold-400" />
+          <span>Keluar Layar Penuh (ESC)</span>
+        </button>
+
+        <p className="text-white text-xl sm:text-2xl md:text-3xl font-bold text-center max-w-3xl mb-8 leading-snug drop-shadow-md">
+          Peserta cukup scan QR ini untuk membuka kelas &amp; klik{" "}
+          <span className="text-gold-400">Daftar / Mulai Belajar</span>.
+        </p>
+
+        <div className="bg-white p-6 sm:p-8 md:p-10 rounded-3xl shadow-2xl border-4 border-gold-400/80 flex items-center justify-center">
+          {qrDataUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={qrDataUrl}
+              alt={`QR Pendaftaran ${courseTitle}`}
+              className="w-72 h-72 sm:w-96 sm:h-96 md:w-[440px] md:h-[440px] object-contain"
+            />
+          ) : (
+            <div className="w-72 h-72 flex items-center justify-center text-sm text-oxford-500">
+              Menyiapkan QR Code...
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+      <div className="bg-white dark:bg-[#161B2A] border border-oxford-200 dark:border-oxford-700 rounded-2xl max-w-5xl w-full p-6 shadow-2xl relative max-h-[92vh] flex flex-col overflow-hidden">
+        {/* Top Bar */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-oxford-200 dark:border-oxford-700">
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-10 h-10 rounded-xl bg-gold-500/15 text-gold-500 flex items-center justify-center shrink-0">
               <QrCode size={22} />
             </div>
             <div className="min-w-0">
-              <h3
-                className={`text-base font-bold truncate ${
-                  isFullscreen ? "text-white text-xl" : "text-oxford-950 dark:text-white"
-                }`}
-              >
+              <h3 className="text-base font-bold truncate text-oxford-950 dark:text-white">
                 QR Code Pendaftaran Kelas
               </h3>
-              <p
-                className={`text-xs truncate ${
-                  isFullscreen ? "text-oxford-300" : "text-oxford-500 dark:text-oxford-400"
-                }`}
-              >
+              <p className="text-xs truncate text-oxford-500 dark:text-oxford-400">
                 {courseTitle}
               </p>
             </div>
@@ -207,29 +296,9 @@ export default function CourseEnrollQrModal({
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              onClick={() => setIsLive((prev) => !prev)}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors ${
-                isLive
-                  ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-500"
-                  : isFullscreen
-                  ? "bg-oxford-900 border-oxford-700 text-oxford-300"
-                  : "bg-oxford-100 dark:bg-oxford-800 border-oxford-200 dark:border-oxford-700 text-oxford-600 dark:text-oxford-300"
-              }`}
-            >
-              <Radio size={14} className={isLive ? "animate-pulse" : ""} />
-              {isLive ? "LIVE (4 dtk)" : "Jeda"}
-              {isLive ? <Pause size={12} /> : <Play size={12} />}
-            </button>
-
-            <button
-              type="button"
               onClick={() => fetchParticipants(false)}
               disabled={isRefreshing}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors ${
-                isFullscreen
-                  ? "bg-oxford-900 border-oxford-700 text-oxford-200 hover:bg-oxford-800"
-                  : "bg-oxford-100 dark:bg-oxford-800 border-oxford-200 dark:border-oxford-700 text-oxford-800 dark:text-oxford-100 hover:bg-oxford-200"
-              }`}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors bg-oxford-100 dark:bg-oxford-800 border-oxford-200 dark:border-oxford-700 text-oxford-800 dark:text-oxford-100 hover:bg-oxford-200"
             >
               <RefreshCw size={14} className={isRefreshing ? "animate-spin" : ""} />
               Refresh
@@ -237,26 +306,18 @@ export default function CourseEnrollQrModal({
 
             <button
               type="button"
-              onClick={() => setIsFullscreen((prev) => !prev)}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors ${
-                isFullscreen
-                  ? "bg-gold-500 border-gold-400 text-oxford-950 hover:bg-gold-400"
-                  : "bg-oxford-900 dark:bg-gold-500 border-oxford-900 dark:border-gold-500 text-white dark:text-oxford-950 hover:opacity-90"
-              }`}
+              onClick={() => setIsFullscreen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors bg-oxford-900 dark:bg-gold-500 border-oxford-900 dark:border-gold-500 text-white dark:text-oxford-950 hover:opacity-90"
             >
-              {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-              {isFullscreen ? "Keluar Layar Penuh" : "Layar Penuh"}
+              <Maximize2 size={14} />
+              Layar Penuh
             </button>
 
             <button
               type="button"
               onClick={onClose}
               aria-label="Tutup"
-              className={`p-2 rounded-xl transition-colors ${
-                isFullscreen
-                  ? "text-oxford-300 hover:bg-oxford-800 hover:text-white"
-                  : "text-oxford-500 hover:bg-oxford-100 dark:hover:bg-oxford-800"
-              }`}
+              className="p-2 rounded-xl transition-colors text-oxford-500 hover:bg-oxford-100 dark:hover:bg-oxford-800"
             >
               <X size={18} />
             </button>
@@ -267,11 +328,7 @@ export default function CourseEnrollQrModal({
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 pt-5 flex-1 min-h-0 overflow-y-auto lg:overflow-hidden">
           {/* Left: QR Code & Link */}
           <div className="lg:col-span-5 flex flex-col items-center justify-center">
-            <p
-              className={`text-xs text-center mb-3 ${
-                isFullscreen ? "text-oxford-300" : "text-oxford-600 dark:text-oxford-300"
-              }`}
-            >
+            <p className="text-xs text-center mb-3 text-oxford-600 dark:text-oxford-300">
               Peserta cukup scan QR ini untuk membuka kelas &amp; klik{" "}
               <strong>Daftar / Mulai Belajar</strong>.
             </p>
@@ -282,11 +339,7 @@ export default function CourseEnrollQrModal({
                 <img
                   src={qrDataUrl}
                   alt={`QR Pendaftaran ${courseTitle}`}
-                  className={
-                    isFullscreen
-                      ? "w-64 h-64 md:w-80 md:h-80 object-contain"
-                      : "w-56 h-56 object-contain"
-                  }
+                  className="w-56 h-56 object-contain"
                 />
               ) : (
                 <div className="w-56 h-56 flex items-center justify-center text-xs text-oxford-400">
@@ -300,20 +353,12 @@ export default function CourseEnrollQrModal({
                 type="text"
                 readOnly
                 value={enrollUrl}
-                className={`flex-1 px-3 py-2 rounded-xl text-xs font-mono border ${
-                  isFullscreen
-                    ? "bg-oxford-900 border-oxford-700 text-oxford-100"
-                    : "bg-oxford-50 dark:bg-oxford-900 border-oxford-200 dark:border-oxford-700 text-oxford-800 dark:text-oxford-200"
-                }`}
+                className="flex-1 px-3 py-2 rounded-xl text-xs font-mono border bg-oxford-50 dark:bg-oxford-900 border-oxford-200 dark:border-oxford-700 text-oxford-800 dark:text-oxford-200"
               />
               <button
                 type="button"
                 onClick={handleCopy}
-                className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold shrink-0 ${
-                  isFullscreen
-                    ? "bg-oxford-800 text-white hover:bg-oxford-700"
-                    : "bg-oxford-100 dark:bg-oxford-800 text-oxford-800 dark:text-oxford-100 hover:bg-oxford-200"
-                }`}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold shrink-0 bg-oxford-100 dark:bg-oxford-800 text-oxford-800 dark:text-oxford-100 hover:bg-oxford-200"
               >
                 <Copy size={14} /> Salin
               </button>
@@ -330,32 +375,40 @@ export default function CourseEnrollQrModal({
             )}
           </div>
 
-          {/* Right: Live Enrolled Participants + Edit */}
-          <div
-            className={`lg:col-span-7 flex flex-col min-h-[320px] lg:min-h-0 rounded-2xl border p-4 ${
-              isFullscreen
-                ? "bg-oxford-900/70 border-oxford-800"
-                : "bg-oxford-50/70 dark:bg-oxford-900/40 border-oxford-200 dark:border-oxford-700"
-            }`}
-          >
+          {/* Right: Live Enrolled Participants + Approval + Edit */}
+          <div className="lg:col-span-7 flex flex-col min-h-[320px] lg:min-h-0 rounded-2xl border p-4 bg-oxford-50/70 dark:bg-oxford-900/40 border-oxford-200 dark:border-oxford-700">
             <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
               <div className="flex items-center gap-2">
                 <Users size={18} className="text-gold-500" />
-                <span className="font-bold text-sm">Peserta Masuk (Live)</span>
+                <span className="font-bold text-sm">Peserta Masuk</span>
                 <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-500 font-bold text-xs">
                   {participants.length} Peserta
                 </span>
               </div>
               {lastUpdated && (
-                <span
-                  className={`text-xs ${
-                    isFullscreen ? "text-oxford-400" : "text-oxford-500"
-                  }`}
-                >
+                <span className="text-xs text-oxford-500">
                   Update: {lastUpdated}
                 </span>
               )}
             </div>
+
+            {/* Banner persetujuan tertunda jika ada */}
+            {pendingParticipants.length > 0 && (
+              <div className="mb-3 p-3 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-between gap-3 text-amber-700 dark:text-amber-300">
+                <div className="flex items-center gap-2 text-xs font-semibold">
+                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                  <span>{pendingParticipants.length} peserta menunggu persetujuan.</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleApproveAll}
+                  disabled={isActionLoading}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-sm transition-colors disabled:opacity-50 shrink-0"
+                >
+                  <UserCheck size={14} /> Setujui Semua ({pendingParticipants.length})
+                </button>
+              </div>
+            )}
 
             <div className="relative mb-3">
               <Search
@@ -367,11 +420,7 @@ export default function CourseEnrollQrModal({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Cari nama, NIP, instansi..."
-                className={`w-full pl-9 pr-3 py-2 rounded-xl border text-xs focus:outline-none focus:border-gold-500 ${
-                  isFullscreen
-                    ? "bg-oxford-950 border-oxford-700 text-white placeholder:text-oxford-500"
-                    : "bg-white dark:bg-[#161B2A] border-oxford-200 dark:border-oxford-700 text-oxford-900 dark:text-white"
-                }`}
+                className="w-full pl-9 pr-3 py-2 rounded-xl border text-xs focus:outline-none focus:border-gold-500 bg-white dark:bg-[#161B2A] border-oxford-200 dark:border-oxford-700 text-oxford-900 dark:text-white"
               />
             </div>
 
@@ -390,11 +439,7 @@ export default function CourseEnrollQrModal({
                 filteredParticipants.map((p, idx) => (
                   <div
                     key={p.enrollmentId}
-                    className={`p-3 rounded-xl border flex items-start justify-between gap-3 ${
-                      isFullscreen
-                        ? "bg-oxford-950/80 border-oxford-800"
-                        : "bg-white dark:bg-[#161B2A] border-oxford-200 dark:border-oxford-700"
-                    }`}
+                    className="p-3 rounded-xl border flex items-start justify-between gap-3 bg-white dark:bg-[#161B2A] border-oxford-200 dark:border-oxford-700"
                   >
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
@@ -404,57 +449,85 @@ export default function CourseEnrollQrModal({
                         <span className="font-bold text-sm truncate">
                           {p.name}
                         </span>
-                        {p.statementAccepted ? (
+
+                        {p.status === "pending_approval" ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-500 text-xs font-bold">
+                            ⏳ Menunggu Persetujuan
+                          </span>
+                        ) : p.status === "rejected" ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-500 text-xs font-bold">
+                            <UserX size={12} /> Ditolak
+                          </span>
+                        ) : p.statementAccepted ? (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-500 text-xs font-bold">
                             <CheckCircle2 size={12} /> Terverifikasi
                           </span>
                         ) : (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-500 text-xs font-bold">
-                            Baru Daftar
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-500 text-xs font-bold">
+                            Terdaftar
                           </span>
                         )}
                       </div>
-                      <p
-                        className={`text-xs mt-1 ${
-                          isFullscreen ? "text-oxford-300" : "text-oxford-600 dark:text-oxford-300"
-                        }`}
-                      >
+                      <p className="text-xs mt-1 text-oxford-600 dark:text-oxford-300">
                         NIP: <span className="font-mono">{p.nip || "-"}</span> ·{" "}
                         {p.instansiAsal || "Instansi belum diisi"}
                       </p>
                       {(p.jabatan || p.pangkat) && (
-                        <p
-                          className={`text-xs ${
-                            isFullscreen ? "text-oxford-400" : "text-oxford-500"
-                          }`}
-                        >
+                        <p className="text-xs text-oxford-500">
                           {[p.jabatan, p.pangkat].filter(Boolean).join(" · ")}
                         </p>
                       )}
                     </div>
 
                     <div className="flex flex-col items-end gap-1.5 shrink-0">
-                      <span
-                        className={`text-xs font-mono ${
-                          isFullscreen ? "text-oxford-400" : "text-oxford-500"
-                        }`}
-                      >
+                      <span className="text-xs font-mono text-oxford-500">
                         {new Date(p.enrolledAt).toLocaleTimeString("id-ID", {
                           hour: "2-digit",
                           minute: "2-digit",
                         })}
                       </span>
-                      <button
-                        type="button"
-                        onClick={() => openEdit(p)}
-                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold border transition-colors ${
-                          isFullscreen
-                            ? "border-oxford-700 bg-oxford-900 text-gold-400 hover:bg-oxford-800"
-                            : "border-oxford-200 dark:border-oxford-700 bg-oxford-50 dark:bg-oxford-800 text-oxford-800 dark:text-gold-400 hover:bg-oxford-100"
-                        }`}
-                      >
-                        <Edit2 size={12} /> Edit
-                      </button>
+
+                      <div className="flex items-center gap-1.5">
+                        {p.status === "pending_approval" ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => handleApprove(p.enrollmentId)}
+                              disabled={isActionLoading}
+                              title="Setujui pendaftaran"
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm transition-colors disabled:opacity-50"
+                            >
+                              <Check size={12} /> Setujui
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleReject(p.enrollmentId)}
+                              disabled={isActionLoading}
+                              title="Tolak pendaftaran"
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-bold border border-rose-300 dark:border-rose-800 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors disabled:opacity-50"
+                            >
+                              <X size={12} /> Tolak
+                            </button>
+                          </>
+                        ) : p.status === "rejected" ? (
+                          <button
+                            type="button"
+                            onClick={() => handleApprove(p.enrollmentId)}
+                            disabled={isActionLoading}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm transition-colors disabled:opacity-50"
+                          >
+                            <UserCheck size={12} /> Setujui Ulang
+                          </button>
+                        ) : null}
+
+                        <button
+                          type="button"
+                          onClick={() => openEdit(p)}
+                          className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-bold border border-oxford-200 dark:border-oxford-700 bg-oxford-50 dark:bg-oxford-800 text-oxford-800 dark:text-gold-400 hover:bg-oxford-100 transition-colors"
+                        >
+                          <Edit2 size={12} /> Edit
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))

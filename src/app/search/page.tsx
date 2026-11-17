@@ -14,6 +14,7 @@ export default async function SearchPage() {
         category: String(c.category || "Lainnya"),
         level: String(c.level || "Pemula"),
         thumbnailUrl: c.thumbnailUrl,
+        accessMode: (c.accessMode as "open" | "passcode" | "approval") || "open",
         createdAt: c.createdAt ? new Date(c.createdAt).toISOString() : null,
         updatedAt: c.updatedAt ? new Date(c.updatedAt).toISOString() : null
     }));

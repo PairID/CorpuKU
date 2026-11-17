@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { motion } from "framer-motion";
-import { Search, SlidersHorizontal, ChevronDown, Check, Signal } from "lucide-react";
+import { Search, SlidersHorizontal, ChevronDown, Check, Signal, Lock, Shield } from "lucide-react";
 import { COURSE_CATEGORIES, COURSE_LEVELS } from "@/lib/constants";
 
 // Mock filters structure
@@ -22,6 +22,7 @@ interface CourseProp {
     category: string;
     level: string;
     thumbnailUrl: string | null;
+    accessMode?: "open" | "passcode" | "approval";
     createdAt: string | null;
     updatedAt: string | null;
 }
@@ -191,6 +192,16 @@ export default function SearchClient({ courses }: { courses: CourseProp[] }) {
                                                     <Image src={course.thumbnailUrl} alt={course.title} fill sizes="(min-width: 1280px) 33vw, (min-width: 768px) 50vw, 100vw" unoptimized className="object-cover opacity-60 mix-blend-overlay" />
                                                 )}
                                                 <div className="absolute inset-0 bg-mesh mix-blend-overlay opacity-50" />
+                                                {course.accessMode === "passcode" && (
+                                                    <div className="absolute top-3 right-3 px-2 py-0.5 rounded-md bg-amber-500/90 text-oxford-950 font-bold text-[10px] flex items-center gap-1 shadow-md z-10">
+                                                        <Lock size={11} /> Passcode
+                                                    </div>
+                                                )}
+                                                {course.accessMode === "approval" && (
+                                                    <div className="absolute top-3 right-3 px-2 py-0.5 rounded-md bg-blue-600/90 text-white font-bold text-[10px] flex items-center gap-1 shadow-md z-10">
+                                                        <Shield size={11} /> Persetujuan
+                                                    </div>
+                                                )}
                                             </div>
 
                                             <div className="p-6 flex flex-col flex-1">

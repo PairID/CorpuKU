@@ -38,6 +38,8 @@ async function ensureEvaluationConfigColumn() {
     await sql`ALTER TABLE courses ADD COLUMN IF NOT EXISTS organizer_name TEXT`;
     await sql`ALTER TABLE courses ADD COLUMN IF NOT EXISTS delivery_mode TEXT NOT NULL DEFAULT 'daring'`;
     await sql`ALTER TABLE courses ADD COLUMN IF NOT EXISTS location_name TEXT`;
+    await sql`ALTER TABLE courses ADD COLUMN IF NOT EXISTS access_mode TEXT NOT NULL DEFAULT 'open'`;
+    await sql`ALTER TABLE courses ADD COLUMN IF NOT EXISTS passcode TEXT`;
     ensuredEvaluationConfigCol = true;
 }
 
@@ -80,6 +82,8 @@ const courseMutationSchema = z.object({
     organizerName: z.string().trim().max(500).nullable().optional(),
     deliveryMode: z.enum(["daring", "luring", "blended"]).default("daring"),
     locationName: z.string().trim().max(255).nullable().optional(),
+    accessMode: z.enum(["open", "passcode", "approval"]).default("open"),
+    passcode: z.string().trim().max(100).nullable().optional(),
     evaluationConfig: evaluationConfigSchema,
 }).superRefine((course, context) => {
     if (course.pacingType === "instructor_paced" && !course.startDate) {
@@ -90,6 +94,9 @@ const courseMutationSchema = z.object({
     }
     if ((course.deliveryMode === "luring" || course.deliveryMode === "blended") && !course.locationName?.trim()) {
         context.addIssue({ code: "custom", path: ["locationName"], message: "Nama tempat wajib diisi untuk pola klasikal/luring atau blended learning." });
+    }
+    if (course.accessMode === "passcode" && (!course.passcode || !course.passcode.trim())) {
+        context.addIssue({ code: "custom", path: ["passcode"], message: "Kunci pendaftaran wajib diisi jika mode akses menggunakan kunci." });
     }
 });
 
@@ -157,6 +164,8 @@ interface CourseRecord {
     organizerName?: string | null;
     deliveryMode?: "daring" | "luring" | "blended";
     locationName?: string | null;
+    accessMode?: "open" | "passcode" | "approval";
+    passcode?: string | null;
     evaluationConfig?: z.infer<typeof evaluationConfigSchema>;
     createdAt: string;
     updatedAt: string;
@@ -256,11 +265,13 @@ async function requireCourseAccess(courseId: string) {
         if (String(course[0]?.instructorId || "") === session.user.id) return session;
     }
     const enrollment = await sql`
-        SELECT id FROM enrollments
+        SELECT id, status FROM enrollments
         WHERE course_id = ${courseId} AND user_id = ${session.user.id}
         LIMIT 1
     `;
     if (!enrollment[0]) throw new Error("Anda belum terdaftar pada kursus ini.");
+    if (enrollment[0].status === "pending_approval") throw new Error("Pendaftaran Anda masih menunggu persetujuan admin.");
+    if (enrollment[0].status === "rejected") throw new Error("Pendaftaran Anda ditolak oleh admin.");
     const schedule = await sql`SELECT pacing_type, start_date FROM courses WHERE id = ${courseId} LIMIT 1`;
     if (schedule[0]?.pacing_type === "instructor_paced" && schedule[0].start_date && new Date(String(schedule[0].start_date)).getTime() > Date.now()) {
         throw new Error("Materi kursus akan terbuka pada tanggal mulai yang ditetapkan instruktur.");
@@ -323,6 +334,7 @@ export async function getAllCourses() {
                    organizer_name as "organizerName",
                    COALESCE(delivery_mode, 'daring') as "deliveryMode",
                    location_name as "locationName",
+                   COALESCE(access_mode, 'open') as "accessMode",
                    evaluation_config as "evaluationConfig",
                    created_at as "createdAt", 
                    updated_at as "updatedAt"
@@ -353,6 +365,8 @@ export async function getCourseById(id: string): Promise<CourseRecord | null> {
                    organizer_name as "organizerName",
                    COALESCE(delivery_mode, 'daring') as "deliveryMode",
                    location_name as "locationName",
+                   COALESCE(access_mode, 'open') as "accessMode",
+                   passcode,
                    evaluation_config as "evaluationConfig",
                    created_at as "createdAt", 
                    updated_at as "updatedAt"
@@ -361,6 +375,14 @@ export async function getCourseById(id: string): Promise<CourseRecord | null> {
         `;
         const course = data[0];
         if (!course || !(await canViewCourse(id, course.status, course.instructorId))) return null;
+        
+        // Hide passcode from non-instructors/non-admins
+        const auth = await getAuthSession();
+        const canSeePasscode = auth && (auth.user.role === "admin" || (auth.user.role === "instructor" && String(course.instructorId) === auth.user.id));
+        if (!canSeePasscode) {
+            delete (course as Record<string, unknown>).passcode;
+        }
+
         return course as unknown as CourseRecord;
     } catch (err) {
         console.error(`Failed to get course ${id}:`, err);
@@ -368,32 +390,65 @@ export async function getCourseById(id: string): Promise<CourseRecord | null> {
     }
 }
 
-export async function enrollInCourse(courseId: string) {
+export async function enrollInCourse(courseId: string, passcode?: string) {
     try {
         const session = await requireUserSession();
         const user = session.user;
         if (!/^[A-Za-z0-9_-]{1,255}$/.test(courseId)) return { success: false, error: "Kursus tidak valid." };
 
         const courseRes = await sql`
-            SELECT id, title, category, jp FROM courses
+            SELECT id, title, category, jp, COALESCE(access_mode, 'open') as "accessMode", passcode
+            FROM courses
             WHERE id = ${courseId} AND status = 'active'
               AND (end_date IS NULL OR end_date >= CURRENT_DATE)
         `;
         const course = courseRes[0];
         if (!course) return { success: false, error: "Kursus tidak tersedia untuk pendaftaran." };
 
+        const accessMode = String(course.accessMode || "open");
+        if (accessMode === "passcode") {
+            const expected = String(course.passcode || "").trim();
+            const provided = String(passcode || "").trim();
+            if (!provided) {
+                return { success: false, error: "Kunci pendaftaran wajib diisi.", requiresPasscode: true };
+            }
+            if (provided !== expected) {
+                return { success: false, error: "Kunci pendaftaran salah. Silakan coba lagi.", requiresPasscode: true };
+            }
+        }
+
+        const initialStatus = accessMode === "approval" ? "pending_approval" : "active";
         const id = `enroll_${crypto.randomUUID()}`;
         const now = new Date().toISOString();
 
         const inserted = await sql`
             INSERT INTO enrollments (id, user_id, course_id, title, category, progress, status, jp, enrolled_at)
-            VALUES (${id}, ${user.id}, ${courseId}, ${course.title}, ${course.category}, 0, 'active', ${course.jp || 0}, ${now})
-            ON CONFLICT (user_id, course_id) DO NOTHING
-            RETURNING id
+            VALUES (${id}, ${user.id}, ${courseId}, ${course.title}, ${course.category}, 0, ${initialStatus}, ${course.jp || 0}, ${now})
+            ON CONFLICT (user_id, course_id) DO UPDATE SET
+                status = CASE 
+                    WHEN enrollments.status = 'rejected' THEN ${initialStatus} 
+                    ELSE enrollments.status 
+                END
+            RETURNING id, status
         `;
         if (!inserted[0]) return { success: false, error: "Anda sudah terdaftar di kursus ini." };
 
-        // Send Notification
+        if (initialStatus === "pending_approval") {
+            await createNotification({
+                userId: user.id,
+                title: "Pendaftaran Menunggu Persetujuan",
+                message: `Pengajuan pendaftaran kelas "${course.title}" telah diterima dan menunggu persetujuan admin.`,
+                type: "info",
+                link: `/courses/${courseId}`
+            });
+            return {
+                success: true,
+                status: "pending_approval",
+                message: "Pendaftaran berhasil diajukan! Mohon menunggu persetujuan admin."
+            };
+        }
+
+        // Send Notification for active enrollment
         await createNotification({
             userId: user.id,
             title: "Pendaftaran Sukses",
@@ -402,7 +457,7 @@ export async function enrollInCourse(courseId: string) {
             link: `/dashboard/courses/${courseId}`
         });
 
-        return { success: true };
+        return { success: true, status: "active" };
     } catch (err: unknown) {
         return { success: false, error: err instanceof Error ? err.message : "Gagal mendaftar kelas." };
     }
@@ -413,10 +468,38 @@ export async function checkEnrollment(courseId: string) {
         const session = await requireUserSession();
         const user = session.user;
         
-        const data = await sql`SELECT id FROM enrollments WHERE (course_id = ${courseId} OR id = ${courseId}) AND user_id = ${user.id}`;
-        return data.length > 0;
+        const data = await sql`
+            SELECT id, status FROM enrollments 
+            WHERE (course_id = ${courseId} OR id = ${courseId}) AND user_id = ${user.id}
+            LIMIT 1
+        `;
+        if (!data[0]) return false;
+        return data[0].status === "active" || data[0].status === "completed";
     } catch {
         return false;
+    }
+}
+
+export async function getEnrollmentStatus(courseId: string): Promise<{
+    enrolled: boolean;
+    status: "active" | "completed" | "pending_approval" | "rejected" | null;
+}> {
+    try {
+        const session = await requireUserSession();
+        const user = session.user;
+
+        const data = await sql`
+            SELECT status FROM enrollments
+            WHERE (course_id = ${courseId} OR id = ${courseId}) AND user_id = ${user.id}
+            LIMIT 1
+        `;
+        if (!data[0]) return { enrolled: false, status: null };
+        return {
+            enrolled: true,
+            status: data[0].status as "active" | "completed" | "pending_approval" | "rejected",
+        };
+    } catch {
+        return { enrolled: false, status: null };
     }
 }
 
@@ -898,6 +981,8 @@ export async function getCoursesWithStats(): Promise<Array<CourseRecord & { inst
                        c.certificate_start_number as "certificateStartNumber",
                        c.passing_score as "passingScore", c.pacing_type as "pacingType", c.start_date as "startDate", c.end_date as "endDate",
                        c.created_at as "createdAt", c.updated_at as "updatedAt",
+                       COALESCE(c.access_mode, 'open') as "accessMode",
+                       c.passcode,
                        COALESCE(u.name, 'Internal Team') as "instructorName",
                        COALESCE(e.student_count, 0)::int as "studentCount"
                 FROM courses c
@@ -918,6 +1003,8 @@ export async function getCoursesWithStats(): Promise<Array<CourseRecord & { inst
                        c.certificate_start_number as "certificateStartNumber",
                        c.passing_score as "passingScore", c.pacing_type as "pacingType", c.start_date as "startDate", c.end_date as "endDate",
                        c.created_at as "createdAt", c.updated_at as "updatedAt",
+                       COALESCE(c.access_mode, 'open') as "accessMode",
+                       c.passcode,
                        COALESCE(u.name, 'Internal Team') as "instructorName",
                        COALESCE(e.student_count, 0)::int as "studentCount"
                 FROM courses c
@@ -998,7 +1085,7 @@ export async function createCourse(input: unknown) {
                 id, title, description, category, level, thumbnail_url, status, instructor_id, pacing_type,
                 start_date, end_date, jp, certificate_type, certificate_enabled, certificate_auto_issue,
                 certificate_number_prefix, certificate_start_number, passing_score, training_type, target_opd,
-                attendance_threshold, documentation_url, organizer_name, delivery_mode, location_name, evaluation_config, created_at, updated_at
+                attendance_threshold, documentation_url, organizer_name, delivery_mode, location_name, access_mode, passcode, evaluation_config, created_at, updated_at
             ) VALUES (
                 ${id}, ${sanitizePlainText(data.title)}, ${sanitizePlainText(data.description)}, ${sanitizePlainText(data.category)},
                 ${data.level}, ${data.thumbnailUrl || null}, 'draft', ${instructorId}, ${data.pacingType}, ${data.startDate || null},
@@ -1009,6 +1096,8 @@ export async function createCourse(input: unknown) {
                 ${data.organizerName ? sanitizePlainText(data.organizerName) : null},
                 ${data.deliveryMode},
                 ${data.deliveryMode === "daring" ? null : (data.locationName ? sanitizePlainText(data.locationName) : null)},
+                ${data.accessMode},
+                ${data.accessMode === "passcode" ? (data.passcode?.trim() || null) : null},
                 ${evalConfigJson}::jsonb, ${now}, ${now}
             )
         `;
@@ -1054,6 +1143,8 @@ export async function updateCourseDetails(id: string, input: unknown) {
                 organizer_name = ${data.organizerName ? sanitizePlainText(data.organizerName) : null},
                 delivery_mode = ${data.deliveryMode},
                 location_name = ${data.deliveryMode === "daring" ? null : (data.locationName ? sanitizePlainText(data.locationName) : null)},
+                access_mode = ${data.accessMode},
+                passcode = ${data.accessMode === "passcode" ? (data.passcode?.trim() || null) : null},
                 evaluation_config = CASE WHEN ${hasEvalConfig} THEN ${evalConfigJson}::jsonb ELSE evaluation_config END,
                 status = ${data.status},
                 updated_at = ${now}
