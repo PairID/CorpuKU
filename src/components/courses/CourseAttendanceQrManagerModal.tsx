@@ -18,6 +18,7 @@ import {
   generateMaterialAttendanceQr,
   getCourseContentForBuilder,
   getMaterialAttendanceQr,
+  updateMaterialAttendanceQrCode,
 } from "@/app/actions/builder";
 import { showToast } from "@/lib/toast";
 
@@ -48,6 +49,8 @@ export default function CourseAttendanceQrManagerModal({
   const [selectedLessonId, setSelectedLessonId] = useState<string>("");
   const [loadingQr, setLoadingQr] = useState(false);
   const [qrCode, setQrCode] = useState("");
+  const [draftCode, setDraftCode] = useState("");
+  const [savingCode, setSavingCode] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState("");
   const [copied, setCopied] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -96,6 +99,7 @@ export default function CourseAttendanceQrManagerModal({
         if (!active) return;
         if (res.success && res.qrDataUrl) {
           setQrCode(res.code || "");
+          setDraftCode(res.code || "");
           setQrDataUrl(res.qrDataUrl);
         } else {
           showToast.error("Gagal Memuat QR", res.error || "Gagal memuat QR presensi.");
@@ -148,6 +152,7 @@ export default function CourseAttendanceQrManagerModal({
       const res = await generateMaterialAttendanceQr(courseId, selectedLessonId);
       if (res.success && res.qrDataUrl) {
         setQrCode(res.code || "");
+        setDraftCode(res.code || "");
         setQrDataUrl(res.qrDataUrl);
         showToast.success("QR Presensi Diperbarui", `Token baru: ${res.code}`);
       } else {
@@ -155,6 +160,24 @@ export default function CourseAttendanceQrManagerModal({
       }
     } finally {
       setLoadingQr(false);
+    }
+  };
+
+  const handleSaveCustomCode = async () => {
+    if (!selectedLessonId || savingCode) return;
+    setSavingCode(true);
+    try {
+      const res = await updateMaterialAttendanceQrCode(courseId, selectedLessonId, draftCode);
+      if (res.success && res.qrDataUrl) {
+        setQrCode(res.code || "");
+        setDraftCode(res.code || "");
+        setQrDataUrl(res.qrDataUrl);
+        showToast.success("Token Disimpan", `Token & QR diperbarui menjadi ${res.code}`);
+      } else {
+        showToast.error("Gagal Menyimpan Token", res.error || "Token tidak valid.");
+      }
+    } finally {
+      setSavingCode(false);
     }
   };
 
@@ -379,17 +402,29 @@ export default function CourseAttendanceQrManagerModal({
                 </div>
 
                 {qrCode && (
-                  <div className="flex items-center gap-2 w-full max-w-xs mb-3">
+                  <div className="flex items-center gap-1.5 w-full max-w-sm mb-3">
                     <input
                       type="text"
-                      readOnly
-                      value={qrCode}
-                      className="flex-1 px-3 py-1.5 bg-white dark:bg-[#161B2A] border border-oxford-200 dark:border-oxford-700 rounded-xl text-xs font-mono font-bold text-center text-oxford-900 dark:text-white"
+                      value={draftCode}
+                      onChange={(e) => setDraftCode(e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, ""))}
+                      placeholder="Contoh: SESI-1-PAGI"
+                      maxLength={40}
+                      className="flex-1 px-3 py-1.5 bg-white dark:bg-[#161B2A] border border-oxford-200 dark:border-oxford-700 rounded-xl text-xs font-mono font-bold text-center text-oxford-900 dark:text-white focus:outline-none focus:border-gold-500"
                     />
+                    {draftCode.trim() !== qrCode && (
+                      <button
+                        type="button"
+                        onClick={() => void handleSaveCustomCode()}
+                        disabled={savingCode || draftCode.trim().length < 3}
+                        className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold disabled:opacity-50 shrink-0"
+                      >
+                        {savingCode ? "Menyimpan..." : "Simpan Token"}
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => void handleCopy()}
-                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-oxford-200 dark:bg-oxford-800 text-xs font-bold text-oxford-800 dark:text-oxford-100"
+                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-oxford-200 dark:bg-oxford-800 text-xs font-bold text-oxford-800 dark:text-oxford-100 shrink-0"
                     >
                       {copied ? <Check size={13} className="text-emerald-600" /> : <Copy size={13} />}
                       <span>{copied ? "Disalin" : "Salin"}</span>

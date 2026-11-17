@@ -391,6 +391,66 @@ export async function generateMaterialAttendanceQr(courseId: string, lessonId: s
 }
 
 /**
+ * Menyimpan kode token presensi kustom dari Admin dan memperbarui QR Code-nya
+ */
+export async function updateMaterialAttendanceQrCode(
+    courseId: string,
+    lessonId: string,
+    rawCode: string
+) {
+    try {
+        await requireCourseEditor(courseId);
+        const code = (rawCode || "").trim().toUpperCase().replace(/[^A-Z0-9_-]/g, "");
+        if (code.length < 3 || code.length > 40) {
+            return {
+                success: false,
+                error: "Token harus 3-40 karakter (huruf, angka, tanda - atau _).",
+            };
+        }
+
+        const dup = await sql`
+            SELECT l.id
+            FROM lessons l
+            JOIN modules m ON m.id = l.module_id
+            WHERE m.course_id = ${courseId}
+              AND l.id != ${lessonId}
+              AND UPPER(TRIM(COALESCE(l.attendance_qr_code, ''))) = ${code}
+            LIMIT 1
+        `;
+        if (dup[0]) {
+            return {
+                success: false,
+                error: "Token ini sudah dipakai di sesi lain pada kelas yang sama.",
+            };
+        }
+
+        await sql`
+            UPDATE lessons
+            SET attendance_qr_code = ${code}
+            WHERE id = ${lessonId}
+        `;
+
+        const qrPayload = JSON.stringify({
+            type: "material_attendance",
+            courseId,
+            lessonId,
+            code,
+        });
+
+        const qrDataUrl = await QRCode.toDataURL(qrPayload, {
+            width: 320,
+            margin: 2,
+            color: { dark: "#0f172a", light: "#ffffff" },
+        });
+
+        return { success: true, code, qrDataUrl };
+    } catch (err: unknown) {
+        console.error("updateMaterialAttendanceQrCode error:", err);
+        return { success: false, error: errorMessage(err, "Gagal memperbarui token presensi.") };
+    }
+}
+
+/**
  * Mengambil kode QR presensi yang sudah tersimpan untuk sesi materi
  */
 export async function getMaterialAttendanceQr(courseId: string, lessonId: string) {
