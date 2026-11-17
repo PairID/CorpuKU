@@ -48,6 +48,13 @@ interface CourseFormProps {
     basePath?: string;
 }
 
+function toDateInputValue(val: unknown): string {
+    if (!val) return "";
+    if (val instanceof Date) return isNaN(val.getTime()) ? "" : val.toISOString().slice(0, 10);
+    const match = String(val).trim().match(/^(\d{4}-\d{2}-\d{2})/);
+    return match ? match[1] : "";
+}
+
 export default function CourseForm({ initialData, instructors, mode, basePath = "/admin" }: CourseFormProps) {
     const [isLoading, setIsLoading] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -61,8 +68,8 @@ export default function CourseForm({ initialData, instructors, mode, basePath = 
     const [pacingType, setPacingType] = useState<"self_paced" | "instructor_paced">(initialData?.pacingType || "self_paced");
     const [instructorId, setInstructorId] = useState(initialData?.instructorId || (instructors.length > 0 ? instructors[0].id : ""));
     const [thumbnailUrl, setThumbnailUrl] = useState(initialData?.thumbnailUrl || "");
-    const [startDate, setStartDate] = useState(initialData?.startDate || "");
-    const [endDate, setEndDate] = useState(initialData?.endDate || "");
+    const [startDate, setStartDate] = useState(() => toDateInputValue(initialData?.startDate));
+    const [endDate, setEndDate] = useState(() => toDateInputValue(initialData?.endDate));
     const [jp, setJp] = useState<number | "">(initialData?.jp || "");
     const [certificateType, setCertificateType] = useState<"sertifikat" | "surat_keterangan" | "sttp">(initialData?.certificateType || "sertifikat");
     const [certificateEnabled, setCertificateEnabled] = useState(initialData?.certificateEnabled ?? true);
