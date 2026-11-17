@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { Edit, Trash2, Layers, Award, Radio, QrCode } from "lucide-react";
+import { Edit, Trash2, Layers, Award, Radio, QrCode, ScanLine } from "lucide-react";
 import { deleteCourse } from "@/app/actions/courses";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { showToast } from "@/lib/toast";
 import CourseEnrollQrModal from "@/components/courses/CourseEnrollQrModal";
+import CourseAttendanceQrManagerModal from "@/components/courses/CourseAttendanceQrManagerModal";
 
 interface AdminCourse {
     id: string;
@@ -31,6 +32,7 @@ export default function AdminCourseTable({ courses, searchQuery, statusFilter, b
     const [deletingId, setDeletingId] = useState<string | null>(null);
     const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
     const [qrCourse, setQrCourse] = useState<{ id: string; title: string } | null>(null);
+    const [attendanceQrCourse, setAttendanceQrCourse] = useState<{ id: string; title: string } | null>(null);
     const router = useRouter();
 
     // Client-side filter
@@ -130,6 +132,14 @@ export default function AdminCourseTable({ courses, searchQuery, statusFilter, b
                                             >
                                                 <QrCode size={16} />
                                             </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setAttendanceQrCourse({ id: course.id, title: course.title })}
+                                                className="p-2 text-oxford-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+                                                title="Manajemen QR Presensi Per Modul & Layar Penuh"
+                                            >
+                                                <ScanLine size={16} />
+                                            </button>
                                             <Link href={`${basePath}/courses/${course.id}/content`} className="p-2 text-oxford-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="Kelola Materi/Konten">
                                                 <Layers size={16} />
                                             </Link>
@@ -177,6 +187,14 @@ export default function AdminCourseTable({ courses, searchQuery, statusFilter, b
                     courseId={qrCourse.id}
                     courseTitle={qrCourse.title}
                     onClose={() => setQrCourse(null)}
+                />
+            )}
+
+            {attendanceQrCourse && (
+                <CourseAttendanceQrManagerModal
+                    courseId={attendanceQrCourse.id}
+                    courseTitle={attendanceQrCourse.title}
+                    onClose={() => setAttendanceQrCourse(null)}
                 />
             )}
         </div>
