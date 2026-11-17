@@ -292,6 +292,27 @@ export async function confirmParticipantData(payload: ConfirmParticipantDataPayl
 }
 
 /**
+ * Mengambil daftar nama instansi/OPD unik dari database untuk pilihan standar peserta
+ */
+export async function getDistinctInstansiList(): Promise<string[]> {
+  try {
+    const rows = await sql`
+      SELECT DISTINCT TRIM(instansi_asal) AS name
+      FROM users
+      WHERE instansi_asal IS NOT NULL
+        AND TRIM(instansi_asal) != ''
+        AND LENGTH(TRIM(instansi_asal)) >= 3
+      ORDER BY name ASC
+      LIMIT 300
+    `;
+    return rows.map((r) => String(r.name));
+  } catch (err) {
+    console.error("getDistinctInstansiList error:", err);
+    return [];
+  }
+}
+
+/**
  * Mengambil data monitoring presensi live untuk menu Admin / Penyelenggara
  */
 export async function getCourseAttendanceLive(courseId: string) {

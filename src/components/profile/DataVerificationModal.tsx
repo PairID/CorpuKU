@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ShieldCheck, UserCheck, AlertCircle, CheckCircle2, Loader2, FileText } from "lucide-react";
 import { PANGKAT_GOLONGAN } from "@/lib/constants";
-import { confirmParticipantData } from "@/app/actions/attendance";
+import { confirmParticipantData, getDistinctInstansiList } from "@/app/actions/attendance";
 import { showToast } from "@/lib/toast";
 
 export interface UserVerificationProfile {
@@ -35,11 +35,29 @@ export default function DataVerificationModal({
   const [name, setName] = useState(initialProfile.name || "");
   const [nip, setNip] = useState(initialProfile.nip || "");
   const [instansiAsal, setInstansiAsal] = useState(initialProfile.instansiAsal || "");
+  const [instansiList, setInstansiList] = useState<string[]>([]);
+  const [isOtherInstansi, setIsOtherInstansi] = useState(false);
   const [jabatan, setJabatan] = useState(initialProfile.jabatan || "");
   const [pangkat, setPangkat] = useState(initialProfile.pangkat || "");
   const [phone, setPhone] = useState(initialProfile.phone || "");
   const [statementAccepted, setStatementAccepted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let active = true;
+    getDistinctInstansiList().then((list) => {
+      if (!active) return;
+      setInstansiList(list);
+      const current = (instansiAsal || "").trim();
+      if (current && !list.includes(current)) {
+        setIsOtherInstansi(true);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!isOpen) return null;
 
@@ -155,14 +173,40 @@ export default function DataVerificationModal({
               <label className="block text-xs font-bold text-oxford-800 dark:text-oxford-200 mb-1">
                 Instansi / OPD <span className="text-crimson-500">*</span>
               </label>
-              <input
-                type="text"
-                required
-                value={instansiAsal}
-                onChange={(e) => setInstansiAsal(e.target.value)}
-                placeholder="Contoh: Dinas Kesehatan Kab. Bulungan"
+              <select
+                value={isOtherInstansi ? "__OTHER__" : instansiAsal}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === "__OTHER__") {
+                    setIsOtherInstansi(true);
+                    if (instansiList.includes(instansiAsal)) {
+                      setInstansiAsal("");
+                    }
+                  } else {
+                    setIsOtherInstansi(false);
+                    setInstansiAsal(val);
+                  }
+                }}
                 className="w-full px-3.5 py-2.5 bg-oxford-50 dark:bg-oxford-900/60 border border-oxford-200 dark:border-oxford-700 rounded-xl text-sm focus:outline-none focus:border-gold-500 text-oxford-900 dark:text-white"
-              />
+              >
+                <option value="">-- Pilih Instansi / OPD --</option>
+                {instansiList.map((inst) => (
+                  <option key={inst} value={inst}>
+                    {inst}
+                  </option>
+                ))}
+                <option value="__OTHER__">+ Tambah / Ketik Instansi Lainnya</option>
+              </select>
+              {(isOtherInstansi || instansiList.length === 0) && (
+                <input
+                  type="text"
+                  required
+                  value={instansiAsal}
+                  onChange={(e) => setInstansiAsal(e.target.value)}
+                  placeholder="Ketik nama instansi lengkap (Contoh: Dinas Kesehatan Prov. Kaltara)"
+                  className="mt-2 w-full px-3.5 py-2.5 bg-oxford-50 dark:bg-oxford-900/60 border border-oxford-200 dark:border-oxford-700 rounded-xl text-sm focus:outline-none focus:border-gold-500 text-oxford-900 dark:text-white"
+                />
+              )}
             </div>
             <div>
               <label className="block text-xs font-bold text-oxford-800 dark:text-oxford-200 mb-1">

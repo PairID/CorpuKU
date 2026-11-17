@@ -1276,7 +1276,7 @@ export default function LearnClient({ course, courseContent, session, enrollment
             />
 
             {/* Mobile Persistent Floating Action Button untuk Presensi QR */}
-            {isClassical && (
+            {isClassical && !isVerificationModalOpen && !showEvaluationWizard && (
                 <MobileAttendanceFAB
                     courseId={course.id}
                     courseTitle={course.title}
