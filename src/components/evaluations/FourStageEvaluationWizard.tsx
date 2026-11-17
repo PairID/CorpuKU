@@ -40,6 +40,7 @@ interface FourStageEvaluationWizardProps {
   courseTitle?: string;
   sessions?: SessionInfo[];
   evaluationConfig?: CourseEvaluationConfig | null;
+  requestedStage?: EvaluationStage | null;
   onEvaluationsComplete?: () => void;
 }
 
@@ -48,6 +49,7 @@ export default function FourStageEvaluationWizard({
   courseTitle,
   sessions = [],
   evaluationConfig,
+  requestedStage = null,
   onEvaluationsComplete,
 }: FourStageEvaluationWizardProps) {
   const narasumberQuestions =
@@ -99,13 +101,20 @@ export default function FourStageEvaluationWizard({
     try {
       const res = await getTrainingEvaluations(courseId);
       if (res.success && res.stages) {
-        setStagesStatus({
+        const nextStatus = {
           narasumber: Boolean(res.stages.narasumber.completed),
           organizer: Boolean(res.stages.organizer.completed),
           understanding: Boolean(res.stages.understanding.completed),
           skm: Boolean(res.stages.skm.completed),
-        });
-        setCurrentStage(res.currentStage as EvaluationStage | "completed");
+        };
+        setStagesStatus(nextStatus);
+        const canJump =
+          requestedStage &&
+          (requestedStage === "narasumber" ||
+            (requestedStage === "organizer" && nextStatus.narasumber) ||
+            (requestedStage === "understanding" && nextStatus.organizer) ||
+            (requestedStage === "skm" && nextStatus.understanding));
+        setCurrentStage(canJump ? requestedStage : (res.currentStage as EvaluationStage | "completed"));
         if (res.allCompleted && onEvaluationsComplete) {
           onEvaluationsComplete();
         }

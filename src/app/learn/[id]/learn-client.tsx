@@ -151,6 +151,7 @@ export default function LearnClient({ course, courseContent, session, enrollment
         Boolean(isClassical && !enrollment?.statementAccepted && session.user.role === "student")
     );
     const [showEvaluationWizard, setShowEvaluationWizard] = useState(false);
+    const [requestedEvalStage, setRequestedEvalStage] = useState<"narasumber" | "organizer" | "understanding" | "skm" | null>(null);
     const [attendanceStats, setAttendanceStats] = useState({
         attendedJp: Number(enrollment?.attendedJp || 0),
         attendancePercentage: Number(enrollment?.attendancePercentage || 0),
@@ -815,16 +816,6 @@ export default function LearnClient({ course, courseContent, session, enrollment
                 </Link>
                 <div className="w-px h-6 bg-oxford-800 mx-4 hidden sm:block"></div>
                 <h1 className="text-sm md:text-base font-serif font-bold truncate flex-1">{activeLesson ? cleanLessonTitle(activeLesson.title, activeLesson.type) : course.title}</h1>
-                {isClassical && (
-                    <button
-                        type="button"
-                        onClick={() => setShowEvaluationWizard(true)}
-                        className="mr-2 inline-flex items-center gap-1.5 px-3 py-1 bg-gold-500 hover:bg-gold-400 text-oxford-950 font-bold text-xs rounded-full transition-colors shadow-xs cursor-pointer"
-                    >
-                        <Award size={14} />
-                        <span>Evaluasi (4 Tahap)</span>
-                    </button>
-                )}
                 {enrollment?.id && (
                     <Link
                         href={`/dashboard/courses/${enrollment.id}/progress`}
@@ -970,26 +961,73 @@ export default function LearnClient({ course, courseContent, session, enrollment
                             </div>
                         ); })}
 
-                        {/* Link Dokumentasi Kegiatan di Sidebar Kelas */}
-                        {course.documentationUrl && /^https?:\/\//i.test(course.documentationUrl.trim()) && (
-                            <div className="p-4 border-t border-oxford-100 dark:border-oxford-800 bg-oxford-50/60 dark:bg-oxford-950/40">
-                                <a
-                                    href={course.documentationUrl.trim()}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="flex items-center justify-between gap-3 p-3 rounded-xl bg-white dark:bg-[#161B2A] border border-oxford-200 dark:border-oxford-700 hover:border-gold-500 transition-colors group"
-                                >
-                                    <div className="flex items-center gap-2.5 min-w-0">
-                                        <div className="p-2 rounded-lg bg-gold-50 dark:bg-gold-950/60 text-gold-700 dark:text-gold-300 flex-shrink-0">
-                                            <Camera size={16} />
-                                        </div>
-                                        <div className="min-w-0">
-                                            <p className="text-xs font-bold text-oxford-900 dark:text-white truncate">Dokumentasi Kegiatan</p>
-                                            <p className="text-[11px] text-oxford-500 dark:text-oxford-400 truncate">Buka tautan album / arsip</p>
-                                        </div>
+                        {/* Menu Evaluasi, Dokumentasi & Sertifikat di Sidebar */}
+                        {(isClassical || (course.documentationUrl && /^https?:\/\//i.test(course.documentationUrl.trim())) || enrollment?.id) && (
+                            <div className="border-t border-oxford-200 dark:border-oxford-800 bg-oxford-50/50 dark:bg-oxford-950/40">
+                                {isClassical && (
+                                    <div className="divide-y divide-oxford-100 dark:divide-oxford-800/80">
+                                        {[
+                                            { key: "understanding" as const, label: "Evaluasi Pembelajaran", done: Boolean(enrollment?.evalUnderstandingCompleted) || attendanceStats.allEvaluationsCompleted },
+                                            { key: "narasumber" as const, label: "Evaluasi Narasumber", done: Boolean(enrollment?.evalNarasumberCompleted) || attendanceStats.allEvaluationsCompleted },
+                                            { key: "organizer" as const, label: "Evaluasi Penyelenggara", done: Boolean(enrollment?.evalOrganizerCompleted) || attendanceStats.allEvaluationsCompleted },
+                                            { key: "skm" as const, label: "SKM", done: Boolean(enrollment?.evalSkmCompleted) || attendanceStats.allEvaluationsCompleted },
+                                        ].map((item) => (
+                                            <button
+                                                key={item.key}
+                                                type="button"
+                                                onClick={() => {
+                                                    setRequestedEvalStage(item.key);
+                                                    setShowEvaluationWizard(true);
+                                                }}
+                                                className="w-full text-left px-5 py-3 flex items-center justify-between gap-2 hover:bg-white dark:hover:bg-[#161B2A] transition-colors"
+                                            >
+                                                <div className="flex items-center gap-2.5 min-w-0">
+                                                    <ClipboardCheck size={15} className={item.done ? "text-emerald-600 shrink-0" : "text-gold-600 shrink-0"} />
+                                                    <span className="text-xs font-bold text-oxford-800 dark:text-oxford-100 truncate">
+                                                        {item.label}
+                                                    </span>
+                                                </div>
+                                                {item.done ? (
+                                                    <CheckCircle2 size={14} className="text-emerald-600 shrink-0" />
+                                                ) : (
+                                                    <ChevronRight size={14} className="text-oxford-400 shrink-0" />
+                                                )}
+                                            </button>
+                                        ))}
                                     </div>
-                                    <ExternalLink size={14} className="text-oxford-400 group-hover:text-gold-600 flex-shrink-0" />
-                                </a>
+                                )}
+
+                                {course.documentationUrl && /^https?:\/\//i.test(course.documentationUrl.trim()) && (
+                                    <a
+                                        href={course.documentationUrl.trim()}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="w-full px-5 py-3 border-t border-oxford-100 dark:border-oxford-800/80 flex items-center justify-between gap-2 hover:bg-white dark:hover:bg-[#161B2A] transition-colors"
+                                    >
+                                        <div className="flex items-center gap-2.5 min-w-0">
+                                            <Camera size={15} className="text-gold-600 shrink-0" />
+                                            <span className="text-xs font-bold text-oxford-800 dark:text-oxford-100 truncate">
+                                                Dokumentasi
+                                            </span>
+                                        </div>
+                                        <ExternalLink size={14} className="text-oxford-400 shrink-0" />
+                                    </a>
+                                )}
+
+                                {enrollment?.id && (
+                                    <Link
+                                        href={`/dashboard/courses/${enrollment.id}/progress`}
+                                        className="w-full px-5 py-3 border-t border-oxford-100 dark:border-oxford-800/80 flex items-center justify-between gap-2 hover:bg-white dark:hover:bg-[#161B2A] transition-colors"
+                                    >
+                                        <div className="flex items-center gap-2.5 min-w-0">
+                                            <Award size={15} className="text-gold-600 shrink-0" />
+                                            <span className="text-xs font-bold text-oxford-800 dark:text-oxford-100 truncate">
+                                                Sertifikat
+                                            </span>
+                                        </div>
+                                        <ChevronRight size={14} className="text-oxford-400 shrink-0" />
+                                    </Link>
+                                )}
                             </div>
                         )}
                     </div>
@@ -1307,6 +1345,7 @@ export default function LearnClient({ course, courseContent, session, enrollment
                             courseId={course.id}
                             courseTitle={course.title}
                             evaluationConfig={course.evaluationConfig}
+                            requestedStage={requestedEvalStage}
                             sessions={allLessons.map((l) => ({
                                 id: l.id,
                                 title: l.title,
