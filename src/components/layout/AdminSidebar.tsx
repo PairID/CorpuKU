@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { LayoutDashboard, BookOpen, Users, Activity, Settings, LogOut, Heart, Image as ImageIcon, Video, GitBranch, Sparkles, Database } from "lucide-react";
+import { LayoutDashboard, BookOpen, Users, Activity, Settings, LogOut, Heart, Image as ImageIcon, Video, GitBranch, Sparkles, Database, X } from "lucide-react";
 import { useState } from "react";
 import { authClient } from "@/lib/auth-client";
 
@@ -102,26 +102,35 @@ export function AdminSidebar({ activePage, isOpen, onClose }: AdminSidebarProps)
                 />
             )}
 
+            {/* SIDEBAR COLUMN (Auto Full Height with Sticky Inner Navigation) */}
             <aside className={`
                 fixed inset-y-0 left-0 z-50 w-72 bg-[#030712] text-white border-r border-white/10 transition-transform duration-300 transform
-                lg:translate-x-0 lg:sticky lg:top-20 lg:flex flex-col shrink-0 h-[calc(100vh-5rem)] overflow-y-auto no-scrollbar
+                lg:translate-x-0 lg:static lg:z-auto lg:self-stretch lg:shrink-0 lg:flex lg:flex-col min-h-screen
                 ${isOpen ? "translate-x-0" : "-translate-x-full"}
             `}>
-                {/* Logo */}
-                <div className="p-6 border-b border-oxford-800 flex items-center justify-between">
-                    <Link href="/admin" className="flex items-center gap-2 group">
-                        <div className="w-8 h-8 bg-gold-500 text-oxford-900 dark:text-white rounded-lg flex items-center justify-center group-hover:bg-gold-400 transition-colors shadow-lg shadow-gold-500/20">
-                            <BookOpen size={20} />
+                <div className="lg:sticky lg:top-20 flex flex-col h-full lg:h-[calc(100vh-5rem)] overflow-y-auto no-scrollbar">
+                    {/* Mobile-only Drawer Header */}
+                    <div className="lg:hidden p-5 border-b border-oxford-800/80 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 bg-gold-500 text-oxford-950 rounded-lg flex items-center justify-center font-bold">
+                                <BookOpen size={18} />
+                            </div>
+                            <span className="font-serif text-lg font-bold tracking-tight">
+                                CorpuKU <span className="font-sans text-gold-500 font-medium text-base">Admin</span>
+                            </span>
                         </div>
-                        <span className="font-serif text-xl font-bold tracking-tight">
-                            CorpuKU <span className="font-sans text-gold-500 font-medium text-lg">Admin</span>
-                        </span>
-                    </Link>
-                    {/* Close button for mobile */}
-                    <button onClick={onClose} className="lg:hidden p-2 text-oxford-400 hover:text-white">
-                        <LogOut size={20} className="rotate-180" />
-                    </button>
-                </div>
+                        <button onClick={onClose} className="p-2 text-oxford-400 hover:text-white rounded-lg hover:bg-oxford-900 transition-colors">
+                            <X size={20} />
+                        </button>
+                    </div>
+
+                    {/* Desktop Subtle Section Tag (Single logo preserved at the top global header) */}
+                    <div className="hidden lg:flex items-center justify-between px-6 py-4 border-b border-white/5 bg-white/[0.02]">
+                        <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full bg-gold-500 shadow-[0_0_8px_rgba(245,158,11,0.8)]" />
+                            <span className="text-[11px] font-bold uppercase tracking-widest text-oxford-400">Panel Administrator</span>
+                        </div>
+                    </div>
 
                 {/* Main Navigation */}
                 <nav className="flex-1 p-4 space-y-2 mt-2">
@@ -200,14 +209,15 @@ export function AdminSidebar({ activePage, isOpen, onClose }: AdminSidebarProps)
                 </div>
 
                 {/* Footer mini */}
-                <div className="p-6 text-center">
+                <div className="p-4 text-center mt-auto">
                     <p className="text-xs text-oxford-600 dark:text-oxford-300 font-medium">BPSDM Kaltara &copy; 2026</p>
                     <div className="flex items-center justify-center gap-1 mt-1">
-                        <span className="text-xs text-oxford-700 dark:text-oxford-200 uppercase tracking-tighter">Powered by</span>
-                        <span className="text-xs text-gold-600/50 font-bold">CorpuKU</span>
+                        <span className="text-[10px] text-oxford-700 dark:text-oxford-400 uppercase tracking-tighter">Powered by</span>
+                        <span className="text-[10px] text-gold-600/70 font-bold">CorpuKU</span>
                     </div>
                 </div>
-            </aside>
+            </div>
+        </aside>
         </>
     );
 }
