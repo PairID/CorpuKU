@@ -144,13 +144,6 @@ export default function MediaGalleryPage() {
             <AdminSidebar activePage="media" isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
             <main className="flex-1 flex flex-col min-h-screen relative">
-                {/* Mobile sidebar toggle button (floating) */}
-                <button 
-                    onClick={() => setSidebarOpen(true)}
-                    className="lg:hidden fixed bottom-6 right-6 z-40 p-4 bg-gold-500 text-oxford-950 rounded-full shadow-2xl hover:bg-gold-400 transition-all active:scale-95"
-                >
-                    <Menu size={24} />
-                </button>
 
                 {/* Stats Bar */}
                 <div className="px-6 md:px-8 pt-6">

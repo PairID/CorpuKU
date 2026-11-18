@@ -2,7 +2,11 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { Search, Menu, BookOpen, LayoutDashboard, X, LogOut, Shield } from 'lucide-react';
+import { 
+    Search, Menu, BookOpen, LayoutDashboard, X, LogOut, Shield,
+    Compass, Video, GitBranch, FileText, Newspaper, Trophy,
+    Activity, Settings, Sparkles, Database, Users, Heart, Image as ImageIcon
+} from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -63,7 +67,7 @@ export function Header() {
         return () => clearTimeout(timer);
     }, [searchQuery]);
 
-    // Close suggestions on route change
+    // Close suggestions and mobile menu on route change
     useEffect(() => {
         const timer = window.setTimeout(() => {
             setShowSuggestions(false);
@@ -109,6 +113,44 @@ export function Header() {
         setShowSuggestions(false);
         setSearchQuery("");
     };
+
+    const isItemActive = (href: string) => {
+        if (href === "/") return pathname === "/";
+        return pathname === href || pathname.startsWith(href + "/");
+    };
+
+    // Navigasi Utama (Menu Atas)
+    const topNavItems = [
+        { href: "/search", label: "Kursus", icon: <Compass size={18} /> },
+        { href: "/webinars", label: "Webinar", icon: <Video size={18} /> },
+        { href: "/paths", label: "Learning Paths", icon: <GitBranch size={18} /> },
+        { href: "/knowledge", label: "Pusat Pengetahuan", icon: <FileText size={18} /> },
+        { href: "/news", label: "Berita & Pers", icon: <Newspaper size={18} /> },
+    ];
+
+    // Navigasi Side Bar Siswa
+    const studentSidebarItems = [
+        { href: "/dashboard", label: "Kelas Saya", icon: <BookOpen size={18} /> },
+        { href: "/dashboard/learning-paths", label: "Learning Paths", icon: <GitBranch size={18} /> },
+        { href: "/dashboard/bangkom", label: "Progres Bangkom", icon: <Activity size={18} /> },
+        { href: "/dashboard/certificates", label: "Sertifikat", icon: <Trophy size={18} /> },
+        { href: "/search", label: "Cari Kelas", icon: <Search size={18} /> },
+    ];
+
+    // Navigasi Side Bar Admin
+    const adminSidebarItems = [
+        { href: "/admin", label: "Dashboard Admin", icon: <LayoutDashboard size={18} /> },
+        { href: "/admin/courses", label: "Kursus", icon: <BookOpen size={18} /> },
+        { href: "/admin/courses/creator", label: "Course Creator (AI)", icon: <Sparkles size={18} className="text-gold-400" /> },
+        { href: "/admin/regulations", label: "Bank Data Regulasi", icon: <Database size={18} className="text-cyan-400" /> },
+        { href: "/admin/webinars", label: "Webinar", icon: <Video size={18} /> },
+        { href: "/admin/learning-paths", label: "Learning Paths", icon: <GitBranch size={18} /> },
+        { href: "/admin/users", label: "Pengguna", icon: <Users size={18} /> },
+        { href: "/admin/bangkom", label: "Lacak Bangkom", icon: <Activity size={18} /> },
+        { href: "/admin/analytics", label: "Analitik", icon: <Activity size={18} /> },
+        { href: "/admin/certificates", label: "Sertifikat", icon: <Heart size={18} /> },
+        { href: "/admin/media", label: "Galeri Media", icon: <ImageIcon size={18} /> },
+    ];
 
     return (
         <header className="sticky top-0 z-50 w-full border-b border-border-base bg-background/95 backdrop-blur-md">
@@ -176,7 +218,7 @@ export function Header() {
                                     </div>
                                     <div className="max-h-[400px] overflow-y-auto">
                                         {isSearching ? (
-                                            <div className="p-8 text-center">
+                                             <div className="p-8 text-center">
                                                 <div className="w-8 h-8 border-4 border-gold-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
                                                 <p className="text-oxford-400 text-sm">Mencari hasil terbaik...</p>
                                             </div>
@@ -252,7 +294,7 @@ export function Header() {
                                 </Link>
                                 <button
                                     onClick={handleLogout}
-                                    className="p-2 md:p-2.5 text-oxford-400 hover:text-crimson-400 hover:bg-oxford-100 dark:hover:bg-[#161B2A] rounded-full transition-all shrink-0"
+                                    className="hidden sm:flex p-2 md:p-2.5 text-oxford-400 hover:text-crimson-400 hover:bg-oxford-100 dark:hover:bg-[#161B2A] rounded-full transition-all shrink-0"
                                     title="Logout"
                                 >
                                     <LogOut size={18} />
@@ -269,39 +311,161 @@ export function Header() {
                             </div>
                         ) : null}
 
-                        {/* Mobile menu button */}
+                        {/* Mobile Menu Button (Unified Navigation Toggle with Highlight state) */}
                         <button
-                            className="md:hidden text-oxford-600 dark:text-oxford-300 hover:text-gold-500 transition-colors p-2"
+                            aria-label="Toggle Menu Navigasi"
+                            className={`md:hidden flex items-center justify-center p-2.5 rounded-xl transition-all duration-200 border ${
+                                mobileMenuOpen
+                                    ? "bg-gold-500 text-oxford-950 border-gold-400 shadow-md ring-2 ring-gold-400/50 scale-105"
+                                    : "text-oxford-600 dark:text-oxford-300 border-transparent hover:bg-oxford-100 dark:hover:bg-oxford-800 hover:text-gold-500"
+                            }`}
                             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
                         >
-                            {mobileMenuOpen ? <X size={28} /> : <Menu size={28} />}
+                            {mobileMenuOpen ? <X size={26} className="stroke-[2.5]" /> : <Menu size={26} className="stroke-[2.5]" />}
                         </button>
                     </div>
                 </div>
             </div>
 
-            {/* Mobile Menu Overlay */}
+            {/* Unified Mobile Menu Overlay (Menu Atas + Side Bar Bersamaan) */}
             <AnimatePresence>
                 {mobileMenuOpen && (
                     <motion.div
                         initial={{ opacity: 0, height: 0 }}
                         animate={{ opacity: 1, height: 'auto' }}
                         exit={{ opacity: 0, height: 0 }}
-                        className="md:hidden bg-white dark:bg-[#161B2A] border-t border-border-base overflow-hidden"
+                        transition={{ duration: 0.25, ease: "easeInOut" }}
+                        className="md:hidden bg-white dark:bg-[#111624] border-t border-border-base shadow-2xl max-h-[calc(100vh-5rem)] overflow-y-auto"
                     >
-                        <div className="px-4 py-6 space-y-4">
-                            <Link href="/search" className="block text-foreground font-sans font-medium py-2">Kursus</Link>
-                            <Link href="/webinars" className="block text-foreground font-sans font-medium py-2">Webinar</Link>
-                            <Link href="/paths" className="block text-foreground font-sans font-medium py-2">Learning Paths</Link>
-                            <Link href="/knowledge" className="block text-foreground font-sans font-medium py-2">Pusat Pengetahuan</Link>
-                            <Link href="/news" className="block text-foreground font-sans font-medium py-2">Berita & Pers</Link>
-                            
-                            {!user && (
-                                <div className="grid grid-cols-2 gap-4 pt-4 border-t border-oxford-100 dark:border-oxford-800">
-                                    <Link href="/login" className="w-full py-3 text-center font-bold text-oxford-900 dark:text-white border border-oxford-200 dark:border-oxford-700 rounded-xl">Masuk</Link>
-                                    <Link href="/register" className="w-full py-3 text-center font-bold bg-oxford-900 text-white rounded-xl">Daftar</Link>
+                        <div className="p-4 sm:p-6 space-y-6">
+
+                            {/* User Profile Card (if logged in) */}
+                            {user && (
+                                <div className="p-3.5 bg-oxford-50 dark:bg-oxford-950/80 rounded-2xl border border-oxford-200 dark:border-oxford-800 flex items-center justify-between">
+                                    <div className="flex items-center gap-3 min-w-0">
+                                        <div className="w-10 h-10 rounded-xl bg-gold-500/20 text-gold-600 dark:text-gold-400 flex items-center justify-center font-bold text-sm shrink-0 border border-gold-500/30">
+                                            {(user.name || 'U').charAt(0).toUpperCase()}
+                                        </div>
+                                        <div className="min-w-0">
+                                            <p className="font-bold text-sm text-oxford-900 dark:text-white truncate">{user.name}</p>
+                                            <p className="text-xs text-oxford-500 dark:text-oxford-400 font-medium">
+                                                {user.role === 'admin' ? 'Administrator' : user.role === 'instructor' ? 'Instruktur' : 'Peserta Pembelajaran'}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <Link 
+                                        href="/settings"
+                                        onClick={() => setMobileMenuOpen(false)}
+                                        className="p-2 text-oxford-400 hover:text-gold-500 hover:bg-oxford-100 dark:hover:bg-oxford-800 rounded-lg transition-colors"
+                                        title="Pengaturan Akun"
+                                    >
+                                        <Settings size={18} />
+                                    </Link>
                                 </div>
                             )}
+
+                            {/* BAGIAN 1: SIDE BAR (MENU PENGGUNA / ADMIN) */}
+                            {user && (
+                                <div>
+                                    <div className="flex items-center gap-2 mb-2.5 px-1">
+                                        <span className="text-xs font-bold uppercase tracking-widest text-gold-600 dark:text-gold-400">
+                                            {user.role === 'admin' ? 'Side Bar Admin' : 'Side Bar Belajar'}
+                                        </span>
+                                        <div className="flex-1 h-px bg-oxford-200 dark:bg-oxford-800" />
+                                    </div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 font-sans">
+                                        {(user.role === 'admin' ? adminSidebarItems : studentSidebarItems).map((item) => {
+                                            const active = isItemActive(item.href);
+                                            return (
+                                                <Link
+                                                    key={item.href}
+                                                    href={item.href}
+                                                    onClick={() => setMobileMenuOpen(false)}
+                                                    className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm transition-all ${
+                                                        active
+                                                            ? 'bg-gold-500/15 text-gold-600 dark:text-gold-400 font-bold border border-gold-500/30 shadow-sm'
+                                                            : 'text-oxford-700 dark:text-oxford-200 hover:bg-oxford-50 dark:hover:bg-oxford-900/60 hover:text-gold-500 font-medium border border-transparent'
+                                                    }`}
+                                                >
+                                                    <span className={active ? 'text-gold-500' : 'text-oxford-400'}>
+                                                        {item.icon}
+                                                    </span>
+                                                    <span>{item.label}</span>
+                                                </Link>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* BAGIAN 2: MENU ATAS (NAVIGASI UTAMA) */}
+                            <div>
+                                <div className="flex items-center gap-2 mb-2.5 px-1">
+                                    <span className="text-xs font-bold uppercase tracking-widest text-oxford-500 dark:text-oxford-400">
+                                        Menu Navigasi Utama
+                                    </span>
+                                    <div className="flex-1 h-px bg-oxford-200 dark:bg-oxford-800" />
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 font-sans">
+                                    {topNavItems.map((item) => {
+                                        const active = isItemActive(item.href);
+                                        return (
+                                            <Link
+                                                key={item.href}
+                                                href={item.href}
+                                                onClick={() => setMobileMenuOpen(false)}
+                                                className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm transition-all ${
+                                                    active
+                                                        ? 'bg-gold-500/15 text-gold-600 dark:text-gold-400 font-bold border border-gold-500/30 shadow-sm'
+                                                        : 'text-oxford-700 dark:text-oxford-200 hover:bg-oxford-50 dark:hover:bg-oxford-900/60 hover:text-gold-500 font-medium border border-transparent'
+                                                }`}
+                                            >
+                                                <span className={active ? 'text-gold-500' : 'text-oxford-400'}>
+                                                    {item.icon}
+                                                </span>
+                                                <span>{item.label}</span>
+                                            </Link>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            {/* Footer Area: Logout atau Login/Register */}
+                            {user ? (
+                                <div className="pt-2 border-t border-oxford-200 dark:border-oxford-800 flex items-center justify-between gap-3">
+                                    <Link
+                                        href="/settings"
+                                        onClick={() => setMobileMenuOpen(false)}
+                                        className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 text-xs font-bold text-oxford-700 dark:text-oxford-300 bg-oxford-100 dark:bg-oxford-900 rounded-xl hover:bg-oxford-200 dark:hover:bg-oxford-800 transition-colors"
+                                    >
+                                        <Settings size={16} /> Pengaturan
+                                    </Link>
+                                    <button
+                                        onClick={handleLogout}
+                                        className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 text-xs font-bold text-crimson-600 dark:text-crimson-400 bg-crimson-50 dark:bg-crimson-950/40 border border-crimson-200 dark:border-crimson-900/40 rounded-xl hover:bg-crimson-100 dark:hover:bg-crimson-900/60 transition-colors"
+                                    >
+                                        <LogOut size={16} /> Keluar
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-2 gap-3 pt-3 border-t border-oxford-200 dark:border-oxford-800">
+                                    <Link 
+                                        href="/login" 
+                                        onClick={() => setMobileMenuOpen(false)}
+                                        className="w-full py-2.5 text-center text-sm font-bold text-oxford-900 dark:text-white border border-oxford-300 dark:border-oxford-700 rounded-xl hover:bg-oxford-50 dark:hover:bg-oxford-900 transition-colors"
+                                    >
+                                        Masuk
+                                    </Link>
+                                    <Link 
+                                        href="/register" 
+                                        onClick={() => setMobileMenuOpen(false)}
+                                        className="w-full py-2.5 text-center text-sm font-bold bg-gold-500 text-oxford-950 rounded-xl hover:bg-gold-400 shadow-md transition-colors"
+                                    >
+                                        Daftar
+                                    </Link>
+                                </div>
+                            )}
+
                         </div>
                     </motion.div>
                 )}
