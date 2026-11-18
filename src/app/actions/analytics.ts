@@ -195,3 +195,44 @@ export async function getLeaderboardData() {
         return [];
     }
 }
+
+export async function getCoursePerformanceAnalytics() {
+    try {
+        await requireAdminSession();
+
+        const data = await sql`
+            SELECT 
+                c.id,
+                c.title,
+                c.category,
+                c.training_type as "trainingType",
+                COALESCE(c.jp, 0) as jp,
+                COUNT(e.id) FILTER (WHERE e.status IN ('active', 'completed'))::INTEGER as "enrolledCount",
+                COUNT(e.id) FILTER (WHERE e.status = 'completed')::INTEGER as "completedCount"
+            FROM courses c
+            LEFT JOIN enrollments e ON e.course_id = c.id
+            WHERE c.status = 'active'
+            GROUP BY c.id, c.title, c.category, c.training_type, c.jp
+            ORDER BY "enrolledCount" DESC, c.created_at DESC
+            LIMIT 10
+        `;
+
+        return data.map((row) => {
+            const enrolled = Number(row.enrolledCount || 0);
+            const completed = Number(row.completedCount || 0);
+            return {
+                id: String(row.id),
+                title: String(row.title),
+                category: String(row.category || "Umum"),
+                trainingType: String(row.trainingType || "elearning"),
+                jp: Number(row.jp || 0),
+                enrolledCount: enrolled,
+                completedCount: completed,
+                completionRatePct: enrolled > 0 ? Math.round((completed / enrolled) * 100) : 0,
+            };
+        });
+    } catch (err) {
+        console.error("Failed to get course performance analytics:", err);
+        return [];
+    }
+}

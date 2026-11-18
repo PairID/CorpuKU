@@ -18,6 +18,7 @@ import {
   QrCode,
   Edit3,
   X,
+  BarChart3,
 } from "lucide-react";
 import { getCourseAttendanceLive, adminOverrideAttendance } from "@/app/actions/attendance";
 import { AdminSidebar } from "@/components/layout/AdminSidebar";
@@ -328,6 +329,13 @@ export default function AttendanceLiveClient({
                   className="inline-flex items-center gap-1.5 text-xs font-bold text-oxford-600 dark:text-oxford-300 hover:text-gold-600"
                 >
                   <ArrowLeft size={14} /> Kembali ke Materi & QR
+                </Link>
+                <span className="text-oxford-300 dark:text-oxford-700">|</span>
+                <Link
+                  href={`/admin/courses/${courseId}/analytics`}
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-700 dark:text-blue-300 hover:underline"
+                >
+                  <BarChart3 size={14} /> Grafik Analitik
                 </Link>
                 <span className="text-oxford-300 dark:text-oxford-700">|</span>
                 <Link

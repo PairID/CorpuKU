@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { Edit, Trash2, Layers, Award, Radio, QrCode, ScanLine, UserCheck } from "lucide-react";
+import { Edit, Trash2, Layers, Award, Radio, QrCode, ScanLine, UserCheck, BarChart3 } from "lucide-react";
 import { deleteCourse } from "@/app/actions/courses";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -175,6 +175,9 @@ export default function AdminCourseTable({ courses, searchQuery, statusFilter, b
                                             </Link>
                                             <Link href={`/admin/courses/${course.id}/attendance`} className="p-2 text-oxford-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-oxford-800 rounded-lg transition-colors" title="Monitoring Presensi Live">
                                                 <Radio size={18} />
+                                            </Link>
+                                            <Link href={`/admin/courses/${course.id}/analytics`} className="p-2 text-oxford-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-oxford-800 rounded-lg transition-colors" title="Grafik Analitik & Retensi Kursus">
+                                                <BarChart3 size={18} />
                                             </Link>
                                             <Link href={`${basePath}/courses/${course.id}/edit`} className="p-2 text-oxford-500 hover:text-gold-600 hover:bg-gold-50 dark:hover:bg-oxford-800 rounded-lg transition-colors" title="Edit Metadata Kursus">
                                                 <Edit size={18} />
