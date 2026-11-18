@@ -278,7 +278,7 @@ export function Header() {
                             <div className="flex items-center gap-2 md:gap-3">
                                 <Link 
                                     href={getDashboardLink()} 
-                                    className="flex items-center gap-2 px-3 md:px-5 py-2 md:py-2.5 text-xs md:text-sm font-sans font-semibold bg-oxford-100 dark:bg-[#161B2A] text-foreground rounded-full hover:bg-oxford-200 dark:hover:bg-oxford-800 transition-all border border-border-base hover:border-gold-500/50 max-w-[150px] md:max-w-[220px]"
+                                    className="hidden sm:flex items-center gap-2 px-3 md:px-5 py-2 md:py-2.5 text-xs md:text-sm font-sans font-semibold bg-oxford-100 dark:bg-[#161B2A] text-foreground rounded-full hover:bg-oxford-200 dark:hover:bg-oxford-800 transition-all border border-border-base hover:border-gold-500/50 max-w-[150px] md:max-w-[220px]"
                                 >
                                     <div className="shrink-0">
                                         {user.role === "admin" ? (

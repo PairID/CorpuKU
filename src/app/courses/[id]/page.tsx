@@ -30,6 +30,7 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ i
         createdAt: courseData.createdAt ? new Date(courseData.createdAt).toISOString() : null,
         updatedAt: courseData.updatedAt ? new Date(courseData.updatedAt).toISOString() : null,
         instructorName: courseData.instructorName ? String(courseData.instructorName) : null,
+        organizerName: courseData.organizerName ? String(courseData.organizerName) : null,
         accessMode: (courseData.accessMode as "open" | "passcode" | "approval") || "open",
     };
     const serializedContent: CourseModule[] = courseContent.map((module) => ({

@@ -30,6 +30,7 @@ export interface CourseProp {
     level: string | null;
     status: string;
     instructorName: string | null;
+    organizerName?: string | null;
     jp: number;
     pacingType: "self_paced" | "instructor_paced";
     startDate: string | null;
@@ -137,7 +138,7 @@ export default function CourseClient({ course, courseContent }: { course: Course
     };
 
     const courseInfo = {
-        provider: "CorpuKU Academy",
+        provider: course.organizerName || "CorpuKU Academy",
         category: course.category || "Professional Development",
         duration: computedDuration,
         effort: computedEffort,
@@ -152,10 +153,10 @@ export default function CourseClient({ course, courseContent }: { course: Course
     };
 
     return (
-        <div className="bg-white dark:bg-[#161B2A] min-h-screen pb-20">
+        <div className="bg-white dark:bg-[#161B2A] min-h-screen pb-20 w-full overflow-x-hidden">
 
             {/* HERO SECTION */}
-            <section className="bg-oxford-950 text-white pt-24 pb-12 lg:pb-32 relative overflow-x-clip overflow-y-visible">
+            <section className="bg-oxford-950 text-white pt-20 pb-12 lg:pb-32 relative overflow-hidden lg:overflow-visible w-full">
                 <div className="absolute inset-0 bg-mesh mix-blend-screen opacity-20" />
 
                 <div className="container mx-auto px-4 relative z-10">
@@ -164,13 +165,13 @@ export default function CourseClient({ course, courseContent }: { course: Course
                         {/* Left/Top Content */}
                         <div className="flex-1 lg:max-w-3xl lg:pr-12">
                             <div className="flex items-center gap-3 mb-6">
-                                <span className="bg-oxford-800 text-oxford-200 px-3 py-1 rounded font-sans text-xs font-semibold uppercase tracking-wider">
+                                <span className="bg-oxford-800 text-oxford-200 px-3 py-1 rounded font-sans text-xs font-semibold uppercase tracking-wider shrink-0">
                                     {courseInfo.category}
                                 </span>
-                                <span className="text-gold-500 font-bold text-sm">{courseInfo.provider}</span>
+                                <span className="text-gold-500 font-bold text-sm line-clamp-1">{courseInfo.provider}</span>
                             </div>
 
-                            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-sans font-bold leading-tight mb-6">
+                            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-sans font-bold leading-tight mb-6 break-words">
                                 {course.title}
                             </h1>
 
@@ -397,12 +398,19 @@ export default function CourseClient({ course, courseContent }: { course: Course
                             <div className="mt-12 lg:mt-16">
                                 <h2 className="text-2xl font-sans font-bold text-oxford-900 dark:text-white mb-6">Instruktur Pengajar</h2>
                                 <div className="flex items-start gap-4">
-                                    <div className="w-16 h-16 lg:w-20 lg:h-20 rounded-full bg-oxford-200 dark:bg-oxford-800 overflow-hidden shrink-0 border-2 border-white shadow-md relative">
-                                        <div className="w-full h-full bg-gradient-to-br from-oxford-300 to-oxford-400 absolute inset-0" />
+                                    <div className="w-16 h-16 lg:w-20 lg:h-20 rounded-full bg-gold-500/20 text-gold-600 dark:text-gold-400 font-bold text-2xl flex items-center justify-center shrink-0 border-2 border-gold-400/50 shadow-md">
+                                        {(courseInfo.instructorName || "I").charAt(0).toUpperCase()}
                                     </div>
                                     <div className="flex-1 mt-1">
                                         <h3 className="font-sans font-bold text-oxford-900 dark:text-white text-base lg:text-lg">{courseInfo.instructorName}</h3>
-                                        <p className="text-sm text-oxford-600 dark:text-oxford-300 mt-1 leading-snug">Instruktur di {courseInfo.provider}</p>
+                                        <p className="text-sm text-oxford-600 dark:text-oxford-300 mt-1 leading-snug">
+                                            {course.instructorName ? "Narasumber / Instruktur Utama" : `Instruktur di ${courseInfo.provider}`}
+                                        </p>
+                                        {course.organizerName && (
+                                            <p className="text-xs text-oxford-500 dark:text-oxford-400 mt-1.5 line-clamp-2 leading-relaxed">
+                                                {course.organizerName}
+                                            </p>
+                                        )}
                                     </div>
                                 </div>
                             </div>

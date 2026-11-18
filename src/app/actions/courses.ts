@@ -322,25 +322,28 @@ export async function getAllCourses() {
     try {
         await ensureEvaluationConfigColumn();
         const data = await sql`
-            SELECT id, title, description, category, level, 
-                   thumbnail_url as "thumbnailUrl", status, 
-                   instructor_id as "instructorId", jp, 
-                   certificate_type as "certificateType", certificate_enabled as "certificateEnabled",
-                   certificate_auto_issue as "certificateAutoIssue", certificate_number_prefix as "certificateNumberPrefix",
-                   certificate_start_number as "certificateStartNumber",
-                   passing_score as "passingScore", pacing_type as "pacingType", TO_CHAR(start_date::date, 'YYYY-MM-DD') as "startDate", TO_CHAR(end_date::date, 'YYYY-MM-DD') as "endDate",
-                   training_type as "trainingType", target_opd as "targetOpd", attendance_threshold as "attendanceThreshold",
-                   documentation_url as "documentationUrl",
-                   organizer_name as "organizerName",
-                   COALESCE(delivery_mode, 'daring') as "deliveryMode",
-                   location_name as "locationName",
-                   COALESCE(access_mode, 'open') as "accessMode",
-                   evaluation_config as "evaluationConfig",
-                   created_at as "createdAt", 
-                   updated_at as "updatedAt"
-            FROM courses
-            WHERE status = 'active'
-            ORDER BY created_at DESC
+            SELECT c.id, c.title, c.description, c.category, c.level, 
+                   c.thumbnail_url as "thumbnailUrl", c.status, 
+                   c.instructor_id as "instructorId",
+                   u.name as "instructorName",
+                   c.jp, 
+                   c.certificate_type as "certificateType", c.certificate_enabled as "certificateEnabled",
+                   c.certificate_auto_issue as "certificateAutoIssue", c.certificate_number_prefix as "certificateNumberPrefix",
+                   c.certificate_start_number as "certificateStartNumber",
+                   c.passing_score as "passingScore", c.pacing_type as "pacingType", TO_CHAR(c.start_date::date, 'YYYY-MM-DD') as "startDate", TO_CHAR(c.end_date::date, 'YYYY-MM-DD') as "endDate",
+                   c.training_type as "trainingType", c.target_opd as "targetOpd", c.attendance_threshold as "attendanceThreshold",
+                   c.documentation_url as "documentationUrl",
+                   c.organizer_name as "organizerName",
+                   COALESCE(c.delivery_mode, 'daring') as "deliveryMode",
+                   c.location_name as "locationName",
+                   COALESCE(c.access_mode, 'open') as "accessMode",
+                   c.evaluation_config as "evaluationConfig",
+                   c.created_at as "createdAt", 
+                   c.updated_at as "updatedAt"
+            FROM courses c
+            LEFT JOIN users u ON u.id = c.instructor_id
+            WHERE c.status = 'active'
+            ORDER BY c.created_at DESC
         `;
         return data;
     } catch (err) {
@@ -353,25 +356,28 @@ export async function getCourseById(id: string): Promise<CourseRecord | null> {
     try {
         await ensureEvaluationConfigColumn();
         const data = await sql`
-            SELECT id, title, description, category, level, 
-                   thumbnail_url as "thumbnailUrl", status, 
-                   instructor_id as "instructorId", jp, 
-                   certificate_type as "certificateType", certificate_enabled as "certificateEnabled",
-                   certificate_auto_issue as "certificateAutoIssue", certificate_number_prefix as "certificateNumberPrefix",
-                   certificate_start_number as "certificateStartNumber",
-                   passing_score as "passingScore", pacing_type as "pacingType", TO_CHAR(start_date::date, 'YYYY-MM-DD') as "startDate", TO_CHAR(end_date::date, 'YYYY-MM-DD') as "endDate",
-                   training_type as "trainingType", target_opd as "targetOpd", attendance_threshold as "attendanceThreshold",
-                   documentation_url as "documentationUrl",
-                   organizer_name as "organizerName",
-                   COALESCE(delivery_mode, 'daring') as "deliveryMode",
-                   location_name as "locationName",
-                   COALESCE(access_mode, 'open') as "accessMode",
-                   passcode,
-                   evaluation_config as "evaluationConfig",
-                   created_at as "createdAt", 
-                   updated_at as "updatedAt"
-            FROM courses
-            WHERE id = ${id}
+            SELECT c.id, c.title, c.description, c.category, c.level, 
+                   c.thumbnail_url as "thumbnailUrl", c.status, 
+                   c.instructor_id as "instructorId",
+                   u.name as "instructorName",
+                   c.jp, 
+                   c.certificate_type as "certificateType", c.certificate_enabled as "certificateEnabled",
+                   c.certificate_auto_issue as "certificateAutoIssue", c.certificate_number_prefix as "certificateNumberPrefix",
+                   c.certificate_start_number as "certificateStartNumber",
+                   c.passing_score as "passingScore", c.pacing_type as "pacingType", TO_CHAR(c.start_date::date, 'YYYY-MM-DD') as "startDate", TO_CHAR(c.end_date::date, 'YYYY-MM-DD') as "endDate",
+                   c.training_type as "trainingType", c.target_opd as "targetOpd", c.attendance_threshold as "attendanceThreshold",
+                   c.documentation_url as "documentationUrl",
+                   c.organizer_name as "organizerName",
+                   COALESCE(c.delivery_mode, 'daring') as "deliveryMode",
+                   c.location_name as "locationName",
+                   COALESCE(c.access_mode, 'open') as "accessMode",
+                   c.passcode,
+                   c.evaluation_config as "evaluationConfig",
+                   c.created_at as "createdAt", 
+                   c.updated_at as "updatedAt"
+            FROM courses c
+            LEFT JOIN users u ON u.id = c.instructor_id
+            WHERE c.id = ${id}
         `;
         const course = data[0];
         if (!course || !(await canViewCourse(id, course.status, course.instructorId))) return null;
