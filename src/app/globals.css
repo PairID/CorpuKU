@@ -177,3 +177,58 @@ body {
 .dark [data-sonner-toast]::after {
   background: rgba(255, 255, 255, 0.35);
 }
+
+
+/* ==========================================================================
+   Tactile Press & Tap Feedback (Responsiveness Indicators)
+   ========================================================================== */
+
+/* Mobile Touch Feedback (CorpuKU Gold Brand Accent) */
+* {
+  -webkit-tap-highlight-color: rgba(239, 177, 25, 0.28);
+}
+
+/* Base smooth transition for interactive elements */
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]),
+a:not([data-no-press]),
+.interactive-press,
+.course-card,
+article {
+  transition: transform 0.1s cubic-bezier(0.2, 0.8, 0.2, 1),
+              filter 0.1s cubic-bezier(0.2, 0.8, 0.2, 1),
+              box-shadow 0.15s ease;
+  will-change: transform;
+}
+
+/* Active Pressed Feedback: Physical scale & slight contrast change */
+button:active:not(:disabled),
+[role="button"]:active:not([aria-disabled="true"]),
+a:active:not([data-no-press]),
+.interactive-press:active,
+.course-card:active,
+article:active {
+  transform: scale(0.975);
+  filter: brightness(0.92);
+}
+
+.dark button:active:not(:disabled),
+.dark [role="button"]:active:not([aria-disabled="true"]),
+.dark a:active:not([data-no-press]),
+.dark .interactive-press:active,
+.dark .course-card:active,
+.dark article:active {
+  transform: scale(0.975);
+  filter: brightness(1.12);
+}
+
+/* Safe exemptions: form inputs, checkboxes, textareas must never scale on touch */
+input, textarea, select, [data-no-press], [data-no-press] * {
+  transform: none !important;
+  filter: none !important;
+}
+
+/* Pulse glow for active course card hover/tap */
+.course-card:active, article:active {
+  box-shadow: 0 0 0 2px rgba(239, 177, 25, 0.4), 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+}
