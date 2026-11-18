@@ -1,6 +1,8 @@
 import { getWebinars } from "@/app/actions/webinars";
 import WebinarsClient from "./client";
 
+export const dynamic = "force-dynamic";
+
 export const metadata = {
     title: "Webinar & Acara Langsung | CorpuKU",
     description: "Daftar webinar dan acara langsung (live session) yang tersedia di CorpuKU",

@@ -2,6 +2,8 @@ import Link from "next/link";
 import { ArrowRight, BookOpen, Clock3, GitBranch } from "lucide-react";
 import { getPublishedLearningPaths } from "@/app/actions/learning-paths";
 
+export const dynamic = "force-dynamic";
+
 export const metadata = { title: "Learning Paths | CorpuKU Academy", description: "Program belajar terstruktur berbasis kompetensi." };
 
 export default async function LearningPathsPage() {

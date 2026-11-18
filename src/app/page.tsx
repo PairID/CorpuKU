@@ -2,6 +2,8 @@ import { getAllCourses } from "./actions/courses";
 import { getFeaturedWebinar } from "./actions/webinars";
 import HomeClient from "./home-client";
 
+export const dynamic = "force-dynamic";
+
 export default async function HomePage() {
   const [courses, featuredWebinar] = await Promise.all([
     getAllCourses(),
