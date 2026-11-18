@@ -31,6 +31,13 @@ export function Header() {
     const hideOnPaths = ['/learn'];
     const shouldHide = hideOnPaths.some(p => pathname.startsWith(p));
 
+    const loginUrl = pathname && pathname !== "/" && pathname !== "/login" && pathname !== "/register"
+        ? `/login?callbackUrl=${encodeURIComponent(pathname)}`
+        : "/login";
+    const registerUrl = pathname && pathname !== "/" && pathname !== "/login" && pathname !== "/register"
+        ? `/register?callbackUrl=${encodeURIComponent(pathname)}`
+        : "/register";
+
     useEffect(() => {
         let active = true;
         authClient.getSession()
@@ -302,10 +309,10 @@ export function Header() {
                             </div>
                         ) : isLoaded ? (
                             <div className="flex items-center gap-2">
-                                <Link href="/login" className="px-4 md:px-5 py-2 md:py-2.5 text-sm font-sans font-semibold text-oxford-600 dark:text-oxford-300 hover:text-gold-600 transition-colors">
+                                <Link href={loginUrl} className="px-4 md:px-5 py-2 md:py-2.5 text-sm font-sans font-semibold text-oxford-600 dark:text-oxford-300 hover:text-gold-600 transition-colors">
                                     Masuk
                                 </Link>
-                                <Link href="/register" className="px-5 md:px-6 py-2 md:py-2.5 text-sm font-sans font-bold bg-oxford-900 text-white rounded-full hover:bg-gold-500 hover:text-oxford-950 transition-all shadow-md">
+                                <Link href={registerUrl} className="px-5 md:px-6 py-2 md:py-2.5 text-sm font-sans font-bold bg-oxford-900 text-white rounded-full hover:bg-gold-500 hover:text-oxford-950 transition-all shadow-md">
                                     Daftar
                                 </Link>
                             </div>
@@ -450,14 +457,14 @@ export function Header() {
                             ) : (
                                 <div className="grid grid-cols-2 gap-3 pt-3 border-t border-oxford-200 dark:border-oxford-800">
                                     <Link 
-                                        href="/login" 
+                                        href={loginUrl} 
                                         onClick={() => setMobileMenuOpen(false)}
                                         className="w-full py-2.5 text-center text-sm font-bold text-oxford-900 dark:text-white border border-oxford-300 dark:border-oxford-700 rounded-xl hover:bg-oxford-50 dark:hover:bg-oxford-900 transition-colors"
                                     >
                                         Masuk
                                     </Link>
                                     <Link 
-                                        href="/register" 
+                                        href={registerUrl} 
                                         onClick={() => setMobileMenuOpen(false)}
                                         className="w-full py-2.5 text-center text-sm font-bold bg-gold-500 text-oxford-950 rounded-xl hover:bg-gold-400 shadow-md transition-colors"
                                     >

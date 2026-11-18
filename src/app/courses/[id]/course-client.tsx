@@ -102,8 +102,8 @@ export default function CourseClient({ course, courseContent }: { course: Course
             } else {
                 showToast.error("Pendaftaran Gagal", errString);
             }
-            if (errString.toLowerCase().includes("logged in") || errString.toLowerCase().includes("login")) {
-                router.push("/login");
+            if (errString.toLowerCase().includes("logged in") || errString.toLowerCase().includes("login") || errString.toLowerCase().includes("unauthorized")) {
+                router.push(`/login?callbackUrl=${encodeURIComponent(`/courses/${course.id}`)}`);
             }
         }
         setIsLoading(false);

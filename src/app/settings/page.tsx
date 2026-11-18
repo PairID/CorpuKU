@@ -8,7 +8,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, useRef } from "react";
 import { changePassword, updateNotificationPreferences, getNotificationPreferences, updateUserProfile } from "@/app/actions/users";
 import { useTheme } from "@/components/theme-provider";
-import { PANGKAT_GOLONGAN } from "@/lib/constants";
+import { PANGKAT_GOLONGAN, DAFTAR_INSTANSI_KALTARA } from "@/lib/constants";
+import { toIsoDate, toIndonesianDate } from "@/lib/utils";
 import type { AuthUser } from "@/lib/session";
 
 type SettingsTab = "profile" | "security" | "notifications" | "preferences";
@@ -331,16 +332,26 @@ function ProfileTab({ user, storedUser, onNotify }: {
                         <p className="text-xs text-oxford-400 mt-1">NIP bersifat tetap dan digunakan sebagai username.</p>
                     </div>
                     <div>
-                        <label className="block text-sm font-bold text-oxford-900 dark:text-white mb-2" htmlFor="instansiAsal">Instansi Asal</label>
+                        <label className="block text-sm font-bold text-oxford-900 dark:text-white mb-2" htmlFor="instansiAsal">
+                            Instansi Asal
+                        </label>
                         <input
                             type="text"
                             id="instansiAsal"
                             name="instansiAsal"
+                            list="daftar-instansi-kaltara"
                             autoComplete="organization"
                             value={formData.instansiAsal}
                             onChange={e => setFormData(f => ({ ...f, instansiAsal: e.target.value }))}
+                            placeholder="Ketik untuk mencari instansi / OPD..."
                             className="w-full px-4 py-3 bg-white dark:bg-[#161B2A] border border-oxford-200 dark:border-oxford-700 rounded-xl focus:outline-none focus:border-gold-500 focus:ring-4 focus:ring-gold-500/10 transition-all font-sans text-oxford-900 dark:text-white"
                         />
+                        <datalist id="daftar-instansi-kaltara">
+                            {DAFTAR_INSTANSI_KALTARA.map((instansi) => (
+                                <option key={instansi} value={instansi} />
+                            ))}
+                        </datalist>
+                        <p className="text-xs text-oxford-400 mt-1">Ketik untuk menyaring cepat atau klik untuk memilih dari 158 instansi resmi Pemprov Kaltara.</p>
                     </div>
                     <div>
                         <label className="block text-sm font-bold text-oxford-900 dark:text-white mb-2" htmlFor="pangkat">Pangkat / Golongan</label>
@@ -386,17 +397,23 @@ function ProfileTab({ user, storedUser, onNotify }: {
                         />
                     </div>
                     <div>
-                        <label className="block text-sm font-bold text-oxford-900 dark:text-white mb-2" htmlFor="tanggalLahir">Tanggal Lahir</label>
+                        <label className="block text-sm font-bold text-oxford-900 dark:text-white mb-2" htmlFor="tanggalLahir">
+                            Tanggal Lahir
+                        </label>
                         <input
-                            type="text"
+                            type="date"
                             id="tanggalLahir"
                             name="tanggalLahir"
                             autoComplete="bday"
-                            value={formData.tanggalLahir}
-                            onChange={e => setFormData(f => ({ ...f, tanggalLahir: e.target.value }))}
-                            placeholder="cth: 15 Mei 1985"
+                            value={toIsoDate(formData.tanggalLahir)}
+                            onChange={e => setFormData(f => ({ ...f, tanggalLahir: toIndonesianDate(e.target.value) }))}
                             className="w-full px-4 py-3 bg-white dark:bg-[#161B2A] border border-oxford-200 dark:border-oxford-700 rounded-xl focus:outline-none focus:border-gold-500 focus:ring-4 focus:ring-gold-500/10 transition-all font-sans text-oxford-900 dark:text-white"
                         />
+                        {formData.tanggalLahir && (
+                            <p className="text-xs text-oxford-500 dark:text-oxford-400 mt-1">
+                                Format sertifikat: <span className="text-gold-600 dark:text-gold-400 font-bold">{toIndonesianDate(toIsoDate(formData.tanggalLahir)) || formData.tanggalLahir}</span>
+                            </p>
+                        )}
                     </div>
                 </div>
 

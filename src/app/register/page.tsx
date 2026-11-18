@@ -2,11 +2,18 @@
 
 import Link from "next/link";
 import { BookOpen, Mail, Lock, User, Briefcase, Building2, ArrowRight, CheckCircle2, Loader2, Eye, EyeOff } from "lucide-react";
-import { useState } from "react";
+import { useState, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 import { validateNipOrNik } from "@/lib/validation";
+import { DAFTAR_INSTANSI_KALTARA } from "@/lib/constants";
 
-export default function Register() {
+function RegisterForm() {
+    const searchParams = useSearchParams();
+    const rawCallback = searchParams.get("callbackUrl") || searchParams.get("redirect") || searchParams.get("next");
+    const callbackUrl = rawCallback && rawCallback.startsWith("/") && !rawCallback.startsWith("//") ? rawCallback : null;
+    const loginUrl = callbackUrl ? `/login?callbackUrl=${encodeURIComponent(callbackUrl)}` : "/login";
+
     const [name, setName] = useState("");
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
@@ -99,7 +106,7 @@ export default function Register() {
                             </p>
                             <div className="pt-4">
                                 <Link
-                                    href="/login"
+                                    href={loginUrl}
                                     className="inline-flex w-full justify-center items-center gap-2 bg-gold-500 text-oxford-950 py-3 rounded-xl font-bold hover:bg-gold-400 transition-colors shadow-sm"
                                 >
                                     Klik Disini Untuk Login <ArrowRight size={18} />
@@ -167,19 +174,26 @@ export default function Register() {
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-bold text-oxford-900 dark:text-white mb-2">Instansi Asal</label>
+                                    <label className="block text-sm font-bold text-oxford-900 dark:text-white mb-2" htmlFor="instansiAsal">Instansi Asal</label>
                                     <div className="relative">
                                         <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 text-oxford-400" size={20} />
                                         <input
                                             type="text"
                                             id="instansiAsal"
                                             name="instansiAsal"
+                                            list="daftar-instansi-kaltara-register"
                                             value={instansiAsal}
                                             onChange={(e) => setInstansiAsal(e.target.value)}
-                                            placeholder="Nama Instansi"
+                                            placeholder="Ketik untuk mencari instansi / OPD..."
                                             className="w-full pl-12 pr-4 py-3 border border-oxford-200 dark:border-oxford-700 bg-white dark:bg-[#161B2A] rounded-xl focus:outline-none focus:ring-4 focus:ring-gold-500/10 focus:border-gold-500 transition-all font-sans text-oxford-900 dark:text-white"
                                         />
+                                        <datalist id="daftar-instansi-kaltara-register">
+                                            {DAFTAR_INSTANSI_KALTARA.map((instansi) => (
+                                                <option key={instansi} value={instansi} />
+                                            ))}
+                                        </datalist>
                                     </div>
+                                    <p className="text-xs text-oxford-400 mt-1">Ketik untuk menyaring otomatis atau pilih dari 158 OPD/Instansi Pemprov Kaltara.</p>
                                 </div>
 
                                 <div>
@@ -271,12 +285,24 @@ export default function Register() {
                             </form>
 
                             <p className="mt-8 text-center text-sm font-sans text-oxford-600 dark:text-oxford-300">
-                                Sudah punya akun? <Link href="/login" className="font-bold text-gold-600 hover:text-gold-500 underline">Masuk di sini</Link>
+                                Sudah punya akun? <Link href={loginUrl} className="font-bold text-gold-600 hover:text-gold-500 underline">Masuk di sini</Link>
                             </p>
                         </>
                     )}
                 </div>
             </div>
         </div>
+    );
+}
+
+export default function Register() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen bg-oxford-50 dark:bg-oxford-950 flex items-center justify-center">
+                <div className="w-8 h-8 border-4 border-gold-500 border-t-transparent rounded-full animate-spin" />
+            </div>
+        }>
+            <RegisterForm />
+        </Suspense>
     );
 }

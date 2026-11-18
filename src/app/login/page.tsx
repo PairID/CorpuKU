@@ -34,14 +34,26 @@ function LoginForm() {
                 setLoading(false);
             } else {
                 authClient.invalidateSession(data.user || null);
-                // Redirect based on role
-                const role = data.user?.role;
-                if (role === "admin") {
-                    router.push("/admin");
-                } else if (role === "instructor") {
-                    router.push("/instructor");
+
+                // Check for return / callback URL
+                const rawCallback = searchParams.get("callbackUrl") || searchParams.get("redirect") || searchParams.get("next");
+                let safeRedirect: string | null = null;
+                if (rawCallback && rawCallback.startsWith("/") && !rawCallback.startsWith("//")) {
+                    safeRedirect = rawCallback;
+                }
+
+                if (safeRedirect) {
+                    router.push(safeRedirect);
                 } else {
-                    router.push("/dashboard");
+                    // Redirect based on role
+                    const role = data.user?.role;
+                    if (role === "admin") {
+                        router.push("/admin");
+                    } else if (role === "instructor") {
+                        router.push("/instructor");
+                    } else {
+                        router.push("/dashboard");
+                    }
                 }
             }
         } catch {
