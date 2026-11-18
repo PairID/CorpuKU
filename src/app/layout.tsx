@@ -20,6 +20,26 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="id">
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              window.addEventListener('error', function(e) {
+                var msg = e && (e.message || (e.error && e.error.message)) || '';
+                if (msg.indexOf('ChunkLoadError') !== -1 || msg.indexOf('Loading chunk') !== -1) {
+                  var k = 'last_chunk_reload';
+                  var last = sessionStorage.getItem(k);
+                  var now = Date.now();
+                  if (!last || now - Number(last) > 15000) {
+                    sessionStorage.setItem(k, String(now));
+                    window.location.reload();
+                  }
+                }
+              });
+            `,
+          }}
+        />
+      </head>
       <body
         className="font-sans bg-background text-foreground antialiased min-h-screen flex flex-col"
       >

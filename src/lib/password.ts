@@ -19,7 +19,7 @@ export function isPasswordHash(value: string): boolean {
 }
 
 export function validatePasswordStrength(password: string): string | null {
-  if (password.length < 10) return "Password minimal 10 karakter.";
+  if (password.length < 8) return "Password minimal 8 karakter.";
   if (password.length > 128) return "Password maksimal 128 karakter.";
   if (!/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/\d/.test(password)) {
     return "Password harus mengandung huruf besar, huruf kecil, dan angka.";

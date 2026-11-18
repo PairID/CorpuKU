@@ -12,8 +12,16 @@ export async function POST(request: NextRequest) {
         if (!isSameOrigin(request)) {
             return NextResponse.json({ error: "Permintaan tidak diizinkan." }, { status: 403, headers: NO_STORE_HEADERS });
         }
-        const data = parseJsonBody(registerSchema, await readJsonRequest(request));
-        if (!data) return NextResponse.json({ error: "Data pendaftaran tidak valid." }, { status: 400, headers: NO_STORE_HEADERS });
+        const rawBody = await readJsonRequest(request);
+        const parsed = registerSchema.safeParse(rawBody);
+        if (!parsed.success) {
+            const firstIssue = parsed.error.issues[0];
+            const errorMsg = firstIssue?.message && firstIssue.message !== "Required"
+                ? firstIssue.message
+                : `Data tidak valid pada ${firstIssue?.path.join(".") || "formulir"}.`;
+            return NextResponse.json({ error: errorMsg }, { status: 400, headers: NO_STORE_HEADERS });
+        }
+        const data = parsed.data;
         if (data.nip) {
             const clean = data.nip.replace(/\D/g, "");
             const nipVal = validateNipOrNik(clean);

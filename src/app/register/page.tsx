@@ -37,6 +37,18 @@ function RegisterForm() {
             return;
         }
 
+        if (password.length < 8) {
+            setError("Password minimal 8 karakter.");
+            setLoading(false);
+            return;
+        }
+
+        if (!/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/\d/.test(password)) {
+            setError("Password harus mengandung huruf besar, huruf kecil, dan angka.");
+            setLoading(false);
+            return;
+        }
+
         const cleanNip = nip.trim().replace(/\D/g, "");
         if (cleanNip) {
             const nipVal = validateNipOrNik(cleanNip);
@@ -237,6 +249,7 @@ function RegisterForm() {
                                             {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                                         </button>
                                     </div>
+                                    <p className="text-xs text-oxford-400 mt-1">Minimal 8 karakter (kombinasi huruf besar, huruf kecil, dan angka).</p>
                                 </div>
 
                                 <div>
@@ -262,6 +275,7 @@ function RegisterForm() {
                                             {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                                         </button>
                                     </div>
+                                    <p className="text-xs text-oxford-400 mt-1">Minimal 8 karakter (kombinasi huruf besar, huruf kecil, dan angka).</p>
                                 </div>
 
                                 <div className="py-2">

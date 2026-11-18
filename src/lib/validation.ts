@@ -10,9 +10,9 @@ export const loginSchema = z.object({
 
 export const registerSchema = z.object({
   name: normalizedText(2, 150),
-  email: z.string().trim().toLowerCase().email().max(254),
+  email: z.string().trim().toLowerCase().email("Format email tidak valid.").max(254),
   nip: z.string().trim().max(50).optional().default(""),
-  password: z.string().min(10).max(128),
+  password: z.string().min(8, "Password minimal 8 karakter.").max(128, "Password maksimal 128 karakter."),
   instansiAsal: z.string().trim().max(255).optional().default("Umum"),
 }).strict();
 
@@ -22,7 +22,7 @@ export const forgotPasswordSchema = z.object({
 
 export const resetPasswordSchema = z.object({
   token: z.string().regex(/^[A-Za-z0-9_-]{40,200}$/),
-  password: z.string().min(10).max(128),
+  password: z.string().min(8, "Password minimal 8 karakter.").max(128, "Password maksimal 128 karakter."),
 }).strict();
 
 export function parseJsonBody<T>(schema: z.ZodType<T>, value: unknown): T | null {
