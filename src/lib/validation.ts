@@ -9,11 +9,11 @@ export const loginSchema = z.object({
 }).strict();
 
 export const registerSchema = z.object({
-  name: normalizedText(2, 150),
-  email: z.string().trim().toLowerCase().email("Format email tidak valid.").max(254),
-  nip: z.string().trim().max(50).optional().default(""),
+  name: z.string().trim().min(2, "Nama lengkap minimal 2 karakter.").max(150, "Nama lengkap maksimal 150 karakter."),
+  email: z.string().trim().toLowerCase().email("Format email tidak valid (contoh: nama@email.com).").max(254, "Email terlalu panjang."),
+  nip: z.string().trim().max(50, "NIP/NIK maksimal 50 karakter.").optional().default(""),
   password: z.string().min(8, "Password minimal 8 karakter.").max(128, "Password maksimal 128 karakter."),
-  instansiAsal: z.string().trim().max(255).optional().default("Umum"),
+  instansiAsal: z.string().trim().max(255, "Nama instansi maksimal 255 karakter.").optional().default("Umum"),
 }).strict();
 
 export const forgotPasswordSchema = z.object({

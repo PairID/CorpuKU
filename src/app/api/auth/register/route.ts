@@ -16,9 +16,19 @@ export async function POST(request: NextRequest) {
         const parsed = registerSchema.safeParse(rawBody);
         if (!parsed.success) {
             const firstIssue = parsed.error.issues[0];
-            const errorMsg = firstIssue?.message && firstIssue.message !== "Required"
-                ? firstIssue.message
-                : `Data tidak valid pada ${firstIssue?.path.join(".") || "formulir"}.`;
+            const field = String(firstIssue?.path[0] || "");
+            const fieldLabels: Record<string, string> = {
+                name: "Nama Lengkap",
+                email: "Email Kedinasan",
+                nip: "NIP / NIK",
+                password: "Password",
+                instansiAsal: "Instansi Asal",
+            };
+            const label = fieldLabels[field] || "Kolom isian";
+            let errorMsg = firstIssue?.message;
+            if (!errorMsg || errorMsg === "Required" || errorMsg.includes("Invalid")) {
+                errorMsg = `${label} wajib diisi dengan benar.`;
+            }
             return NextResponse.json({ error: errorMsg }, { status: 400, headers: NO_STORE_HEADERS });
         }
         const data = parsed.data;
@@ -69,13 +79,26 @@ export async function POST(request: NextRequest) {
     } catch (error: unknown) {
         console.error("Registration error:", error instanceof Error ? error.message : "unknown error");
         if (error instanceof Error && /unique|duplicate/i.test(error.message)) {
+            const msg = error.message.toLowerCase();
+            if (msg.includes("email")) {
+                return NextResponse.json(
+                    { error: "Email ini sudah terdaftar. Silakan gunakan email lain atau langsung masuk (login)." },
+                    { status: 400, headers: NO_STORE_HEADERS }
+                );
+            }
+            if (msg.includes("nip") || msg.includes("username")) {
+                return NextResponse.json(
+                    { error: "NIP/NIK ini sudah terdaftar. Silakan langsung masuk (login) menggunakan NIP/NIK tersebut." },
+                    { status: 400, headers: NO_STORE_HEADERS }
+                );
+            }
             return NextResponse.json(
-                { error: "Pendaftaran tidak dapat diproses dengan data tersebut." },
+                { error: "Akun dengan NIP atau Email tersebut sudah terdaftar. Silakan langsung masuk." },
                 { status: 400, headers: NO_STORE_HEADERS }
             );
         }
         return NextResponse.json(
-            { error: "Pendaftaran gagal. Silakan coba lagi." },
+            { error: "Pendaftaran gagal. Silakan periksa kembali data Anda atau coba beberapa saat lagi." },
             { status: 500, headers: NO_STORE_HEADERS }
         );
     }
