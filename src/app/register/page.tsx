@@ -12,7 +12,11 @@ function RegisterForm() {
     const searchParams = useSearchParams();
     const rawCallback = searchParams.get("callbackUrl") || searchParams.get("redirect") || searchParams.get("next");
     const callbackUrl = rawCallback && rawCallback.startsWith("/") && !rawCallback.startsWith("//") ? rawCallback : null;
-    const loginUrl = callbackUrl ? `/login?callbackUrl=${encodeURIComponent(callbackUrl)}` : "/login";
+    let targetCallback = callbackUrl;
+    if (targetCallback && targetCallback.startsWith("/courses/") && !targetCallback.includes("autoEnroll=1")) {
+        targetCallback += (targetCallback.includes("?") ? "&" : "?") + "autoEnroll=1";
+    }
+    const loginUrl = targetCallback ? `/login?callbackUrl=${encodeURIComponent(targetCallback)}` : "/login";
 
     const [name, setName] = useState("");
     const [email, setEmail] = useState("");
@@ -111,17 +115,17 @@ function RegisterForm() {
                             <div className="w-20 h-20 bg-emerald-500/10 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4">
                                 <CheckCircle2 size={40} className="animate-bounce" />
                             </div>
-                            <h2 className="text-2xl font-bold text-oxford-900 dark:text-white">Pendaftaran Berhasil!</h2>
+                            <h2 className="text-2xl font-bold text-oxford-900 dark:text-white">Pendaftaran Akun Berhasil!</h2>
                             <p className="text-oxford-600 dark:text-oxford-300">
-                                Akun Anda atas nama <span className="font-bold text-oxford-900 dark:text-white">{name}</span> telah berhasil didaftarkan.
-                                Anda sekarang memiliki akses penuh ke platform CorpuKU.
+                                Akun Anda atas nama <span className="font-bold text-oxford-900 dark:text-white">{name}</span> telah berhasil dibuat.
+                                {callbackUrl ? " Silakan klik tombol di bawah untuk login dan langsung bergabung ke kelas pelatihan Anda." : " Anda sekarang memiliki akses penuh ke platform CorpuKU."}
                             </p>
                             <div className="pt-4">
                                 <Link
                                     href={loginUrl}
-                                    className="inline-flex w-full justify-center items-center gap-2 bg-gold-500 text-oxford-950 py-3 rounded-xl font-bold hover:bg-gold-400 transition-colors shadow-sm"
+                                    className="inline-flex w-full justify-center items-center gap-2 bg-gold-500 text-oxford-950 py-4 rounded-xl font-bold text-base hover:bg-gold-400 transition-colors shadow-lg shadow-gold-500/20 active:scale-95"
                                 >
-                                    Klik Disini Untuk Login <ArrowRight size={18} />
+                                    Masuk &amp; Akses Kelas Pelatihan <ArrowRight size={18} />
                                 </Link>
                             </div>
                         </div>

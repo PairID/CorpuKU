@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Image from "next/image";
 import { BookOpen, Clock, Globe, Award, Shield, CheckCircle, ChevronDown, ChevronUp, PlayCircle, Loader2, CalendarDays, Lock, KeyRound, AlertCircle, X } from "lucide-react";
 import { enrollInCourse, getEnrollmentStatus } from "@/app/actions/courses";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { optimizeImage } from "@/lib/utils";
 import { showToast } from "@/lib/toast";
 
@@ -52,24 +52,7 @@ export default function CourseClient({ course, courseContent }: { course: Course
     const [passcodeInput, setPasscodeInput] = useState<string>("");
     const [passcodeError, setPasscodeError] = useState<string>("");
     const router = useRouter();
-
-    useEffect(() => {
-        async function fetchEnrollment() {
-            try {
-                const res = await getEnrollmentStatus(course.id);
-                setIsEnrolled(res.enrolled && (res.status === "active" || res.status === "completed"));
-                setEnrollmentStatus(res.status);
-            } catch (err) {
-                console.error("Failed to check enrollment:", err);
-                setIsEnrolled(false);
-                setEnrollmentStatus(null);
-            } finally {
-                setIsChecking(false);
-            }
-        }
-        const timer = window.setTimeout(() => void fetchEnrollment(), 0);
-        return () => window.clearTimeout(timer);
-    }, [course.id]);
+    const searchParams = useSearchParams();
 
     const handleEnroll = async (passcodeToSubmit?: string) => {
         if (course.accessMode === "passcode" && !passcodeToSubmit) {
@@ -92,7 +75,9 @@ export default function CourseClient({ course, courseContent }: { course: Course
                 setIsEnrolled(true);
                 setEnrollmentStatus("active");
                 setShowPasscodeModal(false);
-                showToast.success("Pendaftaran Berhasil", "Selamat belajar di kelas ini!");
+                showToast.success("Pendaftaran Berhasil", "Mengarahkan ke ruang kelas...");
+                router.push(`/learn/${course.id}`);
+                return;
             }
             router.refresh();
         } else if (result.error) {
@@ -103,11 +88,49 @@ export default function CourseClient({ course, courseContent }: { course: Course
                 showToast.error("Pendaftaran Gagal", errString);
             }
             if (errString.toLowerCase().includes("logged in") || errString.toLowerCase().includes("login") || errString.toLowerCase().includes("unauthorized")) {
-                router.push(`/login?callbackUrl=${encodeURIComponent(`/courses/${course.id}`)}`);
+                router.push(`/login?callbackUrl=${encodeURIComponent(`/courses/${course.id}?autoEnroll=1`)}`);
             }
         }
         setIsLoading(false);
     };
+
+    useEffect(() => {
+        let isMounted = true;
+        async function fetchEnrollment() {
+            try {
+                const res = await getEnrollmentStatus(course.id);
+                if (!isMounted) return;
+                const enrolled = res.enrolled && (res.status === "active" || res.status === "completed");
+                setIsEnrolled(enrolled);
+                setEnrollmentStatus(res.status);
+
+                // Auto-enroll if arrived from login with ?autoEnroll=1 or ?enroll=1
+                const autoEnroll = searchParams.get("autoEnroll") === "1" || searchParams.get("enroll") === "1";
+                if (autoEnroll) {
+                    if (enrolled) {
+                        router.push(`/learn/${course.id}`);
+                    } else if (course.accessMode === "open") {
+                        void handleEnroll();
+                    } else if (course.accessMode === "passcode") {
+                        setShowPasscodeModal(true);
+                    }
+                }
+            } catch (err) {
+                console.error("Failed to check enrollment:", err);
+                if (isMounted) {
+                    setIsEnrolled(false);
+                    setEnrollmentStatus(null);
+                }
+            } finally {
+                if (isMounted) setIsChecking(false);
+            }
+        }
+        const timer = window.setTimeout(() => void fetchEnrollment(), 0);
+        return () => {
+            isMounted = false;
+            window.clearTimeout(timer);
+        };
+    }, [course.id, searchParams]);
 
     const toggleSyllabus = (moduleId: string) => {
         if (expandedWeek === moduleId) {
@@ -237,9 +260,9 @@ export default function CourseClient({ course, courseContent }: { course: Course
                                 {isEnrolled ? (
                                     <button
                                         onClick={() => router.push(`/learn/${course.id}`)}
-                                        className="w-full py-4 font-bold font-sans rounded-xl text-lg transition-all shadow-lg active:scale-95 mb-4 flex items-center justify-center gap-2 bg-emerald-100 text-emerald-700 hover:bg-emerald-200 shadow-none border border-emerald-200"
+                                        className="w-full py-4 font-bold font-sans rounded-xl text-lg transition-all shadow-lg active:scale-95 mb-4 flex items-center justify-center gap-2 bg-emerald-600 text-white hover:bg-emerald-700 shadow-md"
                                     >
-                                        <CheckCircle size={20} /> Lanjutkan Belajar
+                                        <CheckCircle size={20} /> Masuk ke Kelas &amp; Presensi
                                     </button>
                                 ) : enrollmentStatus === "pending_approval" ? (
                                     <div className="w-full py-4 px-4 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-700 dark:text-amber-300 font-bold text-sm text-center mb-4 flex items-center justify-center gap-2 shadow-sm">

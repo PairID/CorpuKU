@@ -10,9 +10,10 @@ export default async function StudentDashboardPage() {
     if (auth.user.role === "instructor") redirect("/instructor");
     const enrollments = await getUserEnrollments();
 
-    // Serialize dates for Client Component
+    // Serialize dates and journey attributes for Client Component
     const serializedEnrollments = enrollments.map(e => ({
         id: String(e.id),
+        courseId: String(e.courseId || e.id),
         title: String(e.title || "Kursus"),
         description: e.description ? String(e.description) : null,
         thumbnailUrl: e.thumbnailUrl ? String(e.thumbnailUrl) : null,
@@ -20,6 +21,18 @@ export default async function StudentDashboardPage() {
         progress: Number(e.progress || 0),
         status: e.status === "completed" ? "completed" as const : "in_progress" as const,
         provider: "CorpuKU Academy",
+        trainingType: e.trainingType || "elearning",
+        deliveryMode: e.deliveryMode || "daring",
+        statementAccepted: Boolean(e.statementAccepted),
+        attendedJp: Number(e.attendedJp || 0),
+        attendancePercentage: Number(e.attendancePercentage || 0),
+        attendanceThreshold: Number(e.attendanceThreshold || 80),
+        allEvaluationsCompleted: Boolean(e.allEvaluationsCompleted),
+        evalNarasumberCompleted: Boolean(e.evalNarasumberCompleted),
+        evalOrganizerCompleted: Boolean(e.evalOrganizerCompleted),
+        evalUnderstandingCompleted: Boolean(e.evalUnderstandingCompleted),
+        evalSkmCompleted: Boolean(e.evalSkmCompleted),
+        certificateEnabled: e.certificateEnabled !== false,
     }));
 
     // Pass a placeholder session — the client component will read actual user from localStorage

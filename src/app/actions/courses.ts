@@ -194,6 +194,7 @@ interface EnrollmentRecord {
     evalSkmCompleted?: boolean;
     allEvaluationsCompleted?: boolean;
     trainingType?: string;
+    deliveryMode?: string;
     targetOpd?: string | null;
     attendanceThreshold?: number;
     certificateEnabled?: boolean;
@@ -666,8 +667,20 @@ export async function getUserEnrollments(): Promise<EnrollmentRecord[]> {
             SELECT e.id, e.user_id as "userId", e.course_id as "courseId", 
                    e.status, e.progress, e.enrolled_at as "enrolledAt", 
                    e.completed_at as "completedAt",
+                   e.statement_accepted as "statementAccepted",
+                   e.attended_jp as "attendedJp",
+                   e.attendance_percentage as "attendancePercentage",
+                   e.all_evaluations_completed as "allEvaluationsCompleted",
+                   e.eval_narasumber_completed as "evalNarasumberCompleted",
+                   e.eval_organizer_completed as "evalOrganizerCompleted",
+                   e.eval_understanding_completed as "evalUnderstandingCompleted",
+                   e.eval_skm_completed as "evalSkmCompleted",
                    COALESCE(c.title, e.title) AS title, COALESCE(c.category, e.category) AS category,
-                   c.description, c.thumbnail_url as "thumbnailUrl"
+                   c.description, c.thumbnail_url as "thumbnailUrl",
+                   c.training_type as "trainingType",
+                   c.delivery_mode as "deliveryMode",
+                   COALESCE(c.attendance_threshold, 80) as "attendanceThreshold",
+                   COALESCE(c.certificate_enabled, true) as "certificateEnabled"
             FROM enrollments e
             LEFT JOIN courses c ON e.course_id = c.id
             WHERE e.user_id = ${user.id}

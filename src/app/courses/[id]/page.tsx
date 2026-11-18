@@ -1,6 +1,9 @@
 import { getCourseById, getCourseOutline } from "@/app/actions/courses";
 import CourseClient, { CourseModule, CourseProp } from "./course-client";
 import { notFound } from "next/navigation";
+import { Suspense } from "react";
+
+export const dynamic = "force-dynamic";
 
 export default async function CourseDetailPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = await params;
@@ -44,5 +47,13 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ i
         })) : [],
     }));
 
-    return <CourseClient course={serializedCourse} courseContent={serializedContent} />;
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen bg-oxford-950 flex items-center justify-center">
+                <div className="w-8 h-8 border-4 border-gold-500 border-t-transparent rounded-full animate-spin" />
+            </div>
+        }>
+            <CourseClient course={serializedCourse} courseContent={serializedContent} />
+        </Suspense>
+    );
 }
