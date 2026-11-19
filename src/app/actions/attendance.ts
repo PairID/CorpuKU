@@ -2,7 +2,7 @@
 
 import crypto from "crypto";
 import { sql } from "@/lib/db";
-import { requireUserSession, requireInstructorSession } from "./auth";
+import { requireUserSession, requireInstructorSession, getAuthSession } from "./auth";
 import { revalidatePath } from "next/cache";
 import { calculateAttendancePercentage, sanitizeParticipantNip } from "@/lib/classical-training";
 import { issueCourseCertificate } from "@/lib/course-certificates";
@@ -12,6 +12,7 @@ interface SubmitAttendancePayload {
   courseId: string;
   lessonId?: string;
   attendanceCode: string;
+  autoAcceptStatement?: boolean;
 }
 
 interface ConfirmParticipantDataPayload {
@@ -34,24 +35,52 @@ export async function submitMaterialAttendance(payload: SubmitAttendancePayload)
   try {
     const session = await requireUserSession();
     const userId = session.user.id;
-    const { courseId, attendanceCode } = payload;
+    let { courseId, attendanceCode, autoAcceptStatement } = payload;
 
-    if (!courseId || !attendanceCode?.trim()) {
+    if (!attendanceCode?.trim()) {
       return { success: false, error: "Data presensi tidak lengkap." };
     }
 
-    // Parse JSON QR payload if present
+    // Parse URL QR payload if present (e.g. https://domain.com/attendance/scan?courseId=...&lessonId=...&code=...)
     let rawInputCode = attendanceCode.trim();
     let targetLessonId = (payload.lessonId || "").trim();
+    let targetCourseId = (courseId || "").trim();
+
+    if (rawInputCode.includes("/attendance/scan") || rawInputCode.startsWith("http://") || rawInputCode.startsWith("https://")) {
+      try {
+        const urlObj = new URL(rawInputCode);
+        const qCode = urlObj.searchParams.get("code");
+        const qLessonId = urlObj.searchParams.get("lessonId");
+        const qCourseId = urlObj.searchParams.get("courseId");
+        if (qCode) rawInputCode = qCode.trim();
+        if (qLessonId && !targetLessonId) targetLessonId = qLessonId.trim();
+        if (qCourseId && !targetCourseId) targetCourseId = qCourseId.trim();
+      } catch {
+        const codeMatch = rawInputCode.match(/[?&]code=([^&]+)/);
+        const lessonMatch = rawInputCode.match(/[?&]lessonId=([^&]+)/);
+        const courseMatch = rawInputCode.match(/[?&]courseId=([^&]+)/);
+        if (codeMatch) rawInputCode = decodeURIComponent(codeMatch[1]).trim();
+        if (lessonMatch && !targetLessonId) targetLessonId = decodeURIComponent(lessonMatch[1]).trim();
+        if (courseMatch && !targetCourseId) targetCourseId = decodeURIComponent(courseMatch[1]).trim();
+      }
+    }
+
+    // Parse JSON QR payload if present
     if (rawInputCode.startsWith("{") && rawInputCode.endsWith("}")) {
       try {
         const parsed = JSON.parse(rawInputCode);
         if (parsed.code) rawInputCode = String(parsed.code).trim();
-        if (parsed.lessonId) targetLessonId = String(parsed.lessonId).trim();
+        if (parsed.lessonId && !targetLessonId) targetLessonId = String(parsed.lessonId).trim();
+        if (parsed.courseId && !targetCourseId) targetCourseId = String(parsed.courseId).trim();
       } catch {
         // use raw string
       }
     }
+
+    if (!targetCourseId) {
+      return { success: false, error: "ID Pelatihan tidak ditemukan." };
+    }
+    courseId = targetCourseId;
 
     // 1. Cek pendaftaran kursus
     const enrollmentRows = await sql`
@@ -60,17 +89,49 @@ export async function submitMaterialAttendance(payload: SubmitAttendancePayload)
       WHERE (course_id = ${courseId} OR id = ${courseId}) AND user_id = ${userId}
       LIMIT 1
     `;
-    const enrollment = enrollmentRows[0];
+    let enrollment = enrollmentRows[0];
+
+    // Jika peserta belum terdaftar di kelas (misal ASN langsung scan QR di ruangan), daftarkan otomatis (zero friction)
     if (!enrollment) {
-      return { success: false, error: "Anda belum terdaftar pada kelas ini." };
+      const courseCheck = await sql`SELECT id, type, is_published FROM courses WHERE id = ${courseId} LIMIT 1`;
+      if (!courseCheck[0]) {
+        return { success: false, error: "Kelas pelatihan tidak ditemukan." };
+      }
+      const newEnrId = `enr_${crypto.randomUUID()}`;
+      await sql`
+        INSERT INTO enrollments (id, user_id, course_id, status, enrolled_at, statement_accepted, statement_accepted_at)
+        VALUES (${newEnrId}, ${userId}, ${courseId}, 'active', CURRENT_TIMESTAMP, TRUE, CURRENT_TIMESTAMP)
+        ON CONFLICT (user_id, course_id) DO UPDATE SET status = 'active'
+      `;
+      const reloaded = await sql`
+        SELECT id, user_id, course_id, statement_accepted, attended_jp, attendance_percentage, completed_lessons, all_evaluations_completed
+        FROM enrollments
+        WHERE (course_id = ${courseId} OR id = ${courseId}) AND user_id = ${userId}
+        LIMIT 1
+      `;
+      enrollment = reloaded[0];
+    }
+
+    if (!enrollment) {
+      return { success: false, error: "Gagal memverifikasi pendaftaran pada kelas ini." };
     }
 
     if (!enrollment.statement_accepted) {
-      return {
-        success: false,
-        error: "Harap lakukan verifikasi data profil dan checklist pernyataan sebelum presensi.",
-        requireStatement: true,
-      };
+      if (autoAcceptStatement) {
+        await sql`
+          UPDATE enrollments
+          SET statement_accepted = TRUE,
+              statement_accepted_at = CURRENT_TIMESTAMP
+          WHERE id = ${enrollment.id}
+        `;
+        enrollment.statement_accepted = true;
+      } else {
+        return {
+          success: false,
+          error: "Harap lakukan verifikasi data profil dan checklist pernyataan sebelum presensi.",
+          requireStatement: true,
+        };
+      }
     }
 
     // 2. Ambil data sesi materi — utamakan pencocokan kode QR di kelas ini agar otomatis mengarah ke modul/sesi terkait
@@ -196,12 +257,16 @@ export async function submitMaterialAttendance(payload: SubmitAttendancePayload)
 
     return {
       success: true,
-      message: `Presensi berhasil dicatat! (+${lessonJp} JP) - ${lesson.title}`,
+      message: existingAtt[0]
+        ? `Anda sudah tercatat hadir pada materi ini (${lesson.title}).`
+        : `Presensi berhasil dicatat! (+${lessonJp} JP) - ${lesson.title}`,
       lessonId,
+      lessonTitle: String(lesson.title),
       attendedJp,
       totalClassJp,
       attendancePercentage,
       alreadyAttended: Boolean(existingAtt[0]),
+      attendedAt: existingAtt[0]?.attended_at ? new Date(existingAtt[0].attended_at).toISOString() : new Date().toISOString(),
     };
   } catch (err: unknown) {
     console.error("submitMaterialAttendance error:", err);
@@ -209,6 +274,137 @@ export async function submitMaterialAttendance(payload: SubmitAttendancePayload)
       success: false,
       error: err instanceof Error ? err.message : "Terjadi kesalahan saat mencatat presensi.",
     };
+  }
+}
+
+/**
+  * Memverifikasi data sesi materi dan status peserta untuk halaman scan presensi web
+  */
+export async function getAttendanceScanContext(params: {
+  courseId: string;
+  lessonId?: string;
+  code?: string;
+}) {
+  try {
+    const session = await getAuthSession();
+    const userId = session?.user?.id;
+    const { courseId, lessonId, code } = params;
+
+    if (!courseId) {
+      return { success: false, error: "ID Pelatihan tidak valid." };
+    }
+
+    // 1. Ambil data Course
+    const courseRows = await sql`
+      SELECT id, title, type, jp, image, instructor_id
+      FROM courses
+      WHERE id = ${courseId}
+      LIMIT 1
+    `;
+    const course = courseRows[0];
+    if (!course) {
+      return { success: false, error: "Pelatihan tidak ditemukan." };
+    }
+
+    // 2. Ambil data Lesson
+    let lesson: any = null;
+    if (code) {
+      const cleanCode = code.trim().toUpperCase();
+      const lessonByCode = await sql`
+        SELECT l.id, l.title, l.jp, l.has_attendance, l.attendance_qr_code, l.narasumber_name,
+               m.id AS module_id, m.title AS module_title
+        FROM lessons l
+        JOIN modules m ON m.id = l.module_id
+        WHERE m.course_id = ${courseId}
+          AND UPPER(TRIM(COALESCE(l.attendance_qr_code, ''))) = ${cleanCode}
+        LIMIT 1
+      `;
+      lesson = lessonByCode[0];
+    }
+
+    if (!lesson && lessonId) {
+      const lessonById = await sql`
+        SELECT l.id, l.title, l.jp, l.has_attendance, l.attendance_qr_code, l.narasumber_name,
+               m.id AS module_id, m.title AS module_title
+        FROM lessons l
+        JOIN modules m ON m.id = l.module_id
+        WHERE l.id = ${lessonId} AND m.course_id = ${courseId}
+        LIMIT 1
+      `;
+      lesson = lessonById[0];
+    }
+
+    if (!lesson) {
+      return { success: false, error: "Sesi materi tidak ditemukan pada pelatihan ini." };
+    }
+
+    // 3. User & Enrollment state if logged in
+    let userState = null;
+    if (userId) {
+      const userRows = await sql`
+        SELECT id, name, nip, email, instansi_asal, jabatan, pangkat, image
+        FROM users
+        WHERE id = ${userId}
+        LIMIT 1
+      `;
+      const userData = userRows[0];
+
+      const enrollmentRows = await sql`
+        SELECT id, status, statement_accepted, attended_jp, attendance_percentage
+        FROM enrollments
+        WHERE (course_id = ${courseId} OR id = ${courseId}) AND user_id = ${userId}
+        LIMIT 1
+      `;
+      const enr = enrollmentRows[0];
+
+      const attRows = await sql`
+        SELECT id, jp, attended_at
+        FROM material_attendances
+        WHERE user_id = ${userId} AND lesson_id = ${lesson.id}
+        LIMIT 1
+      `;
+      const att = attRows[0];
+
+      userState = {
+        isLoggedIn: true,
+        user: userData ? {
+          id: String(userData.id),
+          name: String(userData.name),
+          nip: String(userData.nip || ""),
+          instansiAsal: String(userData.instansi_asal || ""),
+          jabatan: String(userData.jabatan || ""),
+        } : null,
+        isEnrolled: Boolean(enr),
+        statementAccepted: Boolean(enr?.statement_accepted),
+        alreadyAttended: Boolean(att),
+        attendedAt: att?.attended_at ? new Date(att.attended_at).toISOString() : null,
+        attendedJp: Number(enr?.attended_jp || 0),
+        attendancePercentage: Number(enr?.attendance_percentage || 0),
+      };
+    }
+
+    return {
+      success: true,
+      course: {
+        id: String(course.id),
+        title: String(course.title),
+        type: String(course.type || "classical"),
+        totalJp: Number(course.jp || 0),
+        image: course.image ? String(course.image) : null,
+      },
+      lesson: {
+        id: String(lesson.id),
+        title: String(lesson.title),
+        jp: Number(lesson.jp || 2),
+        moduleTitle: String(lesson.module_title || ""),
+        narasumberName: lesson.narasumber_name ? String(lesson.narasumber_name) : null,
+        attendanceCode: String(lesson.attendance_qr_code || ""),
+      },
+      userState,
+    };
+  } catch (err: unknown) {
+    console.error("getAttendanceScanContext error:", err);
+    return { success: false, error: "Gagal memverifikasi data sesi presensi." };
   }
 }
 

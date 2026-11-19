@@ -131,7 +131,21 @@ export default function MobileAttendanceFAB({
     let targetLessonId: string | undefined;
     let codeStr = rawCode.trim();
 
-    if (codeStr.startsWith("{") && codeStr.endsWith("}")) {
+    // Support URL QR code (https://corpuku.../attendance/scan?courseId=...&lessonId=...&code=...)
+    if (codeStr.includes("/attendance/scan") || codeStr.startsWith("http://") || codeStr.startsWith("https://")) {
+      try {
+        const urlObj = new URL(codeStr);
+        const qCode = urlObj.searchParams.get("code");
+        const qLessonId = urlObj.searchParams.get("lessonId");
+        if (qCode) codeStr = qCode.trim();
+        if (qLessonId) targetLessonId = qLessonId.trim();
+      } catch {
+        const codeMatch = codeStr.match(/[?&]code=([^&]+)/);
+        const lessonMatch = codeStr.match(/[?&]lessonId=([^&]+)/);
+        if (codeMatch) codeStr = decodeURIComponent(codeMatch[1]).trim();
+        if (lessonMatch) targetLessonId = decodeURIComponent(lessonMatch[1]).trim();
+      }
+    } else if (codeStr.startsWith("{") && codeStr.endsWith("}")) {
       try {
         const parsed = JSON.parse(codeStr);
         if (parsed.lessonId) targetLessonId = String(parsed.lessonId);

@@ -7,6 +7,7 @@ import {
   ChevronRight,
   Copy,
   Download,
+  Link2,
   Loader2,
   Maximize2,
   Minimize2,
@@ -52,7 +53,9 @@ export default function CourseAttendanceQrManagerModal({
   const [draftCode, setDraftCode] = useState("");
   const [savingCode, setSavingCode] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState("");
+  const [attendanceUrl, setAttendanceUrl] = useState("");
   const [copied, setCopied] = useState(false);
+  const [copiedUrl, setCopiedUrl] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   useEffect(() => {
@@ -101,6 +104,7 @@ export default function CourseAttendanceQrManagerModal({
           setQrCode(res.code || "");
           setDraftCode(res.code || "");
           setQrDataUrl(res.qrDataUrl);
+          setAttendanceUrl(res.attendanceUrl || "");
         } else {
           showToast.error("Gagal Memuat QR", res.error || "Gagal memuat QR presensi.");
         }
@@ -154,6 +158,7 @@ export default function CourseAttendanceQrManagerModal({
         setQrCode(res.code || "");
         setDraftCode(res.code || "");
         setQrDataUrl(res.qrDataUrl);
+        setAttendanceUrl(res.attendanceUrl || "");
         showToast.success("QR Presensi Diperbarui", `Token baru: ${res.code}`);
       } else {
         showToast.error("Gagal", res.error || "Gagal men-generate ulang QR.");
@@ -172,6 +177,7 @@ export default function CourseAttendanceQrManagerModal({
         setQrCode(res.code || "");
         setDraftCode(res.code || "");
         setQrDataUrl(res.qrDataUrl);
+        setAttendanceUrl(res.attendanceUrl || "");
         showToast.success("Token Disimpan", `Token & QR diperbarui menjadi ${res.code}`);
       } else {
         showToast.error("Gagal Menyimpan Token", res.error || "Token tidak valid.");
@@ -189,6 +195,18 @@ export default function CourseAttendanceQrManagerModal({
       setTimeout(() => setCopied(false), 1800);
     } catch {
       showToast.error("Gagal Menyalin", "Silakan salin kode secara manual.");
+    }
+  };
+
+  const handleCopyUrl = async () => {
+    if (!attendanceUrl) return;
+    try {
+      await navigator.clipboard.writeText(attendanceUrl);
+      setCopiedUrl(true);
+      setTimeout(() => setCopiedUrl(false), 2000);
+      showToast.success("Link Presensi Disalin", "Tautan web presensi langsung telah disalin ke clipboard.");
+    } catch {
+      showToast.error("Gagal Menyalin Link", "Silakan salin tautan secara manual.");
     }
   };
 
@@ -257,11 +275,23 @@ export default function CourseAttendanceQrManagerModal({
                     className="w-72 h-72 sm:w-96 sm:h-96 object-contain"
                   />
                 </div>
-                <p className="mt-5 text-sm text-oxford-300">
-                  Scan QR Code di atas menggunakan tombol QR di aplikasi peserta, atau masukkan token:
+                <p className="mt-5 text-sm text-oxford-300 text-center max-w-md">
+                  Arahkan kamera HP peserta (atau scan QR) langsung ke layar untuk presensi otomatis via web:
                 </p>
-                <div className="mt-2 px-6 py-2.5 rounded-2xl bg-oxford-900 border border-oxford-700 text-xl md:text-2xl font-mono font-extrabold tracking-wider text-gold-400">
-                  {qrCode}
+                <div className="mt-3 flex flex-wrap items-center justify-center gap-3">
+                  <div className="px-6 py-2.5 rounded-2xl bg-oxford-900 border border-oxford-700 text-xl md:text-2xl font-mono font-extrabold tracking-wider text-gold-400">
+                    {qrCode}
+                  </div>
+                  {attendanceUrl && (
+                    <button
+                      type="button"
+                      onClick={() => void handleCopyUrl()}
+                      className="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-gold-500 hover:bg-gold-400 text-oxford-950 text-xs font-bold shadow-md transition-all active:scale-95"
+                    >
+                      {copiedUrl ? <Check size={16} className="text-oxford-950" /> : <Link2 size={16} />}
+                      <span>{copiedUrl ? "Link Web Disalin!" : "Salin Link Web Presensi"}</span>
+                    </button>
+                  )}
                 </div>
               </div>
             ) : (
@@ -428,6 +458,19 @@ export default function CourseAttendanceQrManagerModal({
                     >
                       {copied ? <Check size={13} className="text-emerald-600" /> : <Copy size={13} />}
                       <span>{copied ? "Disalin" : "Salin"}</span>
+                    </button>
+                  </div>
+                )}
+
+                {attendanceUrl && (
+                  <div className="w-full max-w-sm mb-3">
+                    <button
+                      type="button"
+                      onClick={() => void handleCopyUrl()}
+                      className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-gold-50 dark:bg-gold-950/40 border border-gold-300 dark:border-gold-700/60 text-gold-950 dark:text-gold-200 text-xs font-bold hover:bg-gold-100 transition-colors"
+                    >
+                      {copiedUrl ? <Check size={14} className="text-emerald-600" /> : <Link2 size={14} />}
+                      <span>{copiedUrl ? "Tautan Web Presensi Berhasil Disalin!" : "Salin Link Web Presensi (Untuk Dishare ke WA)"}</span>
                     </button>
                   </div>
                 )}

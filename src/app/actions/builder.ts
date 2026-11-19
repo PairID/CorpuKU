@@ -354,6 +354,12 @@ export async function saveCourseContent(courseId: string, modulesData: BuilderMo
     }
 }
 
+function buildAttendanceScanUrl(courseId: string, lessonId: string, code: string): string {
+    const rawAppUrl = process.env.NEXT_PUBLIC_APP_URL || "https://corpuku.learningpassport.space";
+    const appUrl = rawAppUrl.trim().replace(/\/+$/, "");
+    return `${appUrl}/attendance/scan?courseId=${encodeURIComponent(courseId)}&lessonId=${encodeURIComponent(lessonId)}&code=${encodeURIComponent(code)}`;
+}
+
 /**
  * Men-generate kode dan QR code presensi unik untuk sesi materi
  */
@@ -370,12 +376,7 @@ export async function generateMaterialAttendanceQr(courseId: string, lessonId: s
             WHERE id = ${lessonId}
         `;
 
-        const qrPayload = JSON.stringify({
-            type: "material_attendance",
-            courseId,
-            lessonId,
-            code,
-        });
+        const qrPayload = buildAttendanceScanUrl(courseId, lessonId, code);
 
         const qrDataUrl = await QRCode.toDataURL(qrPayload, {
             width: 320,
@@ -383,7 +384,7 @@ export async function generateMaterialAttendanceQr(courseId: string, lessonId: s
             color: { dark: "#0f172a", light: "#ffffff" },
         });
 
-        return { success: true, code, qrDataUrl };
+        return { success: true, code, qrDataUrl, attendanceUrl: qrPayload };
     } catch (err: unknown) {
         console.error("generateMaterialAttendanceQr error:", err);
         return { success: false, error: errorMessage(err, "Gagal men-generate QR presensi.") };
@@ -430,12 +431,7 @@ export async function updateMaterialAttendanceQrCode(
             WHERE id = ${lessonId}
         `;
 
-        const qrPayload = JSON.stringify({
-            type: "material_attendance",
-            courseId,
-            lessonId,
-            code,
-        });
+        const qrPayload = buildAttendanceScanUrl(courseId, lessonId, code);
 
         const qrDataUrl = await QRCode.toDataURL(qrPayload, {
             width: 320,
@@ -443,7 +439,7 @@ export async function updateMaterialAttendanceQrCode(
             color: { dark: "#0f172a", light: "#ffffff" },
         });
 
-        return { success: true, code, qrDataUrl };
+        return { success: true, code, qrDataUrl, attendanceUrl: qrPayload };
     } catch (err: unknown) {
         console.error("updateMaterialAttendanceQrCode error:", err);
         return { success: false, error: errorMessage(err, "Gagal memperbarui token presensi.") };
@@ -473,12 +469,7 @@ export async function getMaterialAttendanceQr(courseId: string, lessonId: string
             `;
         }
 
-        const qrPayload = JSON.stringify({
-            type: "material_attendance",
-            courseId,
-            lessonId,
-            code,
-        });
+        const qrPayload = buildAttendanceScanUrl(courseId, lessonId, code);
 
         const qrDataUrl = await QRCode.toDataURL(qrPayload, {
             width: 320,
@@ -486,7 +477,7 @@ export async function getMaterialAttendanceQr(courseId: string, lessonId: string
             color: { dark: "#0f172a", light: "#ffffff" },
         });
 
-        return { success: true, code, qrDataUrl, title: String(rows[0].title) };
+        return { success: true, code, qrDataUrl, attendanceUrl: qrPayload, title: String(rows[0].title) };
     } catch (err: unknown) {
         console.error("getMaterialAttendanceQr error:", err);
         return { success: false, error: errorMessage(err, "Gagal memuat QR presensi.") };
