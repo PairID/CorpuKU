@@ -252,8 +252,26 @@ export async function submitMaterialAttendance(payload: SubmitAttendancePayload)
       completedLessons.push(lessonId);
     }
 
+    const courseQuizRows = await sql`
+      SELECT DISTINCT l.id
+      FROM lessons l
+      JOIN modules m ON m.id = l.module_id
+      LEFT JOIN quiz_questions qq ON qq.lesson_id = l.id
+      WHERE (m.course_id = ${courseId} OR m.course_id = ${courseId.replace(/^course_/, '')} OR m.course_id = ${'course_' + courseId})
+        AND (l.type = 'quiz' OR qq.id IS NOT NULL)
+    `;
+    let allQuizzesPassed = true;
+    if (courseQuizRows.length > 0) {
+      const qIds = courseQuizRows.map((q) => String(q.id));
+      const passedAttempts = await sql`
+        SELECT DISTINCT lesson_id FROM quiz_attempts
+        WHERE user_id = ${userId} AND passed = TRUE AND lesson_id = ANY(${qIds})
+      `;
+      allQuizzesPassed = passedAttempts.length === courseQuizRows.length;
+    }
+
     const isAttendanceSufficient = attendancePercentage >= 80;
-    const canCompleteEnrollment = isAttendanceSufficient && Boolean(enrollment.all_evaluations_completed);
+    const canCompleteEnrollment = isAttendanceSufficient && Boolean(enrollment.all_evaluations_completed) && allQuizzesPassed;
 
     await sql`
       UPDATE enrollments
@@ -815,8 +833,26 @@ export async function adminOverrideAttendance(payload: {
       updatedSet.delete(lessonId);
     }
 
+    const courseQuizRows = await sql`
+      SELECT DISTINCT l.id
+      FROM lessons l
+      JOIN modules m ON m.id = l.module_id
+      LEFT JOIN quiz_questions qq ON qq.lesson_id = l.id
+      WHERE (m.course_id = ${effectiveCourseId} OR m.course_id = ${courseId} OR m.course_id = ${courseId.replace(/^course_/, '')} OR m.course_id = ${'course_' + courseId})
+        AND (l.type = 'quiz' OR qq.id IS NOT NULL)
+    `;
+    let allQuizzesPassed = true;
+    if (courseQuizRows.length > 0) {
+      const qIds = courseQuizRows.map((q) => String(q.id));
+      const passedAttempts = await sql`
+        SELECT DISTINCT lesson_id FROM quiz_attempts
+        WHERE user_id = ${userId} AND passed = TRUE AND lesson_id = ANY(${qIds})
+      `;
+      allQuizzesPassed = passedAttempts.length === courseQuizRows.length;
+    }
+
     const threshold = Number(course.attendanceThreshold ?? 80);
-    const canComplete = attendancePercentage >= threshold && Boolean(enrollment.all_evaluations_completed);
+    const canComplete = attendancePercentage >= threshold && Boolean(enrollment.all_evaluations_completed) && allQuizzesPassed;
 
     await sql`
       UPDATE enrollments

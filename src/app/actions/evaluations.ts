@@ -267,7 +267,25 @@ export async function submitTrainingEvaluation(payload: SubmitEvaluationPayload)
       nextStage = "skm";
     } else if (stage === "skm") {
       const attPct = Number(enrollment.attendance_percentage || 0);
-      const isEligible = attPct >= 80;
+      const courseQuizRows = await sql`
+        SELECT DISTINCT l.id
+        FROM lessons l
+        JOIN modules m ON m.id = l.module_id
+        LEFT JOIN quiz_questions qq ON qq.lesson_id = l.id
+        WHERE (m.course_id = ${courseId} OR m.course_id = ${courseId.replace(/^course_/, '')} OR m.course_id = ${'course_' + courseId})
+          AND (l.type = 'quiz' OR qq.id IS NOT NULL)
+      `;
+      let allQuizzesPassed = true;
+      if (courseQuizRows.length > 0) {
+        const qIds = courseQuizRows.map((q) => String(q.id));
+        const passedAttempts = await sql`
+          SELECT DISTINCT lesson_id FROM quiz_attempts
+          WHERE user_id = ${userId} AND passed = TRUE AND lesson_id = ANY(${qIds})
+        `;
+        allQuizzesPassed = passedAttempts.length === courseQuizRows.length;
+      }
+
+      const isEligible = attPct >= 80 && allQuizzesPassed;
 
       await sql`
         UPDATE enrollments

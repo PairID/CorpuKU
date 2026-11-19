@@ -208,10 +208,14 @@ export default async function CourseProgressPage({ params }: ProgressPageProps) 
     const isAttendanceSufficient = attendancePercentage >= attendanceThreshold;
     const allEvaluationsCompleted = Boolean(enrollment.allEvaluationsCompleted);
     const statementAccepted = Boolean(enrollment.statementAccepted);
+    const isQuizRequirementMet = allQuizzesPassed === null || allQuizzesPassed === true;
 
-    const isEligibleForCertificate = !isClassical || (isAttendanceSufficient && allEvaluationsCompleted && statementAccepted);
-    const canOpenCertificate = Boolean(enrollment.certificateEnabled)
-        && (isClassical ? isEligibleForCertificate : (authoritativeProgress === 100 && String(enrollment.status) === "completed"));
+    const isEligibleForCertificate = isQuizRequirementMet && (
+        !isClassical
+            ? (authoritativeProgress === 100 && String(enrollment.status) === "completed")
+            : (isAttendanceSufficient && allEvaluationsCompleted && statementAccepted)
+    );
+    const canOpenCertificate = Boolean(enrollment.certificateEnabled) && isEligibleForCertificate;
 
     const certificateHref = isParticipant
         ? `/dashboard/certificates/${String(enrollment.id)}`
@@ -310,11 +314,11 @@ export default async function CourseProgressPage({ params }: ProgressPageProps) 
                                         ? "Sertifikat pernah diterbitkan, tetapi telah dicabut oleh administrator."
                                         : canOpenCertificate
                                             ? isClassical
-                                                ? `Presensi kehadiran ${attendancePercentage}% (memenuhi syarat min ${attendanceThreshold}% JP) dan seluruh 4 tahap evaluasi telah lengkap.`
-                                                : "Sertifikat tersedia sesuai konfigurasi kursus."
+                                                ? `Presensi kehadiran ${attendancePercentage}% (memenuhi syarat min ${attendanceThreshold}% JP), seluruh kuis tuntas, dan seluruh 4 tahap evaluasi telah lengkap.`
+                                                : "Seluruh materi, kuis, dan persyaratan kelulusan telah terpenuhi."
                                             : isClassical
-                                                ? `Syarat kelulusan belum terpenuhi: ${!isAttendanceSufficient ? `Presensi kehadiran (${attendancePercentage}%) masih di bawah batas minimal ${attendanceThreshold}% total JP. ` : ''}${!allEvaluationsCompleted ? 'Rangkaian 4 tahap evaluasi belum lengkap diselesaikan. ' : ''}${!statementAccepted ? 'Pernyataan kebenaran data profil belum disetujui.' : ''}`
-                                                : "Penerbitan sertifikat belum tersedia atau status enrollment masih menunggu sinkronisasi."}
+                                                ? `Syarat kelulusan belum terpenuhi: ${!isAttendanceSufficient ? `Presensi kehadiran (${attendancePercentage}%) masih di bawah batas minimal ${attendanceThreshold}% total JP. ` : ''}${!isQuizRequirementMet ? `Seluruh kuis pembelajaran wajib lulus (${quizLessons.filter(l => l.completed).length}/${quizLessons.length} lulus). ` : ''}${!allEvaluationsCompleted ? 'Rangkaian 4 tahap evaluasi belum lengkap diselesaikan. ' : ''}${!statementAccepted ? 'Pernyataan kebenaran data profil belum disetujui.' : ''}`
+                                                : `Syarat kelulusan belum terpenuhi: ${!isQuizRequirementMet ? `Seluruh kuis wajib harus lulus (${quizLessons.filter(l => l.completed).length}/${quizLessons.length} lulus). ` : 'Materi pembelajaran belum selesai 100% atau menunggu sinkronisasi.'}`}
                                 </p>
                             </div>
                         </div>
@@ -330,7 +334,7 @@ export default async function CourseProgressPage({ params }: ProgressPageProps) 
                                 href={`/learn/${String(enrollment.id)}`}
                                 className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full bg-amber-600 px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-amber-700 shadow-md"
                             >
-                                Lengkapi Presensi & Evaluasi <ExternalLink size={16} />
+                                Lengkapi Kuis, Presensi &amp; Evaluasi <ExternalLink size={16} />
                             </Link>
                         ) : null}
                     </section>

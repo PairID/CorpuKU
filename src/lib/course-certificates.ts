@@ -122,6 +122,33 @@ export async function issueCourseCertificate(userId: string, courseId: string, o
     }
   }
 
+  // Persyaratan Kuis Wajib: Jika kelas memiliki kuis, seluruh kuis wajib lulus
+  const courseQuizRows = await sql`
+    SELECT DISTINCT l.id, l.title
+    FROM lessons l
+    JOIN modules m ON m.id = l.module_id
+    LEFT JOIN quiz_questions qq ON qq.lesson_id = l.id
+    WHERE (m.course_id = ${courseId} OR m.course_id = ${courseId.replace(/^course_/, '')} OR m.course_id = ${'course_' + courseId})
+      AND (l.type = 'quiz' OR qq.id IS NOT NULL)
+  `;
+
+  if (courseQuizRows.length > 0) {
+    const quizIds = courseQuizRows.map((q) => String(q.id));
+    const passedAttempts = await sql`
+      SELECT DISTINCT lesson_id
+      FROM quiz_attempts
+      WHERE user_id = ${userId} AND passed = TRUE AND lesson_id = ANY(${quizIds})
+    `;
+    const passedSet = new Set(passedAttempts.map((p) => String(p.lesson_id)));
+    const unpassed = courseQuizRows.filter((q) => !passedSet.has(String(q.id)));
+    if (unpassed.length > 0) {
+      console.warn(
+        `[Certificate] Peserta belum lulus ${unpassed.length} kuis wajib untuk kursus ${courseId}: ${unpassed.map((q) => q.title).join(", ")}`
+      );
+      return null;
+    }
+  }
+
   // 3. Tanggal terbit otomatis disetel ke tanggal hari terakhir kelas (end_date)
   const effectiveIssueDate = el.end_date
     ? new Date(String(el.end_date))
@@ -264,6 +291,9 @@ export async function checkCourseCertificateEligibility(userId: string, courseId
   allEvaluationsCompleted?: boolean;
   statementAccepted?: boolean;
   trainingType?: string;
+  quizzesTotal?: number;
+  quizzesPassed?: number;
+  allQuizzesPassed?: boolean;
 }> {
   const rows = await sql`
     SELECT enrollment.id, enrollment.status, enrollment.progress, enrollment.completed_at,
@@ -289,6 +319,52 @@ export async function checkCourseCertificateEligibility(userId: string, courseId
   const allEvaluationsCompleted = Boolean(enr.all_evaluations_completed);
   const statementAccepted = Boolean(enr.statement_accepted);
 
+  // Cek kewajiban kuis jika kelas memiliki materi kuis
+  const courseQuizRows = await sql`
+    SELECT DISTINCT l.id, l.title
+    FROM lessons l
+    JOIN modules m ON m.id = l.module_id
+    LEFT JOIN quiz_questions qq ON qq.lesson_id = l.id
+    WHERE (m.course_id = ${courseId} OR m.course_id = ${courseId.replace(/^course_/, '')} OR m.course_id = ${'course_' + courseId})
+      AND (l.type = 'quiz' OR qq.id IS NOT NULL)
+  `;
+
+  let allQuizzesPassed = true;
+  let unpassedQuizTitles: string[] = [];
+  const totalQuizzes = courseQuizRows.length;
+  let passedQuizCount = 0;
+
+  if (totalQuizzes > 0) {
+    const quizIds = courseQuizRows.map((q) => String(q.id));
+    const passedAttempts = await sql`
+      SELECT DISTINCT lesson_id
+      FROM quiz_attempts
+      WHERE user_id = ${userId} AND passed = TRUE AND lesson_id = ANY(${quizIds})
+    `;
+    const passedSet = new Set(passedAttempts.map((p) => String(p.lesson_id)));
+    passedQuizCount = passedSet.size;
+    const unpassed = courseQuizRows.filter((q) => !passedSet.has(String(q.id)));
+    if (unpassed.length > 0) {
+      allQuizzesPassed = false;
+      unpassedQuizTitles = unpassed.map((q) => String(q.title));
+    }
+  }
+
+  if (!allQuizzesPassed) {
+    return {
+      eligible: false,
+      reason: `Anda belum menyelesaikan seluruh kuis wajib (${passedQuizCount}/${totalQuizzes} kuis lulus: ${unpassedQuizTitles.join(", ")}).`,
+      attendancePercentage,
+      attendanceThreshold,
+      allEvaluationsCompleted,
+      statementAccepted,
+      trainingType: String(enr.training_type),
+      quizzesTotal: totalQuizzes,
+      quizzesPassed: passedQuizCount,
+      allQuizzesPassed: false,
+    };
+  }
+
   if (isClassical) {
     if (!statementAccepted) {
       return {
@@ -299,6 +375,9 @@ export async function checkCourseCertificateEligibility(userId: string, courseId
         allEvaluationsCompleted,
         statementAccepted,
         trainingType: String(enr.training_type),
+        quizzesTotal: totalQuizzes,
+        quizzesPassed: passedQuizCount,
+        allQuizzesPassed: true,
       };
     }
     if (attendancePercentage < attendanceThreshold) {
@@ -310,6 +389,9 @@ export async function checkCourseCertificateEligibility(userId: string, courseId
         allEvaluationsCompleted,
         statementAccepted,
         trainingType: String(enr.training_type),
+        quizzesTotal: totalQuizzes,
+        quizzesPassed: passedQuizCount,
+        allQuizzesPassed: true,
       };
     }
     if (!allEvaluationsCompleted) {
@@ -321,6 +403,9 @@ export async function checkCourseCertificateEligibility(userId: string, courseId
         allEvaluationsCompleted,
         statementAccepted,
         trainingType: String(enr.training_type),
+        quizzesTotal: totalQuizzes,
+        quizzesPassed: passedQuizCount,
+        allQuizzesPassed: true,
       };
     }
     return {
@@ -330,11 +415,25 @@ export async function checkCourseCertificateEligibility(userId: string, courseId
       allEvaluationsCompleted,
       statementAccepted,
       trainingType: String(enr.training_type),
+      quizzesTotal: totalQuizzes,
+      quizzesPassed: passedQuizCount,
+      allQuizzesPassed: true,
     };
   }
 
   if (Number(enr.progress) < 100 || enr.status !== 'completed') {
-    return { eligible: false, reason: "Materi pembelajaran belum selesai 100%." };
+    return { 
+      eligible: false, 
+      reason: "Materi pembelajaran belum selesai 100%.",
+      attendancePercentage,
+      attendanceThreshold,
+      allEvaluationsCompleted,
+      statementAccepted,
+      trainingType: String(enr.training_type),
+      quizzesTotal: totalQuizzes,
+      quizzesPassed: passedQuizCount,
+      allQuizzesPassed: true,
+    };
   }
 
   return {
@@ -344,5 +443,8 @@ export async function checkCourseCertificateEligibility(userId: string, courseId
     allEvaluationsCompleted,
     statementAccepted,
     trainingType: String(enr.training_type),
+    quizzesTotal: totalQuizzes,
+    quizzesPassed: passedQuizCount,
+    allQuizzesPassed: true,
   };
 }
