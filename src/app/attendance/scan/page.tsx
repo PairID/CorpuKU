@@ -22,7 +22,7 @@ export default async function AttendanceScanPage({ searchParams }: PageProps) {
   const code = (params.code || "").trim();
 
   // If parameters are completely missing
-  if (!courseId || !code) {
+  if (!courseId || (!code && !lessonId)) {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-[#070b14] flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-white dark:bg-[#0d1424] border border-slate-200 dark:border-slate-800 rounded-3xl p-8 text-center space-y-4 shadow-xl">
@@ -53,7 +53,7 @@ export default async function AttendanceScanPage({ searchParams }: PageProps) {
   if (!session) {
     const callbackTarget = `/attendance/scan?courseId=${encodeURIComponent(courseId)}${
       lessonId ? `&lessonId=${encodeURIComponent(lessonId)}` : ""
-    }&code=${encodeURIComponent(code)}`;
+    }${code ? `&code=${encodeURIComponent(code)}` : ""}`;
     redirect(`/login?callbackUrl=${encodeURIComponent(callbackTarget)}`);
   }
 
@@ -106,7 +106,7 @@ export default async function AttendanceScanPage({ searchParams }: PageProps) {
           attendancePercentage: 0,
         }
       }
-      code={code}
+      code={code || context.lesson.attendanceCode}
     />
   );
 }

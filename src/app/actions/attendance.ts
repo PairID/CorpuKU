@@ -93,23 +93,44 @@ export async function submitMaterialAttendance(payload: SubmitAttendancePayload)
 
     // Jika peserta belum terdaftar di kelas (misal ASN langsung scan QR di ruangan), daftarkan otomatis (zero friction)
     if (!enrollment) {
-      const courseCheck = await sql`SELECT id, type, is_published FROM courses WHERE id = ${courseId} LIMIT 1`;
+      const courseCheck = await sql`
+        SELECT id, title, category, jp, status
+        FROM courses
+        WHERE id = ${courseId}
+           OR id = ${'course_' + courseId}
+           OR id = ${courseId.replace(/^course_/, '')}
+        LIMIT 1
+      `;
       if (!courseCheck[0]) {
         return { success: false, error: "Kelas pelatihan tidak ditemukan." };
       }
+      const actualCourse = courseCheck[0];
+      const actualCourseId = String(actualCourse.id);
       const newEnrId = `enr_${crypto.randomUUID()}`;
       await sql`
-        INSERT INTO enrollments (id, user_id, course_id, status, enrolled_at, statement_accepted, statement_accepted_at)
-        VALUES (${newEnrId}, ${userId}, ${courseId}, 'active', CURRENT_TIMESTAMP, TRUE, CURRENT_TIMESTAMP)
+        INSERT INTO enrollments (id, user_id, course_id, title, category, jp, status, enrolled_at, statement_accepted, statement_accepted_at)
+        VALUES (
+          ${newEnrId},
+          ${userId},
+          ${actualCourseId},
+          ${actualCourse.title},
+          ${actualCourse.category || 'Pelatihan'},
+          ${Number(actualCourse.jp || 0)},
+          'active',
+          CURRENT_TIMESTAMP,
+          TRUE,
+          CURRENT_TIMESTAMP
+        )
         ON CONFLICT (user_id, course_id) DO UPDATE SET status = 'active'
       `;
       const reloaded = await sql`
         SELECT id, user_id, course_id, statement_accepted, attended_jp, attendance_percentage, completed_lessons, all_evaluations_completed
         FROM enrollments
-        WHERE (course_id = ${courseId} OR id = ${courseId}) AND user_id = ${userId}
+        WHERE (course_id = ${actualCourseId} OR id = ${actualCourseId}) AND user_id = ${userId}
         LIMIT 1
       `;
       enrollment = reloaded[0];
+      courseId = actualCourseId;
     }
 
     if (!enrollment) {
@@ -296,15 +317,18 @@ export async function getAttendanceScanContext(params: {
 
     // 1. Ambil data Course
     const courseRows = await sql`
-      SELECT id, title, type, jp, image, instructor_id
+      SELECT id, title, training_type, delivery_mode, jp, thumbnail_url, instructor_id
       FROM courses
       WHERE id = ${courseId}
+         OR id = ${'course_' + courseId}
+         OR id = ${courseId.replace(/^course_/, '')}
       LIMIT 1
     `;
     const course = courseRows[0];
     if (!course) {
       return { success: false, error: "Pelatihan tidak ditemukan." };
     }
+    const resolvedCourseId = String(course.id);
 
     // 2. Ambil data Lesson
     let lesson: any = null;
@@ -315,7 +339,7 @@ export async function getAttendanceScanContext(params: {
                m.id AS module_id, m.title AS module_title
         FROM lessons l
         JOIN modules m ON m.id = l.module_id
-        WHERE m.course_id = ${courseId}
+        WHERE m.course_id = ${resolvedCourseId}
           AND UPPER(TRIM(COALESCE(l.attendance_qr_code, ''))) = ${cleanCode}
         LIMIT 1
       `;
@@ -323,15 +347,31 @@ export async function getAttendanceScanContext(params: {
     }
 
     if (!lesson && lessonId) {
+      const cleanLessonId = lessonId.trim();
       const lessonById = await sql`
         SELECT l.id, l.title, l.jp, l.has_attendance, l.attendance_qr_code, l.narasumber_name,
                m.id AS module_id, m.title AS module_title
         FROM lessons l
         JOIN modules m ON m.id = l.module_id
-        WHERE l.id = ${lessonId} AND m.course_id = ${courseId}
+        WHERE (l.id = ${cleanLessonId} OR l.id = ${'less_' + cleanLessonId})
+          AND m.course_id = ${resolvedCourseId}
         LIMIT 1
       `;
       lesson = lessonById[0];
+    }
+
+    // Fallback: jika kode presensi materi belum dicocokkan, ambil sesi materi pertama yang wajib presensi di kelas ini
+    if (!lesson) {
+      const fallbackRows = await sql`
+        SELECT l.id, l.title, l.jp, l.has_attendance, l.attendance_qr_code, l.narasumber_name,
+               m.id AS module_id, m.title AS module_title
+        FROM lessons l
+        JOIN modules m ON m.id = l.module_id
+        WHERE m.course_id = ${resolvedCourseId} AND l.has_attendance = TRUE
+        ORDER BY m.id ASC, l.order ASC, l.id ASC
+        LIMIT 1
+      `;
+      lesson = fallbackRows[0];
     }
 
     if (!lesson) {
@@ -352,7 +392,7 @@ export async function getAttendanceScanContext(params: {
       const enrollmentRows = await sql`
         SELECT id, status, statement_accepted, attended_jp, attendance_percentage
         FROM enrollments
-        WHERE (course_id = ${courseId} OR id = ${courseId}) AND user_id = ${userId}
+        WHERE (course_id = ${resolvedCourseId} OR id = ${resolvedCourseId}) AND user_id = ${userId}
         LIMIT 1
       `;
       const enr = enrollmentRows[0];
@@ -386,11 +426,11 @@ export async function getAttendanceScanContext(params: {
     return {
       success: true,
       course: {
-        id: String(course.id),
+        id: resolvedCourseId,
         title: String(course.title),
-        type: String(course.type || "classical"),
+        type: String(course.training_type || course.delivery_mode || "classical"),
         totalJp: Number(course.jp || 0),
-        image: course.image ? String(course.image) : null,
+        image: course.thumbnail_url ? String(course.thumbnail_url) : null,
       },
       lesson: {
         id: String(lesson.id),
@@ -398,7 +438,7 @@ export async function getAttendanceScanContext(params: {
         jp: Number(lesson.jp || 2),
         moduleTitle: String(lesson.module_title || ""),
         narasumberName: lesson.narasumber_name ? String(lesson.narasumber_name) : null,
-        attendanceCode: String(lesson.attendance_qr_code || ""),
+        attendanceCode: String(lesson.attendance_qr_code || code || ""),
       },
       userState,
     };
