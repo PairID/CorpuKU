@@ -478,6 +478,113 @@ export async function getMaterialAttendances(courseId: string) {
   }
 }
 
+export interface SessionAttendanceParticipant {
+  userId: string;
+  name: string;
+  nip: string;
+  instansiAsal: string;
+  attendedAt?: string;
+}
+
+export interface SessionAttendanceSummary {
+  success: boolean;
+  error?: string;
+  totalEnrolled: number;
+  attendedCount: number;
+  notAttendedCount: number;
+  attendancePercentage: number;
+  attended: SessionAttendanceParticipant[];
+  notAttended: SessionAttendanceParticipant[];
+}
+
+/**
+ * Mengambil ringkasan dan daftar peserta yang sudah & belum presensi pada sesi tertentu
+ */
+export async function getSessionAttendanceSummary(
+  courseId: string,
+  lessonId: string
+): Promise<SessionAttendanceSummary> {
+  try {
+    await requireInstructorSession();
+
+    if (!courseId || !lessonId) {
+      return {
+        success: false,
+        error: "Parameter courseId dan lessonId wajib disertakan.",
+        totalEnrolled: 0,
+        attendedCount: 0,
+        notAttendedCount: 0,
+        attendancePercentage: 0,
+        attended: [],
+        notAttended: [],
+      };
+    }
+
+    const rows = await sql`
+      SELECT 
+        e.user_id AS "userId",
+        u.name,
+        u.nip,
+        u.instansi_asal AS "instansiAsal",
+        ma.attended_at AS "attendedAt"
+      FROM enrollments e
+      JOIN users u ON u.id = e.user_id
+      LEFT JOIN material_attendances ma 
+        ON ma.user_id = e.user_id 
+       AND (ma.lesson_id = ${lessonId} OR ma.lesson_id = ${'less_' + lessonId} OR ma.lesson_id = ${lessonId.replace(/^less_/, '')})
+      WHERE (e.course_id = ${courseId} OR e.course_id = ${'course_' + courseId} OR e.course_id = ${courseId.replace(/^course_/, '')} OR e.id = ${courseId})
+      ORDER BY ma.attended_at DESC NULLS LAST, u.name ASC
+    `;
+
+    const attended: SessionAttendanceParticipant[] = [];
+    const notAttended: SessionAttendanceParticipant[] = [];
+
+    for (const r of rows) {
+      const p: SessionAttendanceParticipant = {
+        userId: String(r.userId),
+        name: String(r.name || "Peserta"),
+        nip: String(r.nip || "-"),
+        instansiAsal: String(r.instansiAsal || "-"),
+        attendedAt: r.attendedAt ? new Date(String(r.attendedAt)).toISOString() : undefined,
+      };
+      if (r.attendedAt) {
+        attended.push(p);
+      } else {
+        notAttended.push(p);
+      }
+    }
+
+    const totalEnrolled = rows.length;
+    const attendedCount = attended.length;
+    const notAttendedCount = notAttended.length;
+    const attendancePercentage = totalEnrolled > 0
+      ? Math.round((attendedCount / totalEnrolled) * 1000) / 10
+      : 0;
+
+    return {
+      success: true,
+      totalEnrolled,
+      attendedCount,
+      notAttendedCount,
+      attendancePercentage,
+      attended,
+      notAttended,
+    };
+  } catch (err: unknown) {
+    console.error("getSessionAttendanceSummary error:", err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Gagal memuat rekap presensi sesi.",
+      totalEnrolled: 0,
+      attendedCount: 0,
+      notAttendedCount: 0,
+      attendancePercentage: 0,
+      attended: [],
+      notAttended: [],
+    };
+  }
+}
+
 /**
  * Konfirmasi kebenaran data profil peserta sebelum masuk kelas pelatihan klasikal
  */
