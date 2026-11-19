@@ -11,11 +11,57 @@ export interface EvaluationCriterion {
   }[];
 }
 
+export interface ComprehensionOption {
+  text: string;
+  correct: boolean;
+}
+
+export interface ComprehensionQuestion {
+  id: number;
+  question: string;
+  options: ComprehensionOption[];
+}
+
 export interface CourseEvaluationConfig {
+  enableUnderstanding?: boolean;
   narasumber?: EvaluationCriterion[];
   organizer?: EvaluationCriterion[];
+  understanding?: ComprehensionQuestion[];
   skm?: EvaluationCriterion[];
 }
+
+export const DEFAULT_COMPREHENSION_QUESTIONS: ComprehensionQuestion[] = [
+  {
+    id: 1,
+    question: "Apakah prinsip utama dalam penyusunan instrumen fasilitasi pelatihan klasikal bagi ASN?",
+    options: [
+      { text: "Berorientasi hasil, terstruktur, andragogis, dan terukur", correct: true },
+      { text: "Hanya menitikberatkan pada ceramah satu arah", correct: false },
+      { text: "Tidak memerlukan presensi jam pelajaran", correct: false },
+      { text: "Menghindari evaluasi bertahap", correct: false },
+    ],
+  },
+  {
+    id: 2,
+    question: "Berapa batas minimal persentase kehadiran JP untuk syarat penerbitan sertifikat pelatihan klasikal?",
+    options: [
+      { text: "50% dari total JP", correct: false },
+      { text: "70% dari total JP", correct: false },
+      { text: "80% dari total JP", correct: true },
+      { text: "100% tanpa toleransi", correct: false },
+    ],
+  },
+  {
+    id: 3,
+    question: "Survei Kepuasan Masyarakat (SKM) dalam pelatihan mengacu pada regulasi:",
+    options: [
+      { text: "PermenPANRB No. 14 Tahun 2017", correct: true },
+      { text: "Permendagri No. 1 Tahun 2000", correct: false },
+      { text: "Perpres Pengadaan Barang & Jasa", correct: false },
+      { text: "UU Cipta Kerja", correct: false },
+    ],
+  },
+];
 
 /**
  * 9 Unsur Standar Survei Kepuasan Masyarakat (SKM) berdasarkan PermenPANRB No. 14 Tahun 2017
@@ -269,11 +315,16 @@ export function calculateSkmScore(
  */
 export function getDefaultCourseEvaluationConfig(): Required<CourseEvaluationConfig> {
   return {
+    enableUnderstanding: false,
     narasumber: NARASUMBER_EVALUATION_QUESTIONS.map((q) => ({
       ...q,
       options: q.options.map((o) => ({ ...o })),
     })),
     organizer: ORGANIZER_EVALUATION_QUESTIONS.map((q) => ({
+      ...q,
+      options: q.options.map((o) => ({ ...o })),
+    })),
+    understanding: DEFAULT_COMPREHENSION_QUESTIONS.map((q) => ({
       ...q,
       options: q.options.map((o) => ({ ...o })),
     })),

@@ -19,6 +19,7 @@ import {
   SKM_QUESTIONS,
   NARASUMBER_EVALUATION_QUESTIONS,
   ORGANIZER_EVALUATION_QUESTIONS,
+  DEFAULT_COMPREHENSION_QUESTIONS,
   calculateSkmScore,
 } from "@/lib/skm-constants";
 import {
@@ -52,6 +53,7 @@ export default function FourStageEvaluationWizard({
   requestedStage = null,
   onEvaluationsComplete,
 }: FourStageEvaluationWizardProps) {
+  const isUnderstandingEnabled = Boolean(evaluationConfig?.enableUnderstanding);
   const narasumberQuestions =
     evaluationConfig?.narasumber && evaluationConfig.narasumber.length > 0
       ? evaluationConfig.narasumber
@@ -60,6 +62,10 @@ export default function FourStageEvaluationWizard({
     evaluationConfig?.organizer && evaluationConfig.organizer.length > 0
       ? evaluationConfig.organizer
       : ORGANIZER_EVALUATION_QUESTIONS;
+  const comprehensionQuestions =
+    evaluationConfig?.understanding && evaluationConfig.understanding.length > 0
+      ? evaluationConfig.understanding
+      : DEFAULT_COMPREHENSION_QUESTIONS;
   const skmQuestions =
     evaluationConfig?.skm && evaluationConfig.skm.length > 0
       ? evaluationConfig.skm
@@ -105,7 +111,7 @@ export default function FourStageEvaluationWizard({
         const nextStatus = {
           narasumber: Boolean(res.stages.narasumber.completed),
           organizer: Boolean(res.stages.organizer.completed),
-          understanding: Boolean(res.stages.understanding.completed),
+          understanding: !isUnderstandingEnabled || Boolean(res.stages.understanding.completed),
           skm: Boolean(res.stages.skm.completed),
         };
         setStagesStatus(nextStatus);
@@ -121,9 +127,12 @@ export default function FourStageEvaluationWizard({
           requestedStage &&
           (requestedStage === "narasumber" ||
             (requestedStage === "organizer" && nextStatus.narasumber) ||
-            (requestedStage === "understanding" && nextStatus.organizer) ||
-            (requestedStage === "skm" && nextStatus.understanding));
-        setCurrentStage(canJump ? requestedStage : (res.currentStage as EvaluationStage | "completed"));
+            (requestedStage === "understanding" && isUnderstandingEnabled && nextStatus.organizer) ||
+            (requestedStage === "skm" && (isUnderstandingEnabled ? nextStatus.understanding : nextStatus.organizer)));
+        const resolvedCurrentStage = (!isUnderstandingEnabled && res.currentStage === "understanding")
+          ? "skm"
+          : (res.currentStage as EvaluationStage | "completed");
+        setCurrentStage(canJump ? requestedStage : resolvedCurrentStage);
         if (res.allCompleted && onEvaluationsComplete) {
           onEvaluationsComplete();
         }
@@ -216,8 +225,13 @@ export default function FourStageEvaluationWizard({
 
       if (res.success) {
         showToast.success("Tahap 2 Selesai!", "Evaluasi penyelenggaraan berhasil disimpan.");
-        setStagesStatus((prev) => ({ ...prev, organizer: true }));
-        setCurrentStage("understanding");
+        if (isUnderstandingEnabled) {
+          setStagesStatus((prev) => ({ ...prev, organizer: true }));
+          setCurrentStage("understanding");
+        } else {
+          setStagesStatus((prev) => ({ ...prev, organizer: true, understanding: true }));
+          setCurrentStage("skm");
+        }
       } else {
         showToast.error("Gagal Menyimpan", res.error || "Gagal menyimpan evaluasi.");
       }
@@ -228,44 +242,10 @@ export default function FourStageEvaluationWizard({
     }
   };
 
-  // Stage 3 Questions
-  const DEFAULT_COMPREHENSION_QUESTIONS = [
-    {
-      id: 1,
-      question: "Apakah prinsip utama dalam penyusunan instrumen fasilitasi pelatihan klasikal bagi ASN?",
-      options: [
-        { text: "Berorientasi hasil, terstruktur, andragogis, dan terukur", correct: true },
-        { text: "Hanya menitikberatkan pada ceramah satu arah", correct: false },
-        { text: "Tidak memerlukan presensi jam pelajaran", correct: false },
-        { text: "Menghindari evaluasi bertahap", correct: false },
-      ],
-    },
-    {
-      id: 2,
-      question: "Berapa batas minimal persentase kehadiran JP untuk syarat penerbitan sertifikat pelatihan klasikal?",
-      options: [
-        { text: "50% dari total JP", correct: false },
-        { text: "70% dari total JP", correct: false },
-        { text: "80% dari total JP", correct: true },
-        { text: "100% tanpa toleransi", correct: false },
-      ],
-    },
-    {
-      id: 3,
-      question: "Survei Kepuasan Masyarakat (SKM) dalam pelatihan mengacu pada regulasi:",
-      options: [
-        { text: "PermenPANRB No. 14 Tahun 2017", correct: true },
-        { text: "Permendagri No. 1 Tahun 2000", correct: false },
-        { text: "Perpres Pengadaan Barang & Jasa", correct: false },
-        { text: "UU Cipta Kerja", correct: false },
-      ],
-    },
-  ];
-
   // Stage 3 Submit
   const handleUnderstandingSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (Object.keys(quizAnswers).length < DEFAULT_COMPREHENSION_QUESTIONS.length) {
+    if (Object.keys(quizAnswers).length < comprehensionQuestions.length) {
       showToast.warning("Jawab Seluruh Soal", "Harap selesaikan seluruh pertanyaan evaluasi pemahaman.");
       return;
     }
@@ -273,13 +253,13 @@ export default function FourStageEvaluationWizard({
     setSubmitting(true);
     try {
       let correct = 0;
-      DEFAULT_COMPREHENSION_QUESTIONS.forEach((q) => {
+      comprehensionQuestions.forEach((q) => {
         const selectedIdx = quizAnswers[q.id];
         if (selectedIdx !== undefined && q.options[selectedIdx]?.correct) {
           correct++;
         }
       });
-      const score = Math.round((correct / DEFAULT_COMPREHENSION_QUESTIONS.length) * 100);
+      const score = Math.round((correct / comprehensionQuestions.length) * 100);
 
       const res = await submitTrainingEvaluation({
         courseId,
@@ -288,7 +268,7 @@ export default function FourStageEvaluationWizard({
           quizAnswers,
           score,
           correctCount: correct,
-          totalQuestions: DEFAULT_COMPREHENSION_QUESTIONS.length,
+          totalQuestions: comprehensionQuestions.length,
         },
         score,
       });
@@ -365,12 +345,18 @@ export default function FourStageEvaluationWizard({
     );
   }
 
-  const STAGES_LIST = [
-    { key: "narasumber", title: "1. Narasumber", icon: User },
-    { key: "organizer", title: "2. Penyelenggara", icon: Building2 },
-    { key: "understanding", title: "3. Pemahaman Materi", icon: BookOpen },
-    { key: "skm", title: "4. Survei SKM", icon: Award },
-  ];
+  const STAGES_LIST = isUnderstandingEnabled
+    ? [
+        { key: "narasumber", title: "1. Narasumber", icon: User },
+        { key: "organizer", title: "2. Penyelenggara", icon: Building2 },
+        { key: "understanding", title: "3. Pemahaman Materi", icon: BookOpen },
+        { key: "skm", title: "4. Survei SKM", icon: Award },
+      ]
+    : [
+        { key: "narasumber", title: "1. Narasumber", icon: User },
+        { key: "organizer", title: "2. Penyelenggara", icon: Building2 },
+        { key: "skm", title: "3. Survei SKM", icon: Award },
+      ];
 
   return (
     <div className="bg-white dark:bg-[#161B2A] rounded-3xl border border-oxford-200 dark:border-oxford-700 shadow-sm overflow-hidden">
@@ -379,7 +365,9 @@ export default function FourStageEvaluationWizard({
         <div className="flex items-center justify-between mb-4">
           <div>
             <h3 className="text-base md:text-lg font-bold text-oxford-900 dark:text-white">
-              Rangkaian 4 Tahap Evaluasi Pelatihan
+              {isUnderstandingEnabled
+                ? "Rangkaian 4 Tahap Evaluasi Pelatihan"
+                : "Rangkaian 3 Tahap Evaluasi Pelatihan"}
             </h3>
             <p className="text-xs text-oxford-500 dark:text-oxford-400">
               Selesaikan secara berurutan sebagai syarat wajib penerbitan sertifikat resmi.
@@ -388,13 +376,13 @@ export default function FourStageEvaluationWizard({
           {currentStage === "completed" && (
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
               <CheckCircle2 size={14} />
-              4/4 Selesai
+              {isUnderstandingEnabled ? "4/4 Selesai" : "3/3 Selesai"}
             </span>
           )}
         </div>
 
         {/* Stepper Navigation */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        <div className={`grid grid-cols-2 ${isUnderstandingEnabled ? "md:grid-cols-4" : "md:grid-cols-3"} gap-2`}>
           {STAGES_LIST.map((st, idx) => {
             const isDone = stagesStatus[st.key as keyof typeof stagesStatus];
             const isActive = currentStage === st.key;
@@ -656,13 +644,17 @@ export default function FourStageEvaluationWizard({
               className="w-full py-3 bg-gradient-to-r from-gold-500 to-gold-400 hover:from-gold-400 text-oxford-950 font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-md disabled:opacity-50 transition-all"
             >
               {submitting ? <Loader2 size={16} className="animate-spin" /> : <ChevronRight size={16} />}
-              <span>Simpan & Lanjut ke Tahap 3: Pemahaman Materi</span>
+              <span>
+                {isUnderstandingEnabled
+                  ? "Simpan & Lanjut ke Tahap 3: Pemahaman Materi"
+                  : "Simpan & Lanjut ke Tahap 3: Survei SKM"}
+              </span>
             </button>
           </form>
         )}
 
-        {/* STAGE 3: PEMAHAMAN MATERI */}
-        {currentStage === "understanding" && (
+        {/* STAGE 3: PEMAHAMAN MATERI (HANYA MUNCUL JIKA AKTIF) */}
+        {isUnderstandingEnabled && currentStage === "understanding" && (
           <form onSubmit={handleUnderstandingSubmit} className="space-y-6">
             <div className="flex items-center gap-2 pb-3 border-b border-oxford-100 dark:border-oxford-800">
               <BookOpen size={20} className="text-gold-500" />
@@ -677,7 +669,7 @@ export default function FourStageEvaluationWizard({
             </div>
 
             <div className="space-y-4">
-              {DEFAULT_COMPREHENSION_QUESTIONS.map((q) => (
+              {comprehensionQuestions.map((q) => (
                 <div
                   key={q.id}
                   className="p-4 bg-oxford-50/70 dark:bg-oxford-900/40 rounded-2xl border border-oxford-200/80 dark:border-oxford-800"
@@ -733,14 +725,16 @@ export default function FourStageEvaluationWizard({
           </form>
         )}
 
-        {/* STAGE 4: SURVEI SKM 9 UNSUR */}
+        {/* STAGE SKM 9 UNSUR */}
         {currentStage === "skm" && (
           <form onSubmit={handleSkmSubmit} className="space-y-6">
             <div className="flex items-center gap-2 pb-3 border-b border-oxford-100 dark:border-oxford-800">
               <Award size={20} className="text-gold-500" />
               <div>
                 <h4 className="text-base font-bold text-oxford-900 dark:text-white">
-                  Tahap 4: Survei Kepuasan Masyarakat (SKM PermenPANRB No. 14/2017)
+                  {isUnderstandingEnabled
+                    ? "Tahap 4: Survei Kepuasan Masyarakat (SKM PermenPANRB No. 14/2017)"
+                    : "Tahap 3: Survei Kepuasan Masyarakat (SKM PermenPANRB No. 14/2017)"}
                 </h4>
                 <p className="text-xs text-oxford-500">
                   9 Unsur Standar Pelayanan Publik Nasional untuk akuntabilitas mutu pelatihan.

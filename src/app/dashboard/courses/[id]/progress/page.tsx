@@ -91,6 +91,7 @@ export default async function CourseProgressPage({ params }: ProgressPageProps) 
                enrollment.completed_at AS "completedAt",
                course.title AS "courseTitle", course.instructor_id AS "instructorId",
                course.training_type AS "trainingType", course.target_opd AS "targetOpd",
+               course.evaluation_config AS "evaluationConfig",
                COALESCE(course.attendance_threshold, 80) AS "attendanceThreshold",
                COALESCE(course.passing_score, 60) AS "passingScore",
                COALESCE(course.certificate_enabled, TRUE) AS "certificateEnabled",
@@ -257,21 +258,38 @@ export default async function CourseProgressPage({ params }: ProgressPageProps) 
                         <SummaryCard label="Kemajuan Materi" value={`${authoritativeProgress}%`} detail={`${completedCount} dari ${lessons.length} materi`} />
                         {isClassical ? (
                             <>
-                                <SummaryCard
-                                    label="Presensi Kehadiran"
-                                    value={`${attendancePercentage}%`}
-                                    detail={`${Number(enrollment.attendedJp || 0)} JP dihadiri • Syarat min ${attendanceThreshold}%`}
-                                />
-                                <SummaryCard
-                                    label="Evaluasi 4 Tahap"
-                                    value={allEvaluationsCompleted ? "4/4 Selesai" : "Belum Lengkap"}
-                                    detail={`${[enrollment.evalNarasumberCompleted, enrollment.evalOrganizerCompleted, enrollment.evalUnderstandingCompleted, enrollment.evalSkmCompleted].filter(Boolean).length} dari 4 tahap tuntas`}
-                                />
-                                <SummaryCard
-                                    label="Status Kelulusan"
-                                    value={canOpenCertificate ? "Lulus" : isClassical ? (isAttendanceSufficient ? "Syarat Belum Lengkap" : "Berjalan") : (authoritativeProgress === 100 ? "Syarat Belum Lengkap" : "Berjalan")}
-                                    detail={canOpenCertificate ? formatDate(enrollment.completedAt || new Date().toISOString()) : isClassical ? `Target: ${enrollment.targetOpd || 'OPD'}` : `Terdaftar ${formatDate(enrollment.enrolledAt)}`}
-                                />
+                                {(() => {
+                                    const evalConf = (typeof enrollment.evaluationConfig === "string"
+                                        ? JSON.parse(enrollment.evaluationConfig || "{}")
+                                        : enrollment.evaluationConfig || {}) as { enableUnderstanding?: boolean };
+                                    const isUnderstandingEnabled = Boolean(evalConf?.enableUnderstanding);
+                                    const totalStages = isUnderstandingEnabled ? 4 : 3;
+                                    const activeCompletedCount = [
+                                        enrollment.evalNarasumberCompleted,
+                                        enrollment.evalOrganizerCompleted,
+                                        isUnderstandingEnabled ? enrollment.evalUnderstandingCompleted : true,
+                                        enrollment.evalSkmCompleted,
+                                    ].filter(Boolean).length;
+                                    return (
+                                        <>
+                                            <SummaryCard
+                                                label="Presensi Kehadiran"
+                                                value={`${attendancePercentage}%`}
+                                                detail={`${Number(enrollment.attendedJp || 0)} JP dihadiri • Syarat min ${attendanceThreshold}%`}
+                                            />
+                                            <SummaryCard
+                                                label={isUnderstandingEnabled ? "Evaluasi 4 Tahap" : "Evaluasi Pelatihan"}
+                                                value={allEvaluationsCompleted ? `${totalStages}/${totalStages} Selesai` : "Belum Lengkap"}
+                                                detail={`${activeCompletedCount} dari ${totalStages} tahap tuntas`}
+                                            />
+                                            <SummaryCard
+                                                label="Status Kelulusan"
+                                                value={canOpenCertificate ? "Lulus" : isClassical ? (isAttendanceSufficient ? "Syarat Belum Lengkap" : "Berjalan") : (authoritativeProgress === 100 ? "Syarat Belum Lengkap" : "Berjalan")}
+                                                detail={canOpenCertificate ? formatDate(enrollment.completedAt || new Date().toISOString()) : isClassical ? `Target: ${enrollment.targetOpd || 'OPD'}` : `Terdaftar ${formatDate(enrollment.enrolledAt)}`}
+                                            />
+                                        </>
+                                    );
+                                })()}
                             </>
                         ) : (
                             <>

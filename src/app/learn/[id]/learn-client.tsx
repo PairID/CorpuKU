@@ -1043,9 +1043,11 @@ export default function LearnClient({ course, courseContent, session, enrollment
                                         </div>
                                         <div className="divide-y divide-oxford-100 dark:divide-oxford-800/80">
                                             {[
-                                                { key: "understanding" as const, label: "Evaluasi Pembelajaran", done: Boolean(enrollment?.evalUnderstandingCompleted) || attendanceStats.allEvaluationsCompleted },
                                                 { key: "narasumber" as const, label: "Evaluasi Narasumber", done: Boolean(enrollment?.evalNarasumberCompleted) || attendanceStats.allEvaluationsCompleted },
                                                 { key: "organizer" as const, label: "Evaluasi Penyelenggara", done: Boolean(enrollment?.evalOrganizerCompleted) || attendanceStats.allEvaluationsCompleted },
+                                                ...(course.evaluationConfig?.enableUnderstanding
+                                                    ? [{ key: "understanding" as const, label: "Evaluasi Pembelajaran", done: Boolean(enrollment?.evalUnderstandingCompleted) || attendanceStats.allEvaluationsCompleted }]
+                                                    : []),
                                                 { key: "skm" as const, label: "SKM", done: Boolean(enrollment?.evalSkmCompleted) || attendanceStats.allEvaluationsCompleted },
                                             ].map((item) => (
                                                 <button

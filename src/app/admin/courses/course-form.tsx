@@ -94,8 +94,10 @@ export default function CourseForm({ initialData, instructors, mode, basePath = 
     const [evaluationConfig, setEvaluationConfig] = useState<Required<CourseEvaluationConfig>>(() => {
         const defaults = getDefaultCourseEvaluationConfig();
         return {
+            enableUnderstanding: Boolean(initialData?.evaluationConfig?.enableUnderstanding),
             narasumber: initialData?.evaluationConfig?.narasumber?.length ? initialData.evaluationConfig.narasumber : defaults.narasumber,
             organizer: initialData?.evaluationConfig?.organizer?.length ? initialData.evaluationConfig.organizer : defaults.organizer,
+            understanding: initialData?.evaluationConfig?.understanding?.length ? initialData.evaluationConfig.understanding : defaults.understanding,
             skm: initialData?.evaluationConfig?.skm?.length ? initialData.evaluationConfig.skm : defaults.skm,
         };
     });

@@ -39,7 +39,16 @@ export async function getTrainingEvaluations(courseId: string) {
       return { success: false, error: "Pendaftaran tidak ditemukan." };
     }
 
-    // 2. Ambil sesi-sesi materi yang memiliki narasumber
+    // 2. Ambil sesi-sesi materi yang memiliki narasumber dan konfigurasi evaluasi kursus
+    const courseRows = await sql`
+      SELECT evaluation_config
+      FROM courses
+      WHERE id = ${courseId} OR id = ${courseId.replace(/^course_/, '')} OR id = ${'course_' + courseId}
+      LIMIT 1
+    `;
+    const evalConfig = (courseRows[0]?.evaluation_config || {}) as { enableUnderstanding?: boolean };
+    const enableUnderstanding = Boolean(evalConfig.enableUnderstanding);
+
     const narasumberLessons = await sql`
       SELECT lesson.id, lesson.title, lesson.narasumber_name AS "narasumberName",
              lesson.jp
@@ -75,7 +84,7 @@ export async function getTrainingEvaluations(courseId: string) {
       currentStage = "narasumber";
     } else if (!enrollment.eval_organizer_completed) {
       currentStage = "organizer";
-    } else if (!enrollment.eval_understanding_completed) {
+    } else if (enableUnderstanding && !enrollment.eval_understanding_completed) {
       currentStage = "understanding";
     } else if (!enrollment.eval_skm_completed) {
       currentStage = "skm";
@@ -86,6 +95,7 @@ export async function getTrainingEvaluations(courseId: string) {
     return {
       success: true,
       enrollmentId: String(enrollment.id),
+      enableUnderstanding,
       currentStage,
       stages: {
         narasumber: {
@@ -97,7 +107,8 @@ export async function getTrainingEvaluations(courseId: string) {
           evaluation: evaluations.find((e) => e.stage === "organizer") || null,
         },
         understanding: {
-          completed: Boolean(enrollment.eval_understanding_completed),
+          enabled: enableUnderstanding,
+          completed: !enableUnderstanding || Boolean(enrollment.eval_understanding_completed),
           evaluation: evaluations.find((e) => e.stage === "understanding") || null,
         },
         skm: {
@@ -141,7 +152,17 @@ export async function submitTrainingEvaluation(payload: SubmitEvaluationPayload)
       return { success: false, error: "Pendaftaran tidak ditemukan." };
     }
 
-    // 2. Gating Modul Terakhir: Evaluasi hanya dapat diakses setelah modul terakhir dikerjakan
+    // 2. Cek konfigurasi evaluasi kursus (apakah tahap pemahaman diaktifkan)
+    const courseRows = await sql`
+      SELECT evaluation_config
+      FROM courses
+      WHERE id = ${courseId} OR id = ${courseId.replace(/^course_/, '')} OR id = ${'course_' + courseId}
+      LIMIT 1
+    `;
+    const evalConfig = (courseRows[0]?.evaluation_config || {}) as { enableUnderstanding?: boolean };
+    const enableUnderstanding = Boolean(evalConfig.enableUnderstanding);
+
+    // Gating Modul Terakhir: Evaluasi hanya dapat diakses setelah modul terakhir dikerjakan
     if (session.user.role === "student") {
       const lastModuleLessons = await sql`
         SELECT l.id
@@ -165,7 +186,7 @@ export async function submitTrainingEvaluation(payload: SubmitEvaluationPayload)
       }
     }
 
-    // 2. Sequential Stage Gating Check
+    // 3. Sequential Stage Gating Check
     if (stage === "organizer" && !enrollment.eval_narasumber_completed) {
       return {
         success: false,
@@ -178,14 +199,22 @@ export async function submitTrainingEvaluation(payload: SubmitEvaluationPayload)
         error: "Tahap 2 belum selesai: Harap lengkapi evaluasi kualitas penyelenggaraan terlebih dahulu.",
       };
     }
-    if (stage === "skm" && !enrollment.eval_understanding_completed) {
-      return {
-        success: false,
-        error: "Tahap 3 belum selesai: Harap lengkapi evaluasi pemahaman materi terlebih dahulu.",
-      };
+    if (stage === "skm") {
+      if (enableUnderstanding && !enrollment.eval_understanding_completed) {
+        return {
+          success: false,
+          error: "Tahap 3 belum selesai: Harap lengkapi evaluasi pemahaman materi terlebih dahulu.",
+        };
+      }
+      if (!enableUnderstanding && !enrollment.eval_organizer_completed) {
+        return {
+          success: false,
+          error: "Tahap 2 belum selesai: Harap lengkapi evaluasi kualitas penyelenggaraan terlebih dahulu.",
+        };
+      }
     }
 
-    // 3. Hitung score evaluasi berdasarkan input
+    // 4. Hitung score evaluasi berdasarkan input
     let calculatedScore: number | null = null;
     if (typeof payload.score === "number") {
       calculatedScore = payload.score;
@@ -252,12 +281,22 @@ export async function submitTrainingEvaluation(payload: SubmitEvaluationPayload)
         nextStage = "narasumber";
       }
     } else if (stage === "organizer") {
-      await sql`
-        UPDATE enrollments
-        SET eval_organizer_completed = TRUE
-        WHERE id = ${enrollment.id}
-      `;
-      nextStage = "understanding";
+      if (enableUnderstanding) {
+        await sql`
+          UPDATE enrollments
+          SET eval_organizer_completed = TRUE
+          WHERE id = ${enrollment.id}
+        `;
+        nextStage = "understanding";
+      } else {
+        await sql`
+          UPDATE enrollments
+          SET eval_organizer_completed = TRUE,
+              eval_understanding_completed = TRUE
+          WHERE id = ${enrollment.id}
+        `;
+        nextStage = "skm";
+      }
     } else if (stage === "understanding") {
       await sql`
         UPDATE enrollments

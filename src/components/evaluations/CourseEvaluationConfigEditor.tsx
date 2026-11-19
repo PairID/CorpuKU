@@ -1,23 +1,39 @@
 "use client";
 
 import { useState } from "react";
-import { ClipboardCheck, Plus, RotateCcw, Trash2, UserCheck, Building2, Star } from "lucide-react";
+import {
+  ClipboardCheck,
+  Plus,
+  RotateCcw,
+  Trash2,
+  UserCheck,
+  Building2,
+  Star,
+  BookOpen,
+  CheckCircle,
+  Circle,
+  HelpCircle,
+  ToggleLeft,
+  ToggleRight,
+} from "lucide-react";
 import {
   CourseEvaluationConfig,
   EvaluationCriterion,
+  ComprehensionQuestion,
   NARASUMBER_EVALUATION_QUESTIONS,
   ORGANIZER_EVALUATION_QUESTIONS,
   SKM_QUESTIONS,
+  DEFAULT_COMPREHENSION_QUESTIONS,
 } from "@/lib/skm-constants";
 
-type EvaluationTab = "narasumber" | "organizer" | "skm";
+type EvaluationTab = "narasumber" | "organizer" | "understanding" | "skm";
 
 interface CourseEvaluationConfigEditorProps {
   value: Required<CourseEvaluationConfig>;
   onChange: (next: Required<CourseEvaluationConfig>) => void;
 }
 
-const TAB_META: {
+const BASE_TABS: {
   key: EvaluationTab;
   label: string;
   desc: string;
@@ -26,7 +42,7 @@ const TAB_META: {
   {
     key: "narasumber",
     label: "Evaluasi Narasumber",
-    desc: "Daftar nama narasumber otomatis terhubung dengan kolom Narasumber yang diisi pada setiap materi di Kelola Konten & QR.",
+    desc: "Daftar narasumber otomatis terhubung dengan kolom narasumber pada setiap materi di Kelola Konten & QR.",
     icon: UserCheck,
   },
   {
@@ -36,6 +52,12 @@ const TAB_META: {
     icon: Building2,
   },
   {
+    key: "understanding",
+    label: "Pemahaman Materi",
+    desc: "Kuis evaluasi pemahaman materi terpisah. Dapat disesuaikan butir soal, opsi jawaban, dan kunci jawabannya.",
+    icon: BookOpen,
+  },
+  {
     key: "skm",
     label: "Survei SKM (9 Unsur)",
     desc: "Instrumen baku Survei Kepuasan Masyarakat mengacu pada PermenPANRB No. 14 Tahun 2017.",
@@ -43,7 +65,7 @@ const TAB_META: {
   },
 ];
 
-function cloneDefaultList(tab: EvaluationTab): EvaluationCriterion[] {
+function cloneDefaultCriterionList(tab: "narasumber" | "organizer" | "skm"): EvaluationCriterion[] {
   const source =
     tab === "narasumber"
       ? NARASUMBER_EVALUATION_QUESTIONS
@@ -56,30 +78,56 @@ function cloneDefaultList(tab: EvaluationTab): EvaluationCriterion[] {
   }));
 }
 
+function cloneDefaultUnderstanding(): ComprehensionQuestion[] {
+  return DEFAULT_COMPREHENSION_QUESTIONS.map((q) => ({
+    ...q,
+    options: q.options.map((o) => ({ ...o })),
+  }));
+}
+
 export default function CourseEvaluationConfigEditor({
   value,
   onChange,
 }: CourseEvaluationConfigEditorProps) {
   const [activeTab, setActiveTab] = useState<EvaluationTab>("narasumber");
-  const questions = value[activeTab] || [];
+  const isUnderstandingEnabled = Boolean(value.enableUnderstanding);
 
-  const updateQuestions = (nextList: EvaluationCriterion[]) => {
-    // Renumber ids sequentially so submission/scoring stays consistent
+  // Filter tabs: hide understanding tab if disabled
+  const visibleTabs = BASE_TABS.filter(
+    (tab) => tab.key !== "understanding" || isUnderstandingEnabled
+  );
+
+  const toggleUnderstanding = (enabled: boolean) => {
+    onChange({
+      ...value,
+      enableUnderstanding: enabled,
+    });
+    if (!enabled && activeTab === "understanding") {
+      setActiveTab("narasumber");
+    }
+  };
+
+  // Criterion questions (narasumber, organizer, skm)
+  const currentCriteria = (activeTab !== "understanding" ? value[activeTab] : []) || [];
+  const understandingQuestions = value.understanding || [];
+
+  const updateCriteria = (nextList: EvaluationCriterion[]) => {
+    if (activeTab === "understanding") return;
     const normalized = nextList.map((item, idx) => ({ ...item, id: idx + 1 }));
     onChange({ ...value, [activeTab]: normalized });
   };
 
-  const handleFieldChange = (
+  const handleCriterionFieldChange = (
     index: number,
     field: "criterion" | "question",
     val: string
   ) => {
-    const updated = questions.map((q, i) => (i === index ? { ...q, [field]: val } : q));
-    updateQuestions(updated);
+    const updated = currentCriteria.map((q, i) => (i === index ? { ...q, [field]: val } : q));
+    updateCriteria(updated);
   };
 
-  const handleOptionChange = (qIndex: number, optIndex: number, text: string) => {
-    const updated = questions.map((q, i) =>
+  const handleCriterionOptionChange = (qIndex: number, optIndex: number, text: string) => {
+    const updated = currentCriteria.map((q, i) =>
       i === qIndex
         ? {
             ...q,
@@ -89,11 +137,11 @@ export default function CourseEvaluationConfigEditor({
           }
         : q
     );
-    updateQuestions(updated);
+    updateCriteria(updated);
   };
 
-  const handleAddQuestion = () => {
-    const nextId = questions.length + 1;
+  const handleAddCriterion = () => {
+    const nextId = currentCriteria.length + 1;
     const newItem: EvaluationCriterion = {
       id: nextId,
       criterion: `Aspek Penilaian ${nextId}`,
@@ -105,19 +153,79 @@ export default function CourseEvaluationConfigEditor({
         { key: "D", text: "Kurang", score: 1 },
       ],
     };
-    updateQuestions([...questions, newItem]);
+    updateCriteria([...currentCriteria, newItem]);
   };
 
-  const handleRemoveQuestion = (index: number) => {
-    if (questions.length <= 1) return;
-    updateQuestions(questions.filter((_, i) => i !== index));
+  const handleRemoveCriterion = (index: number) => {
+    if (currentCriteria.length <= 1) return;
+    updateCriteria(currentCriteria.filter((_, i) => i !== index));
+  };
+
+  // Understanding Questions Handlers
+  const updateUnderstandingQuestions = (nextList: ComprehensionQuestion[]) => {
+    const normalized = nextList.map((q, idx) => ({ ...q, id: idx + 1 }));
+    onChange({ ...value, understanding: normalized });
+  };
+
+  const handleUnderstandingQuestionTextChange = (qIndex: number, text: string) => {
+    const updated = understandingQuestions.map((q, i) =>
+      i === qIndex ? { ...q, question: text } : q
+    );
+    updateUnderstandingQuestions(updated);
+  };
+
+  const handleUnderstandingOptionTextChange = (qIndex: number, optIndex: number, text: string) => {
+    const updated = understandingQuestions.map((q, i) => {
+      if (i !== qIndex) return q;
+      const nextOpts = q.options.map((opt, oi) =>
+        oi === optIndex ? { ...opt, text } : opt
+      );
+      return { ...q, options: nextOpts };
+    });
+    updateUnderstandingQuestions(updated);
+  };
+
+  const handleUnderstandingCorrectOption = (qIndex: number, optIndex: number) => {
+    const updated = understandingQuestions.map((q, i) => {
+      if (i !== qIndex) return q;
+      const nextOpts = q.options.map((opt, oi) => ({
+        ...opt,
+        correct: oi === optIndex,
+      }));
+      return { ...q, options: nextOpts };
+    });
+    updateUnderstandingQuestions(updated);
+  };
+
+  const handleAddUnderstandingQuestion = () => {
+    const nextId = understandingQuestions.length + 1;
+    const newItem: ComprehensionQuestion = {
+      id: nextId,
+      question: "Tuliskan pertanyaan pemahaman materi...",
+      options: [
+        { text: "Pilihan Jawaban A", correct: true },
+        { text: "Pilihan Jawaban B", correct: false },
+        { text: "Pilihan Jawaban C", correct: false },
+        { text: "Pilihan Jawaban D", correct: false },
+      ],
+    };
+    updateUnderstandingQuestions([...understandingQuestions, newItem]);
+  };
+
+  const handleRemoveUnderstandingQuestion = (index: number) => {
+    if (understandingQuestions.length <= 1) return;
+    updateUnderstandingQuestions(understandingQuestions.filter((_, i) => i !== index));
   };
 
   const handleResetTab = () => {
-    updateQuestions(cloneDefaultList(activeTab));
+    if (activeTab === "understanding") {
+      updateUnderstandingQuestions(cloneDefaultUnderstanding());
+    } else {
+      updateCriteria(cloneDefaultCriterionList(activeTab));
+    }
   };
 
-  const activeMeta = TAB_META.find((t) => t.key === activeTab)!;
+  const activeMeta = BASE_TABS.find((t) => t.key === activeTab)!;
 
   return (
     <div className="mt-6 bg-white dark:bg-[#161B2A] rounded-2xl border border-oxford-200 dark:border-oxford-800 p-6 shadow-sm">
@@ -131,7 +239,7 @@ export default function CourseEvaluationConfigEditor({
               Instrumen Evaluasi Pelatihan (Otomatis & Dapat Diedit)
             </h3>
             <p className="text-xs text-oxford-500 dark:text-oxford-400">
-              Pertanyaan standar Narasumber, Penyelenggara, dan SKM sudah terisi otomatis. Ubah teks kriteria, pertanyaan, atau pilihan jawaban bila diperlukan.
+              Pertanyaan standar Narasumber, Penyelenggara, dan SKM terisi otomatis. Anda dapat menyesuaikan teks instrumen sesuai kebutuhan pelatihan.
             </p>
           </div>
         </div>
@@ -145,11 +253,63 @@ export default function CourseEvaluationConfigEditor({
         </button>
       </div>
 
+      {/* Switch: Aktifkan / Nonaktifkan Tahap Evaluasi Pemahaman */}
+      <div className="mt-4 p-4 rounded-xl border border-oxford-200 dark:border-oxford-800 bg-oxford-50/70 dark:bg-oxford-900/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-start gap-3">
+          <div className="p-2 rounded-lg bg-gold-500/15 text-gold-600 dark:text-gold-400 shrink-0">
+            <BookOpen size={18} />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h4 className="text-sm font-bold text-oxford-900 dark:text-white">
+                Tahap Evaluasi Pemahaman Materi (Terpisah)
+              </h4>
+              <span
+                className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                  isUnderstandingEnabled
+                    ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300"
+                    : "bg-oxford-200 dark:bg-oxford-800 text-oxford-600 dark:text-oxford-400"
+                }`}
+              >
+                {isUnderstandingEnabled ? "Aktif (4 Tahap)" : "Nonaktif (3 Tahap)"}
+              </span>
+            </div>
+            <p className="text-xs text-oxford-600 dark:text-oxford-400 mt-0.5">
+              Jika dinonaktifkan, evaluasi langsung 3 tahap (Narasumber &rarr; Penyelenggara &rarr; SKM) karena pemahaman sudah diukur melalui Kuis per Modul.
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => toggleUnderstanding(!isUnderstandingEnabled)}
+          className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${
+            isUnderstandingEnabled
+              ? "bg-emerald-600 text-white shadow-sm hover:bg-emerald-700"
+              : "bg-oxford-200 dark:bg-oxford-800 text-oxford-700 dark:text-oxford-200 hover:bg-oxford-300 dark:hover:bg-oxford-700"
+          }`}
+        >
+          {isUnderstandingEnabled ? (
+            <>
+              <ToggleRight size={18} />
+              <span>Pemahaman Aktif</span>
+            </>
+          ) : (
+            <>
+              <ToggleLeft size={18} />
+              <span>Gunakan Kuis Saja (3 Tahap)</span>
+            </>
+          )}
+        </button>
+      </div>
+
       {/* Tabs */}
       <div className="flex flex-wrap gap-2 mt-4">
-        {TAB_META.map((tab) => {
+        {visibleTabs.map((tab) => {
           const Icon = tab.icon;
-          const count = value[tab.key]?.length || 0;
+          const count =
+            tab.key === "understanding"
+              ? value.understanding?.length || 0
+              : value[tab.key]?.length || 0;
           const isActive = activeTab === tab.key;
           return (
             <button
@@ -182,78 +342,177 @@ export default function CourseEvaluationConfigEditor({
         {activeMeta.desc}
       </p>
 
-      {/* Questions list */}
-      <div className="mt-4 space-y-3">
-        {questions.map((q, qIdx) => (
-          <div
-            key={`${activeTab}-${q.id}`}
-            className="p-4 rounded-xl border border-oxford-200 dark:border-oxford-800 bg-oxford-50/60 dark:bg-oxford-950/60 space-y-3"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-center gap-2 flex-1">
-                <span className="w-6 h-6 rounded-lg bg-gold-500/20 text-gold-700 dark:text-gold-400 text-xs font-extrabold flex items-center justify-center shrink-0">
-                  {qIdx + 1}
-                </span>
-                <input
-                  type="text"
-                  value={q.criterion}
-                  onChange={(e) => handleFieldChange(qIdx, "criterion", e.target.value)}
-                  placeholder="Nama aspek / unsur penilaian"
-                  className="flex-1 px-3 py-1.5 bg-white dark:bg-[#161B2A] border border-oxford-200 dark:border-oxford-700 rounded-lg text-xs font-bold text-oxford-900 dark:text-white focus:outline-none focus:border-gold-500"
-                />
-              </div>
-              {questions.length > 1 && (
-                <button
-                  type="button"
-                  onClick={() => handleRemoveQuestion(qIdx)}
-                  title="Hapus pertanyaan"
-                  className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
-                >
-                  <Trash2 size={14} />
-                </button>
-              )}
-            </div>
-
-            <input
-              type="text"
-              value={q.question}
-              onChange={(e) => handleFieldChange(qIdx, "question", e.target.value)}
-              placeholder="Teks pertanyaan yang ditampilkan ke peserta..."
-              className="w-full px-3 py-2 bg-white dark:bg-[#161B2A] border border-oxford-200 dark:border-oxford-700 rounded-lg text-xs text-oxford-900 dark:text-white focus:outline-none focus:border-gold-500"
-            />
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-              {q.options.map((opt, optIdx) => (
-                <div
-                  key={opt.key}
-                  className="flex items-center gap-1.5 bg-white dark:bg-[#161B2A] border border-oxford-200 dark:border-oxford-700 rounded-lg px-2.5 py-1.5"
-                >
-                  <span className="text-[11px] font-extrabold text-gold-600 dark:text-gold-400 shrink-0">
-                    {opt.key} ({opt.score})
+      {/* Mode A: Tab Pemahaman Materi (Understanding) */}
+      {activeTab === "understanding" ? (
+        <div className="mt-4 space-y-4">
+          {understandingQuestions.map((q, qIdx) => (
+            <div
+              key={`understanding-${q.id}`}
+              className="p-4 rounded-xl border border-oxford-200 dark:border-oxford-800 bg-oxford-50/60 dark:bg-oxford-950/60 space-y-3"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-2 flex-1">
+                  <span className="w-6 h-6 rounded-lg bg-gold-500/20 text-gold-700 dark:text-gold-400 text-xs font-extrabold flex items-center justify-center shrink-0">
+                    {qIdx + 1}
                   </span>
                   <input
                     type="text"
-                    value={opt.text}
-                    onChange={(e) => handleOptionChange(qIdx, optIdx, e.target.value)}
-                    className="w-full bg-transparent text-xs text-oxford-800 dark:text-oxford-200 focus:outline-none"
+                    value={q.question}
+                    onChange={(e) => handleUnderstandingQuestionTextChange(qIdx, e.target.value)}
+                    placeholder="Tuliskan pertanyaan pemahaman materi..."
+                    className="flex-1 px-3 py-1.5 bg-white dark:bg-[#161B2A] border border-oxford-200 dark:border-oxford-700 rounded-lg text-xs font-bold text-oxford-900 dark:text-white focus:outline-none focus:border-gold-500"
                   />
                 </div>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
+                {understandingQuestions.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveUnderstandingQuestion(qIdx)}
+                    title="Hapus pertanyaan"
+                    className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                )}
+              </div>
 
-      <div className="mt-4">
-        <button
-          type="button"
-          onClick={handleAddQuestion}
-          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-dashed border-oxford-300 dark:border-oxford-700 text-xs font-bold text-oxford-700 dark:text-oxford-200 hover:border-gold-500 hover:text-gold-600 dark:hover:text-gold-400 transition-colors"
-        >
-          <Plus size={14} />
-          <span>Tambah Pertanyaan {activeMeta.label}</span>
-        </button>
-      </div>
+              <div className="space-y-2 pl-8">
+                <p className="text-[11px] font-semibold text-oxford-500">
+                  Pilihan Jawaban (Klik lingkaran untuk memilih Kunci Jawaban yang Benar):
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {q.options.map((opt, optIdx) => {
+                    const letter = ["A", "B", "C", "D"][optIdx] || String(optIdx + 1);
+                    return (
+                      <div
+                        key={`opt-${qIdx}-${optIdx}`}
+                        className={`flex items-center gap-2 bg-white dark:bg-[#161B2A] border rounded-lg px-3 py-2 transition-all ${
+                          opt.correct
+                            ? "border-emerald-500 ring-1 ring-emerald-500/40 bg-emerald-50/20 dark:bg-emerald-950/20"
+                            : "border-oxford-200 dark:border-oxford-700"
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => handleUnderstandingCorrectOption(qIdx, optIdx)}
+                          title={opt.correct ? "Kunci Jawaban Benar" : "Jadikan Kunci Jawaban"}
+                          className="shrink-0 text-oxford-400 hover:text-emerald-600 transition-colors"
+                        >
+                          {opt.correct ? (
+                            <CheckCircle className="text-emerald-500" size={16} />
+                          ) : (
+                            <Circle size={16} />
+                          )}
+                        </button>
+                        <span className="text-xs font-bold text-oxford-500 shrink-0">
+                          {letter}.
+                        </span>
+                        <input
+                          type="text"
+                          value={opt.text}
+                          onChange={(e) =>
+                            handleUnderstandingOptionTextChange(qIdx, optIdx, e.target.value)
+                          }
+                          className="w-full bg-transparent text-xs text-oxford-800 dark:text-oxford-200 focus:outline-none"
+                          placeholder={`Jawaban ${letter}...`}
+                        />
+                        {opt.correct && (
+                          <span className="text-[10px] font-extrabold text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-950 px-1.5 py-0.5 rounded shrink-0">
+                            Kunci
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          ))}
+
+          <div className="mt-4">
+            <button
+              type="button"
+              onClick={handleAddUnderstandingQuestion}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-dashed border-oxford-300 dark:border-oxford-700 text-xs font-bold text-oxford-700 dark:text-oxford-200 hover:border-gold-500 hover:text-gold-600 dark:hover:text-gold-400 transition-colors"
+            >
+              <Plus size={14} />
+              <span>Tambah Pertanyaan Pemahaman</span>
+            </button>
+          </div>
+        </div>
+      ) : (
+        /* Mode B: Tab Kriteria Penilaian (Narasumber, Penyelenggara, SKM) */
+        <div className="mt-4 space-y-3">
+          {currentCriteria.map((q, qIdx) => (
+            <div
+              key={`${activeTab}-${q.id}`}
+              className="p-4 rounded-xl border border-oxford-200 dark:border-oxford-800 bg-oxford-50/60 dark:bg-oxford-950/60 space-y-3"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-2 flex-1">
+                  <span className="w-6 h-6 rounded-lg bg-gold-500/20 text-gold-700 dark:text-gold-400 text-xs font-extrabold flex items-center justify-center shrink-0">
+                    {qIdx + 1}
+                  </span>
+                  <input
+                    type="text"
+                    value={q.criterion}
+                    onChange={(e) => handleCriterionFieldChange(qIdx, "criterion", e.target.value)}
+                    placeholder="Nama aspek / unsur penilaian"
+                    className="flex-1 px-3 py-1.5 bg-white dark:bg-[#161B2A] border border-oxford-200 dark:border-oxford-700 rounded-lg text-xs font-bold text-oxford-900 dark:text-white focus:outline-none focus:border-gold-500"
+                  />
+                </div>
+                {currentCriteria.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveCriterion(qIdx)}
+                    title="Hapus pertanyaan"
+                    className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                )}
+              </div>
+
+              <input
+                type="text"
+                value={q.question}
+                onChange={(e) => handleCriterionFieldChange(qIdx, "question", e.target.value)}
+                placeholder="Teks pertanyaan yang ditampilkan ke peserta..."
+                className="w-full px-3 py-2 bg-white dark:bg-[#161B2A] border border-oxford-200 dark:border-oxford-700 rounded-lg text-xs text-oxford-900 dark:text-white focus:outline-none focus:border-gold-500"
+              />
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                {q.options.map((opt, optIdx) => (
+                  <div
+                    key={opt.key}
+                    className="flex items-center gap-1.5 bg-white dark:bg-[#161B2A] border border-oxford-200 dark:border-oxford-700 rounded-lg px-2.5 py-1.5"
+                  >
+                    <span className="text-[11px] font-extrabold text-gold-600 dark:text-gold-400 shrink-0">
+                      {opt.key} ({opt.score})
+                    </span>
+                    <input
+                      type="text"
+                      value={opt.text}
+                      onChange={(e) => handleCriterionOptionChange(qIdx, optIdx, e.target.value)}
+                      className="w-full bg-transparent text-xs text-oxford-800 dark:text-oxford-200 focus:outline-none"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+
+          <div className="mt-4">
+            <button
+              type="button"
+              onClick={handleAddCriterion}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-dashed border-oxford-300 dark:border-oxford-700 text-xs font-bold text-oxford-700 dark:text-oxford-200 hover:border-gold-500 hover:text-gold-600 dark:hover:text-gold-400 transition-colors"
+            >
+              <Plus size={14} />
+              <span>Tambah Pertanyaan {activeMeta.label}</span>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
