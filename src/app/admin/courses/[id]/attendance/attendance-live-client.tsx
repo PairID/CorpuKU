@@ -682,7 +682,7 @@ export default function AttendanceLiveClient({
                         : "bg-oxford-50 dark:bg-oxford-900 text-oxford-700 dark:text-oxford-300 border-oxford-200 dark:border-oxford-700"
                     }`}
                   >
-                    Tandai Hadir
+                    Hadir
                   </button>
                   <button
                     type="button"

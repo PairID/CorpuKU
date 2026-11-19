@@ -703,7 +703,9 @@ export async function adminOverrideAttendance(payload: {
 
     const courseRows = await sql`
       SELECT id, instructor_id AS "instructorId", jp, attendance_threshold AS "attendanceThreshold"
-      FROM courses WHERE id = ${courseId} LIMIT 1
+      FROM courses 
+      WHERE id = ${courseId} OR id = ${courseId.replace(/^course_/, '')} OR id = ${'course_' + courseId}
+      LIMIT 1
     `;
     const course = courseRows[0];
     if (!course) return { success: false, error: "Kelas tidak ditemukan." };
@@ -711,15 +713,39 @@ export async function adminOverrideAttendance(payload: {
       return { success: false, error: "Anda tidak memiliki akses ke kelas ini." };
     }
 
+    const effectiveCourseId = String(course.id);
+
     const lessonRows = await sql`
       SELECT l.id, l.jp
       FROM lessons l
       JOIN modules m ON m.id = l.module_id
-      WHERE l.id = ${lessonId} AND m.course_id = ${courseId}
+      WHERE (l.id = ${lessonId} OR l.id = ${lessonId.replace(/^less_/, '')} OR l.id = ${'less_' + lessonId})
+        AND (m.course_id = ${effectiveCourseId} OR m.course_id = ${courseId} OR m.course_id = ${courseId.replace(/^course_/, '')} OR m.course_id = ${'course_' + courseId})
       LIMIT 1
     `;
     const lesson = lessonRows[0];
     if (!lesson) return { success: false, error: "Sesi materi tidak ditemukan pada kelas ini." };
+
+    const effectiveLessonId = String(lesson.id);
+
+    // Dapatkan data enrollment peserta sebelum insert/delete
+    const enrollmentRows = await sql`
+      SELECT id, completed_lessons, all_evaluations_completed
+      FROM enrollments
+      WHERE user_id = ${userId}
+        AND (course_id = ${effectiveCourseId} OR course_id = ${courseId} OR course_id = ${courseId.replace(/^course_/, '')} OR course_id = ${'course_' + courseId})
+      LIMIT 1
+    `;
+
+    let enrollmentId = enrollmentRows[0]?.id;
+    if (!enrollmentId) {
+      enrollmentId = `enr_${crypto.randomUUID()}`;
+      await sql`
+        INSERT INTO enrollments (id, user_id, course_id, status, enrolled_at)
+        VALUES (${enrollmentId}, ${userId}, ${effectiveCourseId}, 'enrolled', CURRENT_TIMESTAMP)
+        ON CONFLICT DO NOTHING
+      `;
+    }
 
     await ensureAttendanceOverrideColumns();
     const actorLabel = session.user.name || session.user.email || session.user.id;
@@ -728,12 +754,13 @@ export async function adminOverrideAttendance(payload: {
     if (markPresent) {
       const attId = `att_${crypto.randomUUID()}`;
       await sql`
-        INSERT INTO material_attendances (id, user_id, course_id, lesson_id, jp, qr_code_used, attended_at, override_note, override_by)
-        VALUES (${attId}, ${userId}, ${courseId}, ${lessonId}, ${lessonJp}, 'ADMIN_OVERRIDE', CURRENT_TIMESTAMP, ${cleanNote}, ${actorLabel})
+        INSERT INTO material_attendances (id, enrollment_id, user_id, course_id, lesson_id, jp, attended_at, override_note, override_by)
+        VALUES (${attId}, ${enrollmentId}, ${userId}, ${effectiveCourseId}, ${effectiveLessonId}, ${lessonJp}, CURRENT_TIMESTAMP, ${cleanNote}, ${actorLabel})
         ON CONFLICT (user_id, lesson_id)
         DO UPDATE SET
+          enrollment_id = EXCLUDED.enrollment_id,
+          course_id = EXCLUDED.course_id,
           jp = EXCLUDED.jp,
-          qr_code_used = 'ADMIN_OVERRIDE',
           attended_at = CURRENT_TIMESTAMP,
           override_note = EXCLUDED.override_note,
           override_by = EXCLUDED.override_by
@@ -741,28 +768,26 @@ export async function adminOverrideAttendance(payload: {
     } else {
       await sql`
         DELETE FROM material_attendances
-        WHERE user_id = ${userId} AND lesson_id = ${lessonId} AND course_id = ${courseId}
+        WHERE user_id = ${userId} 
+          AND (lesson_id = ${effectiveLessonId} OR lesson_id = ${lessonId} OR lesson_id = ${'less_' + lessonId} OR lesson_id = ${lessonId.replace(/^less_/, '')})
+          AND (course_id = ${effectiveCourseId} OR course_id = ${courseId} OR course_id = ${courseId.replace(/^course_/, '')} OR course_id = ${'course_' + courseId})
       `;
     }
 
     // Recalculate total attended JP & percentage on enrollment
-    const [attSumRows, totalJpRows, enrollmentRows] = await Promise.all([
+    const [attSumRows, totalJpRows] = await Promise.all([
       sql`
         SELECT COALESCE(SUM(jp), 0) AS total_jp
         FROM material_attendances
-        WHERE user_id = ${userId} AND course_id = ${courseId}
+        WHERE user_id = ${userId} 
+          AND (course_id = ${effectiveCourseId} OR course_id = ${courseId} OR course_id = ${courseId.replace(/^course_/, '')} OR course_id = ${'course_' + courseId})
       `,
       sql`
         SELECT COALESCE(SUM(l.jp), 0) AS total_class_jp
         FROM lessons l
         JOIN modules m ON m.id = l.module_id
-        WHERE m.course_id = ${courseId} AND l.has_attendance = TRUE
-      `,
-      sql`
-        SELECT id, completed_lessons, all_evaluations_completed
-        FROM enrollments
-        WHERE user_id = ${userId} AND course_id = ${courseId}
-        LIMIT 1
+        WHERE (m.course_id = ${effectiveCourseId} OR m.course_id = ${courseId} OR m.course_id = ${courseId.replace(/^course_/, '')} OR m.course_id = ${'course_' + courseId}) 
+          AND l.has_attendance = TRUE
       `,
     ]);
 
@@ -771,40 +796,43 @@ export async function adminOverrideAttendance(payload: {
     const totalClassJp = computedClassJp > 0 ? computedClassJp : Number(course.jp || 0);
     const attendancePercentage = calculateAttendancePercentage(attendedJp, totalClassJp);
 
-    const enrollment = enrollmentRows[0];
-    if (enrollment) {
-      let existingCompleted: string[] = [];
-      try {
-        existingCompleted = Array.isArray(enrollment.completed_lessons)
-          ? enrollment.completed_lessons
-          : JSON.parse(String(enrollment.completed_lessons || "[]"));
-      } catch {
-        existingCompleted = [];
-      }
-
-      const updatedSet = new Set(existingCompleted.map(String));
-      if (markPresent) updatedSet.add(lessonId);
-      else updatedSet.delete(lessonId);
-
-      const threshold = Number(course.attendanceThreshold ?? 80);
-      const canComplete = attendancePercentage >= threshold && Boolean(enrollment.all_evaluations_completed);
-
-      await sql`
-        UPDATE enrollments
-        SET attended_jp = ${attendedJp},
-            attendance_percentage = ${attendancePercentage},
-            completed_lessons = ${JSON.stringify(Array.from(updatedSet))},
-            status = CASE WHEN ${canComplete} THEN 'completed' ELSE status END
-        WHERE id = ${enrollment.id}
-      `;
+    const enrollment = enrollmentRows[0] || { id: enrollmentId, completed_lessons: "[]", all_evaluations_completed: false };
+    let existingCompleted: string[] = [];
+    try {
+      existingCompleted = Array.isArray(enrollment.completed_lessons)
+        ? enrollment.completed_lessons
+        : JSON.parse(String(enrollment.completed_lessons || "[]"));
+    } catch {
+      existingCompleted = [];
     }
+
+    const updatedSet = new Set(existingCompleted.map(String));
+    if (markPresent) {
+      updatedSet.add(effectiveLessonId);
+      updatedSet.add(lessonId);
+    } else {
+      updatedSet.delete(effectiveLessonId);
+      updatedSet.delete(lessonId);
+    }
+
+    const threshold = Number(course.attendanceThreshold ?? 80);
+    const canComplete = attendancePercentage >= threshold && Boolean(enrollment.all_evaluations_completed);
+
+    await sql`
+      UPDATE enrollments
+      SET attended_jp = ${attendedJp},
+          attendance_percentage = ${attendancePercentage},
+          completed_lessons = ${JSON.stringify(Array.from(updatedSet))},
+          status = CASE WHEN ${canComplete} THEN 'completed' ELSE status END
+      WHERE id = ${enrollment.id}
+    `;
 
     revalidatePath(`/admin/courses/${courseId}/attendance`);
     revalidatePath(`/learn/${courseId}`);
     return {
       success: true,
       message: markPresent
-        ? "Presensi peserta berhasil ditandai hadir (Manual Override)."
+        ? "Presensi peserta berhasil ditandai Hadir (Manual Override)."
         : "Status kehadiran peserta berhasil dibatalkan.",
     };
   } catch (err: unknown) {
