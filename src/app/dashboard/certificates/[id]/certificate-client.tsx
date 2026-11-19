@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import QRCode from "qrcode";
 import { CertificateView, CertificateData, CertificateTypeConfig } from "@/components/CertificateView";
-import { Download, ExternalLink, ChevronLeft } from "lucide-react";
+import { Download, ExternalLink, ChevronLeft, Loader2 } from "lucide-react";
 import Link from "next/link";
 
 export default function CertificateClient({ data, initialConfig, courseId, verificationToken }: { data: CertificateData, initialConfig?: CertificateTypeConfig, courseId: string, verificationToken: string }) {
@@ -25,20 +25,14 @@ export default function CertificateClient({ data, initialConfig, courseId, verif
             .catch(() => {});
     }, [verificationToken]);
 
-    const handleDownload = async () => {
-        const response = await fetch('/api/pdf', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ type: 'course_certificate', courseId }),
-        });
-        if (!response.ok) return;
-        const blob = await response.blob();
-        const url = URL.createObjectURL(blob);
-        const anchor = document.createElement('a');
-        anchor.href = url;
-        anchor.download = `Sertifikat-${data.courseName}.pdf`;
-        anchor.click();
-        URL.revokeObjectURL(url);
+    const [isDownloading, setIsDownloading] = useState(false);
+    const downloadUrl = `/api/pdf?type=course_certificate&courseId=${encodeURIComponent(courseId)}&verificationToken=${encodeURIComponent(verificationToken)}`;
+    const safeFilename = `Sertifikat_${(data.studentName || 'Peserta').replace(/[/\\?%*:|"<>,\n\r\t]/g, '').trim().replace(/\s+/g, '_')}.pdf`;
+
+    const handleDownload = (e: React.MouseEvent<HTMLAnchorElement>) => {
+        // Biarkan link native berjalan secara langsung
+        setIsDownloading(true);
+        setTimeout(() => setIsDownloading(false), 3000);
     };
 
     return (
@@ -53,12 +47,15 @@ export default function CertificateClient({ data, initialConfig, courseId, verif
                     <Link href={`/verify/certificates/${verificationToken}`} target="_blank" className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-oxford-700 dark:text-oxford-200">
                         <ExternalLink size={16} /> Verifikasi
                     </Link>
-                    <button 
+                    <a 
+                        href={downloadUrl}
+                        download={safeFilename}
                         onClick={handleDownload}
-                        className="flex items-center gap-2 px-5 py-2 font-sans font-bold text-sm bg-gold-500 text-oxford-950 rounded-lg hover:bg-gold-400 transition-all shadow-sm active:scale-95"
+                        className="flex items-center gap-2 px-5 py-2 font-sans font-bold text-sm bg-gold-500 text-oxford-950 rounded-lg hover:bg-gold-400 transition-all shadow-sm active:scale-95 cursor-pointer"
                     >
-                        <Download size={16} /> Unduh PDF
-                    </button>
+                        {isDownloading ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+                        <span>{isDownloading ? "Mengunduh..." : "Unduh PDF"}</span>
+                    </a>
                 </div>
             </div>
 

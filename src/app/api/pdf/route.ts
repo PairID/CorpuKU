@@ -82,17 +82,8 @@ function safeColor(value: unknown) {
   return /^(#[0-9a-f]{3,8}|rgb\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*\))$/i.test(color) ? color : '#000000';
 }
 
-export async function POST(req: Request) {
+async function handleCertificatePdfRequest(data: Record<string, unknown>, req: Request) {
   try {
-    if (!requestOriginIsAllowed(req)) {
-      return NextResponse.json({ error: 'Origin tidak diizinkan.' }, { status: 403 });
-    }
-
-    const body: unknown = await req.json();
-    if (!body || typeof body !== 'object') {
-      return NextResponse.json({ error: 'Payload tidak valid.' }, { status: 400 });
-    }
-    const data = body as Record<string, unknown>;
     const token = typeof data.verificationToken === 'string' && /^[0-9a-f-]{36}$/i.test(data.verificationToken)
       ? data.verificationToken
       : null;
@@ -102,7 +93,7 @@ export async function POST(req: Request) {
 
     const isTest = data.type === 'test_certificate';
     const isWebinar = data.type === 'webinar_certificate';
-    const isCourse = data.type === 'course_certificate';
+    const isCourse = data.type === 'course_certificate' || (!isTest && !isWebinar);
     if (!isTest && !isWebinar && !isCourse) return NextResponse.json({ error: 'Permintaan sertifikat tidak valid.' }, { status: 400 });
 
     if (isTest) {
@@ -190,7 +181,7 @@ export async function POST(req: Request) {
     const page2TemplateUrl = page2Enabled ? allowedAssetUrl(page2?.templateUrl) : null;
     const page2Elements = page2Enabled && Array.isArray(page2?.elements) ? page2.elements as TemplateElement[] : [];
 
-    // Setup filename
+    // Setup filename: bersihkan karakter khusus dan spasi agar kompatibel 100% dengan Android DownloadManager
     const safeCertFilename = isTest
       ? `Uji-Coba-Sertifikat-${certificate.templateType}.pdf`
       : webinarCertificate
@@ -199,7 +190,11 @@ export async function POST(req: Request) {
             certificateNumber: certificate.certificateNumber,
             category: 'Yang Lain',
           })
-        : `Sertifikat-${certificate.activityTitle}.pdf`.replace(/[/\\?%*:|"<>]/g, '_');
+        : (() => {
+            const cleanName = (certificate.participantName || 'Peserta').replace(/[/\\?%*:|"<>,\n\r\t]/g, '').trim().replace(/\s+/g, '_');
+            const cleanTitle = (certificate.activityTitle || 'Pelatihan').replace(/[/\\?%*:|"<>,\n\r\t]/g, '').trim().replace(/\s+/g, '_').slice(0, 40);
+            return `Sertifikat_${cleanName}_${cleanTitle}.pdf`;
+          })();
     const encodedTitle = encodeURIComponent(safeCertFilename);
 
     let courseMeta: {
@@ -270,6 +265,7 @@ export async function POST(req: Request) {
         return new NextResponse(cachedPdf as BodyInit, {
           headers: {
             'Content-Type': 'application/pdf',
+            'Content-Length': String(cachedPdf.length),
             'Content-Disposition': `attachment; filename="${safeCertFilename.replace(/"/g, '')}"; filename*=UTF-8''${encodedTitle}`,
             'Cache-Control': 'private, no-store',
             'X-Content-Type-Options': 'nosniff',
@@ -616,6 +612,7 @@ export async function POST(req: Request) {
     return new NextResponse(pdf as BodyInit, {
       headers: {
         'Content-Type': 'application/pdf',
+        'Content-Length': String(pdf.length),
         'Content-Disposition': `attachment; filename="${safeCertFilename.replace(/"/g, '')}"; filename*=UTF-8''${encodedTitle}`,
         'Cache-Control': 'private, no-store',
         'X-Content-Type-Options': 'nosniff',
@@ -624,6 +621,39 @@ export async function POST(req: Request) {
     });
   } catch (error) {
     console.error('PDF Generation Error:', error);
+    return NextResponse.json({ error: 'Gagal memproses sertifikat PDF.' }, { status: 500 });
+  }
+}
+
+export async function GET(req: Request) {
+  try {
+    const url = new URL(req.url);
+    const data: Record<string, unknown> = {
+      type: url.searchParams.get('type') || 'course_certificate',
+      verificationToken: url.searchParams.get('verificationToken') || url.searchParams.get('token') || undefined,
+      courseId: url.searchParams.get('courseId') || undefined,
+      webinarId: url.searchParams.get('webinarId') || undefined,
+    };
+    return await handleCertificatePdfRequest(data, req);
+  } catch (error) {
+    console.error('PDF GET Error:', error);
+    return NextResponse.json({ error: 'Gagal memproses sertifikat PDF.' }, { status: 500 });
+  }
+}
+
+export async function POST(req: Request) {
+  try {
+    if (!requestOriginIsAllowed(req)) {
+      return NextResponse.json({ error: 'Origin tidak diizinkan.' }, { status: 403 });
+    }
+
+    const body: unknown = await req.json();
+    if (!body || typeof body !== 'object') {
+      return NextResponse.json({ error: 'Payload tidak valid.' }, { status: 400 });
+    }
+    return await handleCertificatePdfRequest(body as Record<string, unknown>, req);
+  } catch (error) {
+    console.error('PDF POST Error:', error);
     return NextResponse.json({ error: 'Gagal memproses sertifikat PDF.' }, { status: 500 });
   }
 }

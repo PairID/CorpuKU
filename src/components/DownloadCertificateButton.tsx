@@ -25,84 +25,58 @@ export function DownloadCertificateButton({
 }: DownloadCertificateButtonProps) {
   const [isDownloading, setIsDownloading] = useState(false);
 
-  const handleDownload = async (e: React.MouseEvent) => {
-    e.preventDefault();
+  const certType =
+    type === "Kursus" || type === "course_certificate"
+      ? "course_certificate"
+      : "webinar_certificate";
+
+  const downloadUrl = `/api/pdf?type=${certType}&verificationToken=${encodeURIComponent(verificationToken)}`;
+  const cleanParticipant = (participantName || "").replace(/[/\\?%*:|"<>,\n\r\t]/g, "").trim().replace(/\s+/g, "_");
+  const cleanNumber = (certificateNumber || verificationToken.slice(0, 8)).replace(/[/\\?%*:|"<>,\n\r\t]/g, "_").trim();
+  const safeFilename = cleanParticipant
+    ? `Sertifikat_${cleanParticipant}_${cleanNumber}.pdf`
+    : `Sertifikat_${cleanNumber}.pdf`;
+
+  const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (isDownloading) return;
-
     setIsDownloading(true);
-    try {
-      const certType =
-        type === "Kursus" || type === "course_certificate"
-          ? "course_certificate"
-          : "webinar_certificate";
-
-      const res = await fetch("/api/pdf", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: certType,
-          verificationToken,
-        }),
-      });
-
-      if (!res.ok) {
-        const errorJson = await res.json().catch(() => null);
-        throw new Error(errorJson?.error || "Gagal mengunduh sertifikat.");
-      }
-
-      const blob = await res.blob();
-      const blobUrl = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = blobUrl;
-      const safeFilename = participantName && certificateNumber
-        ? `${participantName}-${certificateNumber}.pdf`.replace(/[/\\?%*:|"<>]/g, "_")
-        : `Sertifikat-${certificateNumber || verificationToken.slice(0, 8)}.pdf`;
-      a.download = safeFilename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => window.URL.revokeObjectURL(blobUrl), 3000);
-      showToast.success("Sertifikat Berhasil Diunduh", safeFilename);
-    } catch (err: unknown) {
-      console.error(err);
-      showToast.error("Gagal Mengunduh Sertifikat", err instanceof Error ? err.message : "Terjadi kesalahan saat mengunduh sertifikat.");
-    } finally {
-      setIsDownloading(false);
-    }
+    showToast.success("Unduhan Dimulai", "Sertifikat sedang diunduh ke perangkat Anda.");
+    setTimeout(() => setIsDownloading(false), 3000);
   };
 
   if (variant === "button") {
     return (
-      <button
-        onClick={handleDownload}
-        disabled={isDownloading}
+      <a
+        href={downloadUrl}
+        download={safeFilename}
+        onClick={handleClick}
         title="Cetak / Unduh PDF sertifikat resmi"
-        className={`inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white transition-all hover:bg-emerald-700 disabled:opacity-50 ${className}`}
+        className={`inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white transition-all hover:bg-emerald-700 cursor-pointer ${className}`}
       >
         {isDownloading ? (
           <Loader2 size={13} className="animate-spin" />
         ) : (
           <Download size={13} />
         )}
-        <span>{isDownloading ? "Mencetak..." : label}</span>
-      </button>
+        <span>{isDownloading ? "Mengunduh..." : label}</span>
+      </a>
     );
   }
 
   return (
-    <button
-      onClick={handleDownload}
-      disabled={isDownloading}
+    <a
+      href={downloadUrl}
+      download={safeFilename}
+      onClick={handleClick}
       title="Cetak / Unduh PDF sertifikat resmi"
-      className={`inline-flex items-center gap-1 text-xs font-bold text-emerald-600 hover:text-emerald-700 hover:underline disabled:opacity-50 ${className}`}
+      className={`inline-flex items-center gap-1 text-xs font-bold text-emerald-600 hover:text-emerald-700 hover:underline cursor-pointer ${className}`}
     >
       {isDownloading ? (
         <Loader2 size={13} className="animate-spin" />
       ) : (
         <Download size={13} />
       )}
-      <span>{isDownloading ? "Mencetak..." : label}</span>
-    </button>
+      <span>{isDownloading ? "Mengunduh..." : label}</span>
+    </a>
   );
 }

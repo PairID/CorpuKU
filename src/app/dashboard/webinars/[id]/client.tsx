@@ -87,31 +87,22 @@ export default function DashboardClient({ webinar, registration, user }: { webin
     const handleDownloadCert = async () => {
         setIsGeneratingCert(true);
         try {
-            // Reusing existing pdf route. Assuming standard behavior.
-            const response = await fetch('/api/pdf', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    type: 'webinar_certificate',
-                    webinarId: webinar.id,
-                }),
-            });
+            const cleanTitle = (webinar.title || 'Webinar').replace(/[/\\?%*:|"<>,\n\r\t]/g, '').trim().replace(/\s+/g, '_').slice(0, 40);
+            const cleanUser = (user.name || 'Peserta').replace(/[/\\?%*:|"<>,\n\r\t]/g, '').trim().replace(/\s+/g, '_');
+            const safeFilename = `Sertifikat_${cleanUser}_${cleanTitle}.pdf`;
+            const downloadUrl = `/api/pdf?type=webinar_certificate&webinarId=${encodeURIComponent(webinar.id)}`;
 
-            if (!response.ok) throw new Error("Gagal generate PDF");
-            
-            const blob = await response.blob();
-            const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
-            a.href = url;
-            a.download = `Sertifikat-${webinar.title}-${user.name}.pdf`;
+            a.href = downloadUrl;
+            a.download = safeFilename;
             document.body.appendChild(a);
             a.click();
-            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
             toast.success("Sertifikat berhasil diunduh!");
         } catch (error: unknown) {
             toast.error(error instanceof Error ? error.message : "Gagal mengunduh sertifikat");
         } finally {
-            setIsGeneratingCert(false);
+            setTimeout(() => setIsGeneratingCert(false), 2000);
         }
     };
 

@@ -431,32 +431,22 @@ export default function WebinarDetailClient({
   const handleDownloadPdfWithToken = async (cert: IssuedWebinarCertificate) => {
     setIsDownloadingPdf(true);
     try {
-      const response = await fetch('/api/pdf', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: 'webinar_certificate',
-          verificationToken: cert.verificationToken,
-          webinarId: webinar.id,
-        }),
-      });
-      if (!response.ok) {
-        throw new Error('Gagal mengunduh sertifikat PDF.');
-      }
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
+      const cleanName = (cert.participantName || 'Peserta').replace(/[/\\?%*:|"<>,\n\r\t]/g, '').trim().replace(/\s+/g, '_');
+      const cleanNum = (cert.certificateNumber || 'Sertifikat').replace(/[/\\?%*:|"<>,\n\r\t]/g, '_').trim();
+      const safeFilename = `Sertifikat_${cleanName}_${cleanNum}.pdf`;
+      const downloadUrl = `/api/pdf?type=webinar_certificate&verificationToken=${encodeURIComponent(cert.verificationToken)}&webinarId=${encodeURIComponent(webinar.id)}`;
+
       const a = document.createElement('a');
-      a.href = url;
-      a.download = `${cert.participantName}-${cert.certificateNumber}-Yang Lain.pdf`;
+      a.href = downloadUrl;
+      a.download = safeFilename;
       document.body.appendChild(a);
       a.click();
-      window.URL.revokeObjectURL(url);
-      a.remove();
+      document.body.removeChild(a);
       toast.success('Sertifikat PDF berhasil diunduh!');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Gagal mengunduh sertifikat.');
     } finally {
-      setIsDownloadingPdf(false);
+      setTimeout(() => setIsDownloadingPdf(false), 2000);
     }
   };
 
