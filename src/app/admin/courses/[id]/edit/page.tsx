@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Menu, Users, BookOpen, LayoutDashboard, Activity } from "lucide-react";
 import CourseForm, { type CourseFormData, type CourseInstructor } from "../../course-form";
+import CourseStaffManager from "@/components/admin/CourseStaffManager";
 import { getInstructors } from "@/app/actions/users";
 import { getCourseById } from "@/app/actions/courses";
 import { notFound } from "next/navigation";
@@ -58,11 +59,16 @@ export default async function EditCoursePage({ params }: { params: Promise<{ id:
                 </header>
 
                 {/* Content */}
-                <div className="p-6 md:p-8 lg:p-10 max-w-7xl mx-auto w-full">
+                <div className="p-6 md:p-8 lg:p-10 max-w-7xl mx-auto w-full space-y-8">
                     <CourseForm
                         mode="edit"
                         initialData={courseData as unknown as CourseFormData}
                         instructors={instructors as unknown as CourseInstructor[]}
+                    />
+
+                    <CourseStaffManager
+                        courseId={courseData.id}
+                        courseTitle={courseData.title}
                     />
                 </div>
             </main>

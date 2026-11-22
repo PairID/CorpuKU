@@ -5,7 +5,8 @@ import Image from "next/image";
 import { 
     BookOpen, Trophy, Clock, CheckCircle, CheckCircle2, 
     ArrowRight, Star, Crown, Zap, ShieldCheck, 
-    FileText, Award, QrCode, Sparkles, ChevronRight
+    FileText, Award, QrCode, Sparkles, ChevronRight,
+    Radio, BarChart3, Layers, Users
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { getUserGamification } from "@/app/actions/gamification";
@@ -35,6 +36,19 @@ interface EnrolledCourse {
     certificateEnabled?: boolean;
 }
 
+export interface ManagedCourseItem {
+    id: string;
+    title: string;
+    category: string;
+    thumbnailUrl: string | null;
+    startDate: string | null;
+    endDate: string | null;
+    trainingType: string;
+    deliveryMode: string;
+    staffRole: "course_manager" | "class_officer";
+    assignedAt: string;
+}
+
 export interface UserSession {
     user: {
         id: string;
@@ -52,9 +66,11 @@ export interface UserSession {
 
 export default function DashboardClient({
     enrollments,
+    managedCourses = [],
     session
 }: {
     enrollments: EnrolledCourse[],
+    managedCourses?: ManagedCourseItem[],
     session: UserSession
 }) {
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -211,6 +227,71 @@ export default function DashboardClient({
                                 : "Akses katalog kursus atau scan barcode pendaftaran pelatihan kedinasan Anda."}
                         </p>
                     </div>
+
+                    {/* SEKSI KHUSUS: KELAS YANG ANDA KELOLA (TIM PENYELENGGARA & MANEJER KELAS) */}
+                    {managedCourses && managedCourses.length > 0 && (
+                        <div className="mb-10 bg-gradient-to-r from-oxford-900 via-oxford-950 to-oxford-900 border border-gold-500/30 rounded-3xl p-6 sm:p-8 shadow-xl relative overflow-hidden">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-white/10">
+                                <div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-gold-500/20 text-gold-400 border border-gold-500/30">
+                                            TIM PENYELENGGARA KELAS
+                                        </span>
+                                    </div>
+                                    <h3 className="text-xl font-bold text-white mt-1">Pelatihan yang Ditugaskan kepada Anda</h3>
+                                    <p className="text-xs text-oxford-300">
+                                        Anda memiliki hak akses khusus untuk mengelola operasional, presensi, atau materi pada kelas di bawah ini.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {managedCourses.map((mc) => (
+                                    <div
+                                        key={mc.id}
+                                        className="bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl p-5 transition-all flex flex-col justify-between gap-4"
+                                    >
+                                        <div>
+                                            <div className="flex items-center justify-between gap-2 mb-2">
+                                                <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                                                    mc.staffRole === "course_manager"
+                                                        ? "bg-gold-500 text-oxford-950"
+                                                        : "bg-emerald-600 text-white"
+                                                }`}>
+                                                    {mc.staffRole === "course_manager" ? "👑 Manejer Kelas" : "📋 Pengurus Kelas"}
+                                                </span>
+                                                <span className="text-[11px] text-oxford-400">{mc.category}</span>
+                                            </div>
+                                            <h4 className="font-bold text-white text-base line-clamp-2">{mc.title}</h4>
+                                        </div>
+
+                                        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-white/10">
+                                            <Link
+                                                href={`/admin/courses/${mc.id}/attendance`}
+                                                className="px-3 py-1.5 rounded-xl bg-gold-500 hover:bg-gold-400 text-oxford-950 text-xs font-bold transition-colors flex items-center gap-1.5 shadow-xs"
+                                            >
+                                                <Radio size={14} /> Monitor Presensi
+                                            </Link>
+                                            <Link
+                                                href={`/admin/courses/${mc.id}/analytics`}
+                                                className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-colors flex items-center gap-1.5"
+                                            >
+                                                <BarChart3 size={14} /> Analitik
+                                            </Link>
+                                            {mc.staffRole === "course_manager" && (
+                                                <Link
+                                                    href={`/admin/courses/${mc.id}/content`}
+                                                    className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-colors flex items-center gap-1.5"
+                                                >
+                                                    <Layers size={14} /> Materi
+                                                </Link>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
                     {/* HERO ACTION / JOURNEY STEPPER FOR ACTIVE COURSE */}
                     {activeCourse && journey && (

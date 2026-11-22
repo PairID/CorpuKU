@@ -254,7 +254,7 @@ export default function AdminCourseTable({
                                     ) : (
                                         <div className="grid grid-cols-8 gap-1 sm:gap-1.5">
                                             {/* 1. QR Enroll */}
-                                            <div className="relative group flex items-center justify-center">
+                                            <div className="relative group/action flex items-center justify-center">
                                                 <button
                                                     type="button"
                                                     onClick={() => setQrCourse({ id: course.id, title: course.title })}
@@ -272,13 +272,13 @@ export default function AdminCourseTable({
                                                         </span>
                                                     )}
                                                 </button>
-                                                <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-oxford-950 text-white text-[10px] font-bold rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-150 whitespace-nowrap shadow-lg z-30 border border-white/10">
+                                                <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-oxford-950 text-white text-[10px] font-bold rounded-md opacity-0 group-hover/action:opacity-100 transition-opacity duration-150 whitespace-nowrap shadow-lg z-30 border border-white/10">
                                                     QR Masuk
                                                 </span>
                                             </div>
 
                                             {/* 2. QR Attendance */}
-                                            <div className="relative group flex items-center justify-center">
+                                            <div className="relative group/action flex items-center justify-center">
                                                 <button
                                                     type="button"
                                                     onClick={() => setAttendanceQrCourse({ id: course.id, title: course.title })}
@@ -287,13 +287,13 @@ export default function AdminCourseTable({
                                                 >
                                                     <ScanLine size={18} />
                                                 </button>
-                                                <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-oxford-950 text-white text-[10px] font-bold rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-150 whitespace-nowrap shadow-lg z-30 border border-white/10">
+                                                <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-oxford-950 text-white text-[10px] font-bold rounded-md opacity-0 group-hover/action:opacity-100 transition-opacity duration-150 whitespace-nowrap shadow-lg z-30 border border-white/10">
                                                     Presensi
                                                 </span>
                                             </div>
 
                                             {/* 3. Manage Content */}
-                                            <div className="relative group flex items-center justify-center">
+                                            <div className="relative group/action flex items-center justify-center">
                                                 <Link
                                                     href={`${basePath}/courses/${course.id}/content`}
                                                     className="w-full aspect-square p-2 rounded-xl bg-white dark:bg-oxford-900 text-oxford-700 dark:text-oxford-200 hover:bg-indigo-50 dark:hover:bg-oxford-800 hover:text-indigo-600 border border-oxford-200 dark:border-oxford-700 hover:border-indigo-400 transition-all flex items-center justify-center"
@@ -301,13 +301,13 @@ export default function AdminCourseTable({
                                                 >
                                                     <Layers size={18} />
                                                 </Link>
-                                                <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-oxford-950 text-white text-[10px] font-bold rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-150 whitespace-nowrap shadow-lg z-30 border border-white/10">
+                                                <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-oxford-950 text-white text-[10px] font-bold rounded-md opacity-0 group-hover/action:opacity-100 transition-opacity duration-150 whitespace-nowrap shadow-lg z-30 border border-white/10">
                                                     Materi
                                                 </span>
                                             </div>
 
                                             {/* 4. Live Attendance Monitoring */}
-                                            <div className="relative group flex items-center justify-center">
+                                            <div className="relative group/action flex items-center justify-center">
                                                 <Link
                                                     href={`/admin/courses/${course.id}/attendance`}
                                                     className="w-full aspect-square p-2 rounded-xl bg-white dark:bg-oxford-900 text-oxford-700 dark:text-oxford-200 hover:bg-rose-50 dark:hover:bg-oxford-800 hover:text-rose-600 border border-oxford-200 dark:border-oxford-700 hover:border-rose-400 transition-all flex items-center justify-center"
@@ -315,13 +315,13 @@ export default function AdminCourseTable({
                                                 >
                                                     <Radio size={18} />
                                                 </Link>
-                                                <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-oxford-950 text-white text-[10px] font-bold rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-150 whitespace-nowrap shadow-lg z-30 border border-white/10">
+                                                <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-oxford-950 text-white text-[10px] font-bold rounded-md opacity-0 group-hover/action:opacity-100 transition-opacity duration-150 whitespace-nowrap shadow-lg z-30 border border-white/10">
                                                     Monitor
                                                 </span>
                                             </div>
 
                                             {/* 5. Analytics */}
-                                            <div className="relative group flex items-center justify-center">
+                                            <div className="relative group/action flex items-center justify-center">
                                                 <Link
                                                     href={`/admin/courses/${course.id}/analytics`}
                                                     className="w-full aspect-square p-2 rounded-xl bg-white dark:bg-oxford-900 text-oxford-700 dark:text-oxford-200 hover:bg-blue-50 dark:hover:bg-oxford-800 hover:text-blue-600 border border-oxford-200 dark:border-oxford-700 hover:border-blue-400 transition-all flex items-center justify-center"
@@ -329,13 +329,13 @@ export default function AdminCourseTable({
                                                 >
                                                     <BarChart3 size={18} />
                                                 </Link>
-                                                <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-oxford-950 text-white text-[10px] font-bold rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-150 whitespace-nowrap shadow-lg z-30 border border-white/10">
+                                                <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-oxford-950 text-white text-[10px] font-bold rounded-md opacity-0 group-hover/action:opacity-100 transition-opacity duration-150 whitespace-nowrap shadow-lg z-30 border border-white/10">
                                                     Analitik
                                                 </span>
                                             </div>
 
                                             {/* 6. Edit Metadata */}
-                                            <div className="relative group flex items-center justify-center">
+                                            <div className="relative group/action flex items-center justify-center">
                                                 <Link
                                                     href={`${basePath}/courses/${course.id}/edit`}
                                                     className="w-full aspect-square p-2 rounded-xl bg-white dark:bg-oxford-900 text-oxford-700 dark:text-oxford-200 hover:bg-gold-50 dark:hover:bg-oxford-800 hover:text-gold-600 border border-oxford-200 dark:border-oxford-700 hover:border-gold-400 transition-all flex items-center justify-center"
@@ -343,13 +343,13 @@ export default function AdminCourseTable({
                                                 >
                                                     <Edit size={18} />
                                                 </Link>
-                                                <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-oxford-950 text-white text-[10px] font-bold rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-150 whitespace-nowrap shadow-lg z-30 border border-white/10">
+                                                <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-oxford-950 text-white text-[10px] font-bold rounded-md opacity-0 group-hover/action:opacity-100 transition-opacity duration-150 whitespace-nowrap shadow-lg z-30 border border-white/10">
                                                     Edit
                                                 </span>
                                             </div>
 
                                             {/* 7. Certificates */}
-                                            <div className="relative group flex items-center justify-center">
+                                            <div className="relative group/action flex items-center justify-center">
                                                 <Link
                                                     href={`/admin/courses/${course.id}/certificates`}
                                                     className="w-full aspect-square p-2 rounded-xl bg-white dark:bg-oxford-900 text-oxford-700 dark:text-oxford-200 hover:bg-emerald-50 dark:hover:bg-oxford-800 hover:text-emerald-600 border border-oxford-200 dark:border-oxford-700 hover:border-emerald-400 transition-all flex items-center justify-center"
@@ -357,13 +357,13 @@ export default function AdminCourseTable({
                                                 >
                                                     <Award size={18} />
                                                 </Link>
-                                                <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-oxford-950 text-white text-[10px] font-bold rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-150 whitespace-nowrap shadow-lg z-30 border border-white/10">
+                                                <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-oxford-950 text-white text-[10px] font-bold rounded-md opacity-0 group-hover/action:opacity-100 transition-opacity duration-150 whitespace-nowrap shadow-lg z-30 border border-white/10">
                                                     Sertifikat
                                                 </span>
                                             </div>
 
                                             {/* 8. Delete */}
-                                            <div className="relative group flex items-center justify-center">
+                                            <div className="relative group/action flex items-center justify-center">
                                                 <button
                                                     type="button"
                                                     onClick={() => setConfirmDeleteId(course.id)}
@@ -372,7 +372,7 @@ export default function AdminCourseTable({
                                                 >
                                                     <Trash2 size={18} />
                                                 </button>
-                                                <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-crimson-950 text-white text-[10px] font-bold rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-150 whitespace-nowrap shadow-lg z-30 border border-white/10">
+                                                <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-crimson-950 text-white text-[10px] font-bold rounded-md opacity-0 group-hover/action:opacity-100 transition-opacity duration-150 whitespace-nowrap shadow-lg z-30 border border-white/10">
                                                     Hapus
                                                 </span>
                                             </div>

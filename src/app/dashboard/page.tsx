@@ -1,4 +1,5 @@
 import { getUserEnrollments } from "@/app/actions/courses";
+import { getStaffManagedCourses } from "@/app/actions/course-staff";
 import DashboardClient, { UserSession } from "./dashboard-client";
 import { getAuthSession } from "@/app/actions/auth";
 import { redirect } from "next/navigation";
@@ -8,7 +9,10 @@ export default async function StudentDashboardPage() {
     if (!auth) redirect("/login");
     if (auth.user.role === "admin") redirect("/admin");
     if (auth.user.role === "instructor") redirect("/instructor");
-    const enrollments = await getUserEnrollments();
+    const [enrollments, managedCourses] = await Promise.all([
+        getUserEnrollments(),
+        getStaffManagedCourses(auth.user.id),
+    ]);
 
     // Serialize dates and journey attributes for Client Component
     const serializedEnrollments = enrollments.map(e => ({
@@ -39,6 +43,7 @@ export default async function StudentDashboardPage() {
     return (
         <DashboardClient
             enrollments={serializedEnrollments}
+            managedCourses={managedCourses}
             session={{ user: auth.user } as UserSession}
         />
     );
