@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { calculateAttendancePercentage, sanitizeParticipantNip } from "@/lib/classical-training";
 import { issueCourseCertificate } from "@/lib/course-certificates";
 import { hashPassword } from "@/lib/password";
+import { verifyCourseStaffAccess } from "@/lib/admin-guard";
 
 interface SubmitAttendancePayload {
   courseId: string;
@@ -523,7 +524,19 @@ export async function getSessionAttendanceSummary(
   lessonId: string
 ): Promise<SessionAttendanceSummary> {
   try {
-    await requireInstructorSession();
+    const auth = await verifyCourseStaffAccess(courseId);
+    if (!auth.authorized) {
+      return {
+        success: false,
+        error: "Akses ditolak.",
+        totalEnrolled: 0,
+        attendedCount: 0,
+        notAttendedCount: 0,
+        attendancePercentage: 0,
+        attended: [],
+        notAttended: [],
+      };
+    }
 
     if (!courseId || !lessonId) {
       return {
@@ -710,9 +723,11 @@ export async function adminOverrideAttendance(payload: {
   note: string;
 }) {
   try {
-    const session = await requireInstructorSession();
-    const isAdmin = session.user.role === "admin";
     const { courseId, userId, lessonId, markPresent, note } = payload;
+    const auth = await verifyCourseStaffAccess(courseId);
+    if (!auth.authorized) {
+      return { success: false, error: "Anda tidak memiliki akses ke kelas ini." };
+    }
 
     const cleanNote = (note || "").trim();
     if (cleanNote.length < 3) {
@@ -727,9 +742,6 @@ export async function adminOverrideAttendance(payload: {
     `;
     const course = courseRows[0];
     if (!course) return { success: false, error: "Kelas tidak ditemukan." };
-    if (!isAdmin && String(course.instructorId || "") !== session.user.id) {
-      return { success: false, error: "Anda tidak memiliki akses ke kelas ini." };
-    }
 
     const effectiveCourseId = String(course.id);
 
@@ -766,7 +778,7 @@ export async function adminOverrideAttendance(payload: {
     }
 
     await ensureAttendanceOverrideColumns();
-    const actorLabel = session.user.name || session.user.email || session.user.id;
+    const actorLabel = auth.user?.name || auth.user?.email || auth.user?.id || "Staf Kelas";
     const lessonJp = Number(lesson.jp || 2);
 
     if (markPresent) {
@@ -885,8 +897,10 @@ export async function adminOverrideAttendance(payload: {
  */
 export async function getCourseAttendanceLive(courseId: string) {
   try {
-    const session = await requireInstructorSession();
-    const isAdmin = session.user.role === "admin";
+    const auth = await verifyCourseStaffAccess(courseId);
+    if (!auth.authorized) {
+      return { success: false, error: "Anda tidak memiliki akses ke kelas ini." };
+    }
     await ensureAttendanceOverrideColumns();
 
     const courseRows = await sql`
@@ -899,9 +913,6 @@ export async function getCourseAttendanceLive(courseId: string) {
     const course = courseRows[0];
     if (!course) {
       return { success: false, error: "Kelas tidak ditemukan." };
-    }
-    if (!isAdmin && String(course.instructorId || "") !== session.user.id) {
-      return { success: false, error: "Anda tidak memiliki akses ke kelas ini." };
     }
 
     const [lessonRows, participantRows, attendanceRows, evaluationRows] = await Promise.all([
@@ -1030,8 +1041,10 @@ export interface LiveEnrolledParticipant {
  */
 export async function getCourseEnrollmentsLive(courseId: string) {
   try {
-    const session = await requireInstructorSession();
-    const isAdmin = session.user.role === "admin";
+    const auth = await verifyCourseStaffAccess(courseId);
+    if (!auth.authorized) {
+      return { success: false, error: "Anda tidak memiliki akses ke kelas ini." };
+    }
 
     const courseRows = await sql`
       SELECT id, instructor_id AS "instructorId"
@@ -1042,9 +1055,6 @@ export async function getCourseEnrollmentsLive(courseId: string) {
     const course = courseRows[0];
     if (!course) {
       return { success: false, error: "Kelas tidak ditemukan." };
-    }
-    if (!isAdmin && String(course.instructorId || "") !== session.user.id) {
-      return { success: false, error: "Anda tidak memiliki akses ke kelas ini." };
     }
 
     const rows = await sql`
@@ -1097,9 +1107,11 @@ export async function adminUpdateEnrollmentApproval(payload: {
   status: "active" | "rejected";
 }) {
   try {
-    const session = await requireInstructorSession();
-    const isAdmin = session.user.role === "admin";
     const { courseId, enrollmentId, status } = payload;
+    const auth = await verifyCourseStaffAccess(courseId);
+    if (!auth.authorized) {
+      return { success: false, error: "Anda tidak memiliki akses ke kelas ini." };
+    }
 
     const courseRows = await sql`
       SELECT id, instructor_id AS "instructorId", title
@@ -1109,9 +1121,6 @@ export async function adminUpdateEnrollmentApproval(payload: {
     `;
     const course = courseRows[0];
     if (!course) return { success: false, error: "Kelas tidak ditemukan." };
-    if (!isAdmin && String(course.instructorId || "") !== session.user.id) {
-      return { success: false, error: "Anda tidak memiliki akses ke kelas ini." };
-    }
 
     const updated = await sql`
       UPDATE enrollments
@@ -1141,8 +1150,10 @@ export async function adminUpdateEnrollmentApproval(payload: {
  */
 export async function adminApproveAllPendingEnrollments(courseId: string) {
   try {
-    const session = await requireInstructorSession();
-    const isAdmin = session.user.role === "admin";
+    const auth = await verifyCourseStaffAccess(courseId);
+    if (!auth.authorized) {
+      return { success: false, error: "Anda tidak memiliki akses ke kelas ini." };
+    }
 
     const courseRows = await sql`
       SELECT id, instructor_id AS "instructorId"
@@ -1152,9 +1163,6 @@ export async function adminApproveAllPendingEnrollments(courseId: string) {
     `;
     const course = courseRows[0];
     if (!course) return { success: false, error: "Kelas tidak ditemukan." };
-    if (!isAdmin && String(course.instructorId || "") !== session.user.id) {
-      return { success: false, error: "Anda tidak memiliki akses ke kelas ini." };
-    }
 
     const updated = await sql`
       UPDATE enrollments
@@ -1184,8 +1192,10 @@ export async function adminRemoveCourseParticipant(payload: {
 }) {
   try {
     const { courseId, enrollmentId } = payload;
-    const session = await requireInstructorSession();
-    const isAdmin = session.user.role === "admin";
+    const auth = await verifyCourseStaffAccess(courseId);
+    if (!auth.authorized) {
+      return { success: false, error: "Anda tidak memiliki akses ke kelas ini." };
+    }
 
     const courseRows = await sql`
       SELECT id, instructor_id AS "instructorId"
@@ -1195,9 +1205,6 @@ export async function adminRemoveCourseParticipant(payload: {
     `;
     const course = courseRows[0];
     if (!course) return { success: false, error: "Kelas tidak ditemukan." };
-    if (!isAdmin && String(course.instructorId || "") !== session.user.id) {
-      return { success: false, error: "Anda tidak memiliki akses ke kelas ini." };
-    }
 
     const enrollmentRows = await sql`
       SELECT id, user_id AS "userId"
@@ -1262,9 +1269,11 @@ export async function adminUpdateParticipantRegistration(payload: {
   phone?: string;
 }) {
   try {
-    const session = await requireInstructorSession();
-    const isAdmin = session.user.role === "admin";
     const { courseId, userId, name, nip, instansiAsal, jabatan, pangkat, phone } = payload;
+    const auth = await verifyCourseStaffAccess(courseId);
+    if (!auth.authorized) {
+      return { success: false, error: "Anda tidak memiliki akses ke kelas ini." };
+    }
 
     const courseRows = await sql`
       SELECT id, instructor_id AS "instructorId"
@@ -1275,9 +1284,6 @@ export async function adminUpdateParticipantRegistration(payload: {
     const course = courseRows[0];
     if (!course) {
       return { success: false, error: "Kelas tidak ditemukan." };
-    }
-    if (!isAdmin && String(course.instructorId || "") !== session.user.id) {
-      return { success: false, error: "Anda tidak memiliki akses ke kelas ini." };
     }
 
     const enrollmentRows = await sql`
@@ -1346,8 +1352,10 @@ export async function adminUpdateParticipantRegistration(payload: {
  */
 export async function adminSearchCandidateUsers(courseId: string, query: string) {
   try {
-    const session = await requireInstructorSession();
-    const isAdmin = session.user.role === "admin";
+    const auth = await verifyCourseStaffAccess(courseId);
+    if (!auth.authorized) {
+      return { success: false, error: "Akses ditolak.", users: [] };
+    }
 
     const courseRows = await sql`
       SELECT id, instructor_id AS "instructorId"
@@ -1357,9 +1365,6 @@ export async function adminSearchCandidateUsers(courseId: string, query: string)
     `;
     const course = courseRows[0];
     if (!course) return { success: false, error: "Kelas tidak ditemukan.", users: [] };
-    if (!isAdmin && String(course.instructorId || "") !== session.user.id) {
-      return { success: false, error: "Akses ditolak.", users: [] };
-    }
 
     const q = (query || "").trim();
     if (!q || q.length < 2) {
@@ -1416,8 +1421,10 @@ export async function adminEnrollExistingUser(payload: {
 }) {
   try {
     const { courseId, userId } = payload;
-    const session = await requireInstructorSession();
-    const isAdmin = session.user.role === "admin";
+    const auth = await verifyCourseStaffAccess(courseId);
+    if (!auth.authorized) {
+      return { success: false, error: "Anda tidak memiliki akses ke kelas ini." };
+    }
 
     const courseRows = await sql`
       SELECT id, title, category, jp, instructor_id AS "instructorId"
@@ -1427,9 +1434,6 @@ export async function adminEnrollExistingUser(payload: {
     `;
     const course = courseRows[0];
     if (!course) return { success: false, error: "Kelas tidak ditemukan." };
-    if (!isAdmin && String(course.instructorId || "") !== session.user.id) {
-      return { success: false, error: "Anda tidak memiliki akses ke kelas ini." };
-    }
 
     const userRows = await sql`
       SELECT id, name, nip, instansi_asal AS "instansiAsal"
@@ -1489,8 +1493,10 @@ export async function adminCreateAndEnrollUser(payload: {
       return { success: false, error: "NIP/NIK peserta valid wajib diisi minimal 5 digit." };
     }
 
-    const session = await requireInstructorSession();
-    const isAdmin = session.user.role === "admin";
+    const auth = await verifyCourseStaffAccess(courseId);
+    if (!auth.authorized) {
+      return { success: false, error: "Anda tidak memiliki akses ke kelas ini." };
+    }
 
     const courseRows = await sql`
       SELECT id, title, category, jp, instructor_id AS "instructorId"
@@ -1500,9 +1506,6 @@ export async function adminCreateAndEnrollUser(payload: {
     `;
     const course = courseRows[0];
     if (!course) return { success: false, error: "Kelas tidak ditemukan." };
-    if (!isAdmin && String(course.instructorId || "") !== session.user.id) {
-      return { success: false, error: "Anda tidak memiliki akses ke kelas ini." };
-    }
 
     const cleanEmail = (payload.email || "").trim().toLowerCase() || `${cleanNip}@kaltaraprov.go.id`;
     const now = new Date().toISOString();

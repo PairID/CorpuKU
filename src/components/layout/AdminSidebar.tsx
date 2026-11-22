@@ -54,12 +54,13 @@ export function AdminSidebar({ activePage, isOpen, onClose }: AdminSidebarProps)
             icon: <Video size={20} />, 
             active: activePage === "webinars" 
         },
-        {
-            href: "/admin/learning-paths",
-            label: "Learning Paths",
-            icon: <GitBranch size={20} />,
-            active: activePage === "paths"
-        },
+        // ponytail: Dinonaktifkan sementara sampai konsep learning path matang
+        // {
+        //     href: "/admin/learning-paths",
+        //     label: "Learning Paths",
+        //     icon: <GitBranch size={20} />,
+        //     active: activePage === "paths"
+        // },
         { 
             href: "/admin/users", 
             label: "Pengguna", 

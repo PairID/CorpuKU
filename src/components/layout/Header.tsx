@@ -130,7 +130,8 @@ export function Header() {
     const topNavItems = [
         { href: "/search", label: "Kursus", icon: <Compass size={18} /> },
         { href: "/webinars", label: "Webinar", icon: <Video size={18} /> },
-        { href: "/paths", label: "Learning Paths", icon: <GitBranch size={18} /> },
+        // ponytail: Dinonaktifkan sementara sampai konsep learning path matang
+        // { href: "/paths", label: "Learning Paths", icon: <GitBranch size={18} /> },
         { href: "/knowledge", label: "Pusat Pengetahuan", icon: <FileText size={18} /> },
         { href: "/news", label: "Berita & Pers", icon: <Newspaper size={18} /> },
     ];
@@ -138,7 +139,8 @@ export function Header() {
     // Navigasi Side Bar Siswa
     const studentSidebarItems = [
         { href: "/dashboard", label: "Kelas Saya", icon: <BookOpen size={18} /> },
-        { href: "/dashboard/learning-paths", label: "Learning Paths", icon: <GitBranch size={18} /> },
+        // ponytail: Dinonaktifkan sementara sampai konsep learning path matang
+        // { href: "/dashboard/learning-paths", label: "Learning Paths", icon: <GitBranch size={18} /> },
         { href: "/dashboard/bangkom", label: "Progres Bangkom", icon: <Activity size={18} /> },
         { href: "/dashboard/certificates", label: "Sertifikat", icon: <Trophy size={18} /> },
         { href: "/search", label: "Cari Kelas", icon: <Search size={18} /> },
@@ -151,7 +153,8 @@ export function Header() {
         { href: "/admin/courses/creator", label: "Course Creator (AI)", icon: <Sparkles size={18} className="text-gold-400" /> },
         { href: "/admin/regulations", label: "Bank Data Regulasi", icon: <Database size={18} className="text-cyan-400" /> },
         { href: "/admin/webinars", label: "Webinar", icon: <Video size={18} /> },
-        { href: "/admin/learning-paths", label: "Learning Paths", icon: <GitBranch size={18} /> },
+        // ponytail: Dinonaktifkan sementara sampai konsep learning path matang
+        // { href: "/admin/learning-paths", label: "Learning Paths", icon: <GitBranch size={18} /> },
         { href: "/admin/users", label: "Pengguna", icon: <Users size={18} /> },
         { href: "/admin/bangkom", label: "Lacak Bangkom", icon: <Activity size={18} /> },
         { href: "/admin/analytics", label: "Analitik", icon: <Activity size={18} /> },
@@ -180,9 +183,10 @@ export function Header() {
                     <Link href="/webinars" className="text-sm lg:text-base font-sans font-medium text-foreground hover:text-gold-500 transition-colors whitespace-nowrap">
                         Webinar
                     </Link>
-                    <Link href="/paths" className="text-sm lg:text-base font-sans font-medium text-foreground hover:text-gold-500 transition-colors whitespace-nowrap">
+                    {/* ponytail: Dinonaktifkan sementara sampai konsep learning path matang */}
+                    {/* <Link href="/paths" className="text-sm lg:text-base font-sans font-medium text-foreground hover:text-gold-500 transition-colors whitespace-nowrap">
                         Learning Paths
-                    </Link>
+                    </Link> */}
                     <Link href="/knowledge" className="text-sm lg:text-base font-sans font-medium text-foreground hover:text-gold-500 transition-colors whitespace-nowrap">
                         Pusat Pengetahuan
                     </Link>

@@ -1,14 +1,44 @@
 import { sql } from "@/lib/db";
-import { requireInstructorSession } from "@/app/actions/auth";
+import { getAuthSession } from "@/app/actions/auth";
 
 export async function requireCourseEditor(courseId: string) {
-  const session = await requireInstructorSession();
-  if (session.user.role === "admin") return session;
-  const rows = await sql`SELECT instructor_id AS "instructorId" FROM courses WHERE id = ${courseId}`;
-  if (!rows[0] || String(rows[0].instructorId || "") !== session.user.id) {
-    throw new Error("Anda tidak memiliki akses untuk mengubah kursus ini.");
+  const session = await getAuthSession();
+  if (!session?.user) {
+    throw new Error("Unauthorized: Login required");
   }
-  return session;
+
+  if (session.user.role === "admin") return session;
+
+  const effectiveCourseId = String(courseId);
+
+  // 1. Cek apakah instruktur kursus
+  const rows = await sql`
+    SELECT instructor_id AS "instructorId" 
+    FROM courses 
+    WHERE id = ${effectiveCourseId} 
+       OR id = ${effectiveCourseId.replace(/^course_/, "")} 
+       OR id = ${"course_" + effectiveCourseId}
+    LIMIT 1
+  `;
+  if (rows[0] && String(rows[0].instructorId || "") === session.user.id) {
+    return session;
+  }
+
+  // 2. Cek apakah ditugaskan sebagai Manejer Kelas atau Pengurus Kelas
+  const assignments = await sql`
+    SELECT role FROM course_staff_assignments
+    WHERE (course_id = ${effectiveCourseId} 
+        OR course_id = ${effectiveCourseId.replace(/^course_/, "")} 
+        OR course_id = ${"course_" + effectiveCourseId})
+      AND user_id = ${session.user.id}
+    LIMIT 1
+  `;
+
+  if (assignments.length > 0) {
+    return session;
+  }
+
+  throw new Error("Anda tidak memiliki akses untuk mengelola kursus ini.");
 }
 
 export async function requireModuleEditor(moduleId: string) {

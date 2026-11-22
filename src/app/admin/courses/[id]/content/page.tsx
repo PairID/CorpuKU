@@ -2,11 +2,17 @@ import Link from "next/link";
 import { BookOpen, ChevronLeft, LayoutDashboard, Users, Activity, Radio } from "lucide-react";
 import { getCourseById } from "@/app/actions/courses";
 import { getCourseContentForBuilder } from "@/app/actions/builder";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
+import { verifyCourseStaffAccess } from "@/lib/admin-guard";
 import ContentBuilder, { type CourseContentModule } from "./content-builder";
 
 export default async function CourseContentPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = await params;
+
+    const auth = await verifyCourseStaffAccess(id, ["course_manager"]);
+    if (!auth.authorized) {
+        redirect("/dashboard");
+    }
 
     const courseData = await getCourseById(id);
     if (!courseData) {

@@ -3,6 +3,7 @@
 import { sql } from "@/lib/db";
 import { requireInstructorSession } from "./auth";
 import { calculateAttendancePercentage } from "@/lib/classical-training";
+import { verifyCourseStaffAccess } from "@/lib/admin-guard";
 
 export interface CourseAnalyticsData {
   course: {
@@ -83,7 +84,10 @@ export interface CourseAnalyticsData {
 
 export async function getCourseAnalytics(courseId: string): Promise<{ success: boolean; data?: CourseAnalyticsData; error?: string }> {
   try {
-    const session = await requireInstructorSession();
+    const auth = await verifyCourseStaffAccess(courseId);
+    if (!auth.authorized) {
+      return { success: false, error: "Anda tidak memiliki wewenang mengakses analitik kursus ini." };
+    }
     if (!/^[A-Za-z0-9_-]{1,255}$/.test(courseId)) {
       return { success: false, error: "ID Kursus tidak valid." };
     }
@@ -108,11 +112,6 @@ export async function getCourseAnalytics(courseId: string): Promise<{ success: b
     const course = courseRows[0];
     if (!course) {
       return { success: false, error: "Kursus tidak ditemukan." };
-    }
-
-    // Otorisasi instruktur (admin boleh melihat semua, instruktur hanya kursus miliknya)
-    if (session.user.role === "instructor" && String(course.instructorId) !== session.user.id) {
-      return { success: false, error: "Anda tidak memiliki wewenang mengakses analitik kursus ini." };
     }
 
     // 2. Ambil Sesi / Materi dengan JP

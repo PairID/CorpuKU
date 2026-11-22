@@ -22,7 +22,8 @@ export function UserSidebar({ isOpen, onClose }: UserSidebarProps) {
 
     const menuItems = [
         { href: "/dashboard", label: "Kelas Saya", icon: <BookOpen size={20} /> },
-        { href: "/dashboard/learning-paths", label: "Learning Paths", icon: <GitBranch size={20} /> },
+        // ponytail: Dinonaktifkan sementara sampai konsep learning path matang
+        // { href: "/dashboard/learning-paths", label: "Learning Paths", icon: <GitBranch size={20} /> },
         { href: "/dashboard/bangkom", label: "Progres Bangkom", icon: <Activity size={20} /> },
         { href: "/dashboard/certificates", label: "Sertifikat", icon: <Trophy size={20} /> },
         { href: "/search", label: "Cari Kelas", icon: <Search size={20} /> },

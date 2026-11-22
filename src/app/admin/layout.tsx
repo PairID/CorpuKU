@@ -1,8 +1,8 @@
-import { requireAdmin } from "@/lib/admin-guard";
+import { requireAdminOrStaff } from "@/lib/admin-guard";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-    // This will redirect non-admin users before rendering any admin page
-    await requireAdmin();
+    // Memastikan hanya Admin global, Instruktur, atau Staf Kelas terdaftar yang dapat mengakses area admin
+    await requireAdminOrStaff();
 
     return <>{children}</>;
 }
