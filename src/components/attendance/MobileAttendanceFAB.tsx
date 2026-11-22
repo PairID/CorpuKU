@@ -159,25 +159,17 @@ export default function MobileAttendanceFAB({
   };
 
   // Start camera & cross-browser jsQR frame loop (works on iOS Safari/Brave, Android, Desktop)
-  useEffect(() => {
-    if (!isOpen || activeTab !== "camera") {
-      stopCamera();
-      scanLockRef.current = false;
-      return;
-    }
+  const startCamera = async () => {
+    setCameraError(null);
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error("Kamera tidak didukung pada browser ini atau koneksi bukan HTTPS.");
+      }
 
-    let isMounted = true;
-    let intervalId: ReturnType<typeof setInterval> | null = null;
-    scanLockRef.current = false;
-
-    const startCamera = async () => {
-      setCameraError(null);
+      // Two-step camera stream acquisition: ideal environment (mobile) -> fallback to basic video (laptop/webcam)
+      let stream: MediaStream;
       try {
-        if (!navigator.mediaDevices?.getUserMedia) {
-          throw new Error("Kamera tidak didukung pada browser ini.");
-        }
-
-        const stream = await navigator.mediaDevices.getUserMedia({
+        stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: { ideal: "environment" },
             width: { ideal: 1280 },
@@ -185,55 +177,90 @@ export default function MobileAttendanceFAB({
           },
           audio: false,
         });
-
-        if (!isMounted) {
-          stream.getTracks().forEach((t) => t.stop());
-          return;
-        }
-
-        streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.setAttribute("playsinline", "true");
-          await videoRef.current.play().catch(() => {});
-        }
-
-        intervalId = setInterval(() => {
-          const video = videoRef.current;
-          if (!video || !streamRef.current || scanLockRef.current) return;
-          if (video.readyState < 2 || video.videoWidth === 0 || video.videoHeight === 0) return;
-
-          const canvas = canvasRef.current || document.createElement("canvas");
-          canvasRef.current = canvas;
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
-          const ctx = canvas.getContext("2d", { willReadFrequently: true });
-          if (!ctx) return;
-
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          const decoded = jsQR(imageData.data, imageData.width, imageData.height, {
-            inversionAttempts: "dontInvert",
+      } catch (firstErr) {
+        // Fallback for laptops/webcams where facingMode 'environment' or resolution fails
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: false,
           });
-
-          if (decoded?.data) {
-            if (intervalId) clearInterval(intervalId);
-            void handleQrScanned(decoded.data);
-          }
-        }, 250);
-      } catch (err: unknown) {
-        if (isMounted) {
-          const msg = err instanceof Error ? err.message : "Tidak dapat mengakses kamera.";
-          setCameraError(msg);
+        } catch {
+          throw firstErr;
         }
       }
-    };
 
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.setAttribute("playsinline", "true");
+        await videoRef.current.play().catch(() => {});
+      }
+
+      if (intervalIdRef.current) clearInterval(intervalIdRef.current);
+      intervalIdRef.current = setInterval(() => {
+        const video = videoRef.current;
+        if (!video || !streamRef.current || scanLockRef.current) return;
+        if (video.readyState < 2 || video.videoWidth === 0 || video.videoHeight === 0) return;
+
+        const canvas = canvasRef.current || document.createElement("canvas");
+        canvasRef.current = canvas;
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+        if (!ctx) return;
+
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const decoded = jsQR(imageData.data, imageData.width, imageData.height, {
+          inversionAttempts: "dontInvert",
+        });
+
+        if (decoded?.data) {
+          if (intervalIdRef.current) clearInterval(intervalIdRef.current);
+          void handleQrScanned(decoded.data);
+        }
+      }, 250);
+    } catch (err: unknown) {
+      let friendlyMsg = "Tidak dapat mengakses kamera.";
+      const errorName = err instanceof DOMException ? err.name : (err as { name?: string })?.name;
+
+      if (errorName === "NotAllowedError" || errorName === "PermissionDeniedError") {
+        friendlyMsg =
+          "Izin kamera diblokir oleh browser atau sistem operasi laptop. Pop-up tidak muncul karena izin sebelumnya pernah ditolak atau akses kamera aplikasi dinonaktifkan di Pengaturan Windows/Mac.";
+      } else if (errorName === "NotFoundError" || errorName === "DevicesNotFoundError") {
+        friendlyMsg = "Webcam atau perangkat kamera tidak terdeteksi pada laptop ini.";
+      } else if (errorName === "NotReadableError" || errorName === "TrackStartError") {
+        friendlyMsg =
+          "Kamera laptop sedang dipakai aplikasi lain (seperti Zoom, Teams, Google Meet, atau Camera App). Harap tutup aplikasi tersebut.";
+      } else if (err instanceof Error && err.message) {
+        friendlyMsg = err.message;
+      }
+
+      setCameraError(friendlyMsg);
+    }
+  };
+
+  const intervalIdRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (!isOpen || activeTab !== "camera") {
+      stopCamera();
+      if (intervalIdRef.current) {
+        clearInterval(intervalIdRef.current);
+        intervalIdRef.current = null;
+      }
+      scanLockRef.current = false;
+      return;
+    }
+
+    scanLockRef.current = false;
     void startCamera();
 
     return () => {
-      isMounted = false;
-      if (intervalId) clearInterval(intervalId);
+      if (intervalIdRef.current) {
+        clearInterval(intervalIdRef.current);
+        intervalIdRef.current = null;
+      }
       stopCamera();
     };
   }, [isOpen, activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -448,17 +475,29 @@ export default function MobileAttendanceFAB({
                     </div>
                   )}
                   {cameraError && (
-                    <div className="absolute inset-0 bg-oxford-950/90 p-4 flex flex-col items-center justify-center text-center text-xs text-oxford-300">
-                      <AlertTriangle size={28} className="text-amber-400 mb-2" />
-                      <p className="font-bold text-white mb-1">Akses Kamera Terkendala</p>
-                      <p className="mb-3">{cameraError}</p>
-                      <button
-                        type="button"
-                        onClick={() => setActiveTab("code")}
-                        className="px-4 py-2 bg-gold-500 text-oxford-950 font-bold rounded-lg text-xs"
-                      >
-                        Beralih ke Input Kode Presensi Manual
-                      </button>
+                    <div className="absolute inset-0 bg-oxford-950/95 p-4 flex flex-col items-center justify-center text-center text-xs text-oxford-300 overflow-y-auto">
+                      <AlertTriangle size={28} className="text-amber-400 mb-2 shrink-0" />
+                      <p className="font-bold text-white mb-1.5 text-sm">Akses Kamera Terkendala</p>
+                      <p className="mb-3 text-[11px] leading-relaxed text-oxford-300 max-w-xs">{cameraError}</p>
+                      <div className="flex flex-col sm:flex-row gap-2 w-full max-w-xs">
+                        <button
+                          type="button"
+                          onClick={() => void startCamera()}
+                          className="flex-1 py-2 px-3 bg-oxford-800 hover:bg-oxford-700 text-gold-400 border border-gold-500/30 font-bold rounded-xl text-xs transition-colors"
+                        >
+                          Coba Akses Lagi
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setActiveTab("code")}
+                          className="flex-1 py-2 px-3 bg-gold-500 hover:bg-gold-400 text-oxford-950 font-bold rounded-xl text-xs transition-colors"
+                        >
+                          Gunakan Kode Saja
+                        </button>
+                      </div>
+                      <p className="text-[10px] text-oxford-400 mt-3 max-w-xs">
+                        Tip Laptop: Klik ikon 🔒/slider di sebelah kiri alamat URL browser &rarr; ubah Kamera menjadi <strong>Izinkan (Allow)</strong>.
+                      </p>
                     </div>
                   )}
                 </div>
