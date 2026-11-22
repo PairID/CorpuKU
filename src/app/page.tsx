@@ -24,6 +24,8 @@ export default async function HomePage() {
       title: c.title,
       description: c.description,
       category: c.category,
+      trainingType: c.trainingType || null,
+      deliveryMode: c.deliveryMode || null,
       thumbnailUrl: c.thumbnailUrl,
       accessMode: c.accessMode || "open",
       startDate: safeDate(c.startDate),

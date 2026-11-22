@@ -76,6 +76,8 @@ interface CourseProp {
   title: string;
   description: string | null;
   category: string;
+  trainingType?: string | null;
+  deliveryMode?: string | null;
   thumbnailUrl: string | null;
   accessMode?: "open" | "passcode" | "approval";
   startDate: string | null;
@@ -83,15 +85,61 @@ interface CourseProp {
   createdAt: string | null;
 }
 
-const CATEGORY_TO_TYPE: Record<string, { type: string, color: string }> = {
-  "Kepemimpinan": { type: "Diklat Struktural", color: "bg-oxford-800" },
-  "Manajemen Pemerintahan": { type: "Diklat Struktural", color: "bg-oxford-900" },
-  "Teknologi Informasi": { type: "Diklat Teknis", color: "bg-oxford-700" },
-  "Data & Analitik": { type: "Workshop", color: "bg-crimson-700" },
-  "Pengadaan Barang & Jasa": { type: "Bimtek", color: "bg-gold-600" },
-  "Keuangan Daerah": { type: "Bimtek", color: "bg-crimson-600" },
-  "default": { type: "Lainnya", color: "bg-oxford-600" }
-};
+// Menentukan label tipe dan warna banner jadwal pelatihan secara dinamis dari data riil kursus
+function getCourseScheduleBadge(course: CourseProp): { type: string; color: string } {
+  const titleLower = (course.title || "").toLowerCase();
+  const trType = (course.trainingType || "").toLowerCase();
+
+  // 1. Deteksi tipe berdasarkan nama kegiatan riil pada judul
+  if (titleLower.startsWith("bimbingan teknis") || titleLower.includes("bimtek")) {
+    return { type: "Bimbingan Teknis", color: "bg-gold-600" };
+  }
+  if (titleLower.startsWith("workshop") || titleLower.includes(" lokakarya")) {
+    return { type: "Workshop", color: "bg-crimson-700" };
+  }
+  if (titleLower.startsWith("sosialisasi")) {
+    return { type: "Sosialisasi", color: "bg-emerald-700" };
+  }
+  if (titleLower.includes("latsar cpns") || titleLower.startsWith("pelatihan dasar")) {
+    return { type: "Latsar CPNS", color: "bg-oxford-900" };
+  }
+  if (titleLower.includes("orientasi pppk") || titleLower.startsWith("orientasi")) {
+    return { type: "Orientasi PPPK", color: "bg-oxford-800" };
+  }
+  if (titleLower.includes("kepemimpinan") || titleLower.includes("pka") || titleLower.includes("pkp") || titleLower.includes("pkm")) {
+    return { type: "Pelatihan Kepemimpinan", color: "bg-oxford-800" };
+  }
+
+  // 2. Deteksi dari konfigurasi trainingType database
+  if (trType.includes("facilitation") || trType.includes("fasilitasi")) {
+    return { type: "Fasilitasi OPD", color: "bg-gold-600" };
+  }
+  if (trType.includes("klasikal") || trType.includes("classical")) {
+    return { type: "Pelatihan Klasikal", color: "bg-oxford-800" };
+  }
+  if (trType.includes("fungsional")) {
+    return { type: "Pelatihan Fungsional", color: "bg-oxford-700" };
+  }
+  if (trType.includes("teknis")) {
+    return { type: "Pelatihan Teknis", color: "bg-oxford-700" };
+  }
+
+  // 3. Fallback ke kategori asli kursus
+  const categoryColorMap: Record<string, string> = {
+    "Teknologi Informasi": "bg-oxford-700",
+    "Data & Analitik": "bg-crimson-700",
+    "Pengadaan Barang & Jasa": "bg-gold-600",
+    "Keuangan Daerah": "bg-crimson-600",
+    "Manajemen Pemerintahan": "bg-oxford-900",
+    "Kepemimpinan": "bg-oxford-800",
+    "Pelayanan Publik": "bg-emerald-700",
+  };
+
+  return {
+    type: course.category || "Pelatihan",
+    color: categoryColorMap[course.category] || "bg-oxford-800",
+  };
+}
 
 export default function HomeClient({ courses, featuredWebinar }: { courses: CourseProp[]; featuredWebinar?: Webinar | null }) {
   const isWebinarLive = Boolean(
@@ -111,7 +159,7 @@ export default function HomeClient({ courses, featuredWebinar }: { courses: Cour
     if (!course.startDate) return [];
     const scheduleDate = new Date(course.startDate);
     const month = MONTHS[scheduleDate.getMonth()];
-    const mapping = CATEGORY_TO_TYPE[course.category] || CATEGORY_TO_TYPE["default"];
+    const badge = getCourseScheduleBadge(course);
     const endDate = course.endDate ? new Date(course.endDate) : null;
     const dateFormatter = new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", year: "numeric" });
     const dateStr = endDate
@@ -122,8 +170,8 @@ export default function HomeClient({ courses, featuredWebinar }: { courses: Cour
       ...course,
       month,
       date: dateStr,
-      type: mapping.type,
-      color: mapping.color
+      type: badge.type,
+      color: badge.color
     };
   });
   const availableMonths = MONTHS.filter((month) => scheduledData.some((course) => course.month === month));
