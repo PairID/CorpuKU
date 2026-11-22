@@ -14,6 +14,7 @@ export default function GlobalError({
     if (
       msg.includes("ChunkLoadError") ||
       msg.includes("Loading chunk") ||
+      msg.includes("Failed to load chunk") ||
       msg.includes("Failed to fetch dynamically imported module")
     ) {
       if (typeof window !== "undefined") {

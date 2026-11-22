@@ -15,6 +15,7 @@ export default function ErrorBoundary({
   const isChunkError =
     msg.includes("ChunkLoadError") ||
     msg.includes("Loading chunk") ||
+    msg.includes("Failed to load chunk") ||
     msg.includes("Failed to fetch dynamically imported module");
 
   useEffect(() => {
