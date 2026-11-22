@@ -354,12 +354,18 @@ export default function LearnClient({ course, courseContent, session, enrollment
     const nextLesson = allLessons[currentLessonIndex + 1];
     const prevLesson = allLessons[currentLessonIndex - 1];
 
-    // Extract YouTube ID for embed
+    // Extract YouTube ID for embed (mendukung: watch?v=, embed/, live/, shorts/, youtu.be/)
     const getYoutubeEmbedUrl = (url: string | null) => {
         if (!url) return null;
-        const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
-        const match = url.match(regExp);
-        return (match && match[2].length === 11) ? `https://www.youtube.com/embed/${match[2]}` : null;
+        const cleanUrl = url.trim();
+        const match = cleanUrl.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|live\/|shorts\/|v\/))([a-zA-Z0-9_-]{11})/);
+        if (match && match[1]) {
+            return `https://www.youtube.com/embed/${match[1]}?rel=0`;
+        }
+        if (cleanUrl.includes("youtube.com/embed/")) {
+            return cleanUrl;
+        }
+        return null;
     };
 
     const getLessonTypeLabel = (type: string) => {
@@ -1232,9 +1238,13 @@ export default function LearnClient({ course, courseContent, session, enrollment
                                                     allowFullScreen
                                                 ></iframe>
                                             ) : (
-                                                <div className="absolute inset-0 flex items-center justify-center text-white font-sans">
-                                                    Video format not supported in demo.
-                                                </div>
+                                                <video
+                                                    src={activeLesson.videoUrl}
+                                                    controls
+                                                    className="absolute top-0 left-0 w-full h-full object-contain"
+                                                >
+                                                    Peramban Anda tidak mendukung pemutar video.
+                                                </video>
                                             )}
                                         </div>
                                     )}

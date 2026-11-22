@@ -56,7 +56,19 @@ interface GeneratedQuestion {
     options: Array<{ optionText: string; isCorrect: boolean }>;
 }
 
-export default function ContentBuilder({ courseId, initialData, initialDocumentationUrl = "" }: { courseId: string; initialData: CourseContentModule[]; initialDocumentationUrl?: string }) {
+export default function ContentBuilder({ 
+    courseId, 
+    initialData, 
+    initialDocumentationUrl = "",
+    courseTitle,
+    trainingType
+}: { 
+    courseId: string; 
+    initialData: CourseContentModule[]; 
+    initialDocumentationUrl?: string;
+    courseTitle?: string;
+    trainingType?: string;
+}) {
     const [isSaving, setIsSaving] = useState(false);
     const [documentationUrl, setDocumentationUrl] = useState(initialDocumentationUrl);
     const [isSavingDoc, setIsSavingDoc] = useState(false);

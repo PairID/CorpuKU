@@ -1,7 +1,7 @@
 "use client";
 
-import { Menu, Activity, Sparkles, PlusCircle } from "lucide-react";
-import { useState, useEffect } from "react";
+import { Menu, Activity, PlusCircle } from "lucide-react";
+import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { getCoursesWithStats } from "@/app/actions/courses";
 import AdminCourseControls, { type AdminCourse } from "./admin-course-controls";
@@ -44,39 +44,30 @@ export default function AdminCourses() {
 
             {/* MAIN CONTENT */}
             <main className="flex-1 flex flex-col min-h-screen min-w-0 overflow-hidden relative">
+
                 {/* Mobile Header Bar */}
-                <header className="lg:hidden sticky top-0 z-30 flex items-center justify-between px-4 py-3 bg-white/90 dark:bg-[#161B2A]/90 backdrop-blur-md border-b border-oxford-200 dark:border-oxford-800 shadow-xs">
+                <div className="lg:hidden flex items-center justify-between p-4 bg-white dark:bg-[#161B2A] border-b border-oxford-200 dark:border-oxford-800 sticky top-0 z-30 shadow-sm">
                     <div className="flex items-center gap-3">
                         <button
                             type="button"
                             onClick={() => setSidebarOpen(true)}
-                            className="p-2 -ml-1 text-oxford-700 dark:text-oxford-200 hover:bg-oxford-100 dark:hover:bg-oxford-800 rounded-xl transition-colors cursor-pointer"
-                            aria-label="Buka Menu Sidebar"
+                            className="p-2 text-oxford-700 dark:text-oxford-200 hover:bg-oxford-100 dark:hover:bg-oxford-800 rounded-lg transition-colors"
+                            aria-label="Buka Menu Navigasi"
                         >
                             <Menu size={22} />
                         </button>
-                        <div>
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-gold-600 block">CorpuKU Admin</span>
-                            <h1 className="text-sm sm:text-base font-bold text-oxford-900 dark:text-white leading-tight">Kelola Kursus</h1>
-                        </div>
+                        <span className="font-bold text-oxford-900 dark:text-white text-base">
+                            Manajemen <span className="text-gold-500 font-medium text-xs">Kursus</span>
+                        </span>
                     </div>
-                    <div className="flex items-center gap-1.5">
-                        <Link
-                            href="/admin/courses/creator"
-                            className="p-2 bg-oxford-900 text-gold-400 border border-gold-500/30 rounded-lg hover:bg-oxford-800 text-xs font-bold transition-all shadow-xs"
-                            title="AI Course Creator"
-                        >
-                            <Sparkles size={16} />
-                        </Link>
-                        <Link
-                            href="/admin/courses/new"
-                            className="p-2 bg-gold-500 text-oxford-950 rounded-lg hover:bg-gold-400 text-xs font-bold transition-colors shadow-xs"
-                            title="Buat Kursus Baru"
-                        >
-                            <PlusCircle size={16} />
-                        </Link>
-                    </div>
-                </header>
+                    <Link
+                        href="/admin/courses/new"
+                        className="p-2 text-gold-600 hover:bg-gold-50 dark:hover:bg-oxford-800 rounded-lg transition-colors"
+                        title="Buat Kursus Baru"
+                    >
+                        <PlusCircle size={20} />
+                    </Link>
+                </div>
 
                 {/* Content */}
                 <div className="p-4 sm:p-6 md:p-8 lg:p-10 max-w-7xl mx-auto w-full overflow-y-auto">
@@ -85,10 +76,17 @@ export default function AdminCourses() {
                             <Activity className="animate-spin text-gold-500" size={32} />
                         </div>
                     ) : (
-                        <AdminCourseControls courses={courses} />
+                        <Suspense fallback={
+                            <div className="flex items-center justify-center h-64">
+                                <Activity className="animate-spin text-gold-500" size={32} />
+                            </div>
+                        }>
+                            <AdminCourseControls courses={courses} />
+                        </Suspense>
                     )}
                 </div>
             </main>
+
         </div>
     );
 }

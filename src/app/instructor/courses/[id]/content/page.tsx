@@ -40,7 +40,7 @@ export default async function InstructorCourseContentPage({ params }: { params: 
             </aside>
 
             {/* MAIN CONTENT */}
-            <main className="flex-1 flex flex-col min-h-screen max-w-5xl">
+            <main className="flex-1 flex flex-col min-h-screen w-full min-w-0">
                 <header className="h-20 bg-white dark:bg-[#161B2A] border-b border-oxford-200 dark:border-oxford-700 flex items-center px-6 sticky top-0 z-30">
                     <div className="flex items-center gap-4">
                         <Link href="/instructor" className="text-oxford-500 dark:text-oxford-400 hover:text-oxford-900 dark:hover:text-white transition-colors">
