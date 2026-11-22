@@ -140,6 +140,7 @@ function ProfileTab({ user, storedUser, onNotify }: {
         jabatan: storedUser?.jabatan || "",
         tempatLahir: storedUser?.tempatLahir || "",
         tanggalLahir: storedUser?.tanggalLahir || "",
+        phone: (storedUser as any)?.phone || (user as any)?.phone || "",
     });
     const [saving, setSaving] = useState(false);
 
@@ -215,6 +216,7 @@ function ProfileTab({ user, storedUser, onNotify }: {
             jabatan: formData.jabatan,
             tempatLahir: formData.tempatLahir,
             tanggalLahir: formData.tanggalLahir,
+            phone: formData.phone,
             image: avatarPreview || undefined,
         });
 
@@ -414,6 +416,20 @@ function ProfileTab({ user, storedUser, onNotify }: {
                                 Format sertifikat: <span className="text-gold-600 dark:text-gold-400 font-bold">{toIndonesianDate(toIsoDate(formData.tanggalLahir)) || formData.tanggalLahir}</span>
                             </p>
                         )}
+                    </div>
+                    <div>
+                        <label className="block text-sm font-bold text-oxford-900 dark:text-white mb-2" htmlFor="phone">Nomor WhatsApp / HP</label>
+                        <input
+                            type="tel"
+                            id="phone"
+                            name="phone"
+                            autoComplete="tel"
+                            value={formData.phone}
+                            onChange={e => setFormData(f => ({ ...f, phone: e.target.value }))}
+                            placeholder="cth: 081234567890"
+                            className="w-full px-4 py-3 bg-white dark:bg-[#161B2A] border border-oxford-200 dark:border-oxford-700 rounded-xl focus:outline-none focus:border-gold-500 focus:ring-4 focus:ring-gold-500/10 transition-all font-sans text-oxford-900 dark:text-white"
+                        />
+                        <p className="text-xs text-oxford-400 mt-1">Digunakan untuk informasi presensi, sertifikat, dan koordinasi pelatihan.</p>
                     </div>
                 </div>
 

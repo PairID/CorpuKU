@@ -54,7 +54,8 @@ export async function getCurrentUser() {
                    created_at as "createdAt", 
                    image, pangkat, jabatan,
                    tempat_lahir as "tempatLahir",
-                   tanggal_lahir as "tanggalLahir"
+                   tanggal_lahir as "tanggalLahir",
+                   phone
             FROM users 
             WHERE id = ${session.user.id}
         `;
@@ -361,6 +362,7 @@ export interface UserProfileUpdates {
     image?: string | null;
     tempatLahir?: string | null;
     tanggalLahir?: string | null;
+    phone?: string | null;
 }
 
 export async function updateUserProfile(userId: string, updates: UserProfileUpdates) {
@@ -382,6 +384,10 @@ export async function updateUserProfile(userId: string, updates: UserProfileUpda
         }
 
         // Handle mapping of snake_case for DB
+        const cleanPhone = updates.phone !== undefined 
+            ? (updates.phone ? updates.phone.replace(/[^\d+]/g, "") : null) 
+            : undefined;
+
         await sql`
             UPDATE users SET 
                 name = COALESCE(${updates.name}, name),
@@ -390,7 +396,11 @@ export async function updateUserProfile(userId: string, updates: UserProfileUpda
                 jabatan = COALESCE(${updates.jabatan}, jabatan),
                 image = COALESCE(${updates.image}, image),
                 tempat_lahir = COALESCE(${updates.tempatLahir}, tempat_lahir),
-                tanggal_lahir = COALESCE(${updates.tanggalLahir}, tanggal_lahir)
+                tanggal_lahir = COALESCE(${updates.tanggalLahir}, tanggal_lahir),
+                phone = CASE 
+                    WHEN ${cleanPhone !== undefined} THEN ${cleanPhone}
+                    ELSE phone 
+                END
             WHERE id = ${userId}
         `;
         const rawUser = await sql`SELECT * FROM users WHERE id = ${userId}`;
@@ -410,6 +420,7 @@ export async function updateUserProfile(userId: string, updates: UserProfileUpda
             jabatan: dbUser.jabatan,
             tempatLahir: dbUser.tempat_lahir,
             tanggalLahir: dbUser.tanggal_lahir,
+            phone: dbUser.phone,
             createdAt: dbUser.created_at,
             joinedAt: dbUser.joined_at
         };

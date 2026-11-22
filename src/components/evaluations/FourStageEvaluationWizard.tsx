@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   Lock,
   ChevronRight,
+  ChevronLeft,
   User,
   Building2,
   BookOpen,
@@ -103,6 +104,7 @@ export default function FourStageEvaluationWizard({
     narasumberSessions[0]?.id || sessions[0]?.id || "sess_default"
   );
   const [evaluatedSessionIds, setEvaluatedSessionIds] = useState<string[]>([]);
+  const [savedNarasumberEvals, setSavedNarasumberEvals] = useState<any[]>([]);
   const [narasumberRatings, setNarasumberRatings] = useState<Record<number, { key: string; score: number }>>({});
   const [narasumberNotes, setNarasumberNotes] = useState("");
 
@@ -116,6 +118,73 @@ export default function FourStageEvaluationWizard({
   // State Stage 4: SKM
   const [skmRatings, setSkmRatings] = useState<Record<number, { key: string; text: string; score: number }>>({});
   const [skmNotes, setSkmNotes] = useState("");
+
+  // Helper pengisian otomatis (prefill) dari data tersimpan agar input tidak hilang saat navigasi
+  const populateNarasumberFromEval = (sessId: string, evalsList: any[]) => {
+    const target = evalsList.find((e) => String(e.sessionId || e.session_id) === String(sessId));
+    if (target && target.answers) {
+      const rawAns = typeof target.answers === "string" ? JSON.parse(target.answers) : target.answers;
+      if (Array.isArray(rawAns.ratings)) {
+        const mapped: Record<number, { key: string; score: number }> = {};
+        rawAns.ratings.forEach((r: { questionId: number; score: number }) => {
+          const q = narasumberQuestions.find((nq) => nq.id === r.questionId);
+          const opt = q?.options.find((o) => o.score === r.score) || q?.options[0];
+          mapped[r.questionId] = { key: opt?.key || "D", score: r.score };
+        });
+        setNarasumberRatings(mapped);
+      }
+      setNarasumberNotes(rawAns.notes || "");
+    } else {
+      setNarasumberRatings({});
+      setNarasumberNotes("");
+    }
+  };
+
+  const populateOrganizerFromEval = (evalItem: any) => {
+    if (!evalItem || !evalItem.answers) return;
+    const rawAns = typeof evalItem.answers === "string" ? JSON.parse(evalItem.answers) : evalItem.answers;
+    if (Array.isArray(rawAns.ratings)) {
+      const mapped: Record<number, { key: string; score: number }> = {};
+      rawAns.ratings.forEach((r: { questionId: number; score: number }) => {
+        const q = organizerQuestions.find((oq) => oq.id === r.questionId);
+        const opt = q?.options.find((o) => o.score === r.score) || q?.options[0];
+        mapped[r.questionId] = { key: opt?.key || "D", score: r.score };
+      });
+      setOrganizerRatings(mapped);
+    }
+    if (rawAns.notes !== undefined) {
+      setOrganizerNotes(rawAns.notes || "");
+    }
+  };
+
+  const populateUnderstandingFromEval = (evalItem: any) => {
+    if (!evalItem || !evalItem.answers) return;
+    const rawAns = typeof evalItem.answers === "string" ? JSON.parse(evalItem.answers) : evalItem.answers;
+    if (rawAns.quizAnswers) {
+      setQuizAnswers(rawAns.quizAnswers);
+    }
+  };
+
+  const populateSkmFromEval = (evalItem: any) => {
+    if (!evalItem || !evalItem.answers) return;
+    const rawAns = typeof evalItem.answers === "string" ? JSON.parse(evalItem.answers) : evalItem.answers;
+    if (Array.isArray(rawAns.skmAnswers)) {
+      const mapped: Record<number, { key: string; text: string; score: number }> = {};
+      rawAns.skmAnswers.forEach((item: { questionId: number; optionKey?: string; optionText?: string; score: number }) => {
+        const q = skmQuestions.find((sq) => sq.id === item.questionId);
+        const opt = q?.options.find((o) => o.key === item.optionKey || o.score === item.score) || q?.options[0];
+        mapped[item.questionId] = {
+          key: item.optionKey || opt?.key || "D",
+          text: item.optionText || opt?.text || "",
+          score: item.score,
+        };
+      });
+      setSkmRatings(mapped);
+    }
+    if (rawAns.notes !== undefined) {
+      setSkmNotes(rawAns.notes || "");
+    }
+  };
 
   // Refresh status from server
   const loadStatus = async () => {
@@ -134,10 +203,27 @@ export default function FourStageEvaluationWizard({
           .filter((s: { evaluated?: boolean }) => Boolean(s.evaluated))
           .map((s: { lessonId: string }) => String(s.lessonId));
         setEvaluatedSessionIds(doneIds);
+
+        const nEvaluations = res.stages.narasumber.evaluations || [];
+        setSavedNarasumberEvals(nEvaluations);
+
         const firstPending = narasumberSessions.find((s) => !doneIds.includes(s.id));
+        const activeSessId = firstPending ? firstPending.id : (narasumberSessions[0]?.id || selectedSessionId);
         if (firstPending) {
           setSelectedSessionId(firstPending.id);
         }
+        // Prefill narasumber for active session
+        populateNarasumberFromEval(activeSessId, nEvaluations);
+
+        // Prefill organizer
+        populateOrganizerFromEval(res.stages.organizer.evaluation);
+
+        // Prefill understanding
+        populateUnderstandingFromEval(res.stages.understanding?.evaluation);
+
+        // Prefill skm
+        populateSkmFromEval(res.stages.skm?.evaluation);
+
         const canJump =
           requestedStage &&
           (requestedStage === "narasumber" ||
@@ -190,13 +276,28 @@ export default function FourStageEvaluationWizard({
       });
 
       if (res.success) {
+        const newEvalRecord = {
+          stage: "narasumber",
+          sessionId: selectedSessionId,
+          answers: {
+            ratings: ratingsArray,
+            notes: narasumberNotes.trim(),
+          },
+        };
+        const updatedNarasumberEvals = [
+          ...savedNarasumberEvals.filter((e) => String(e.sessionId || e.session_id) !== String(selectedSessionId)),
+          newEvalRecord,
+        ];
+        setSavedNarasumberEvals(updatedNarasumberEvals);
+
         if (res.nextStage === "narasumber") {
           const nextEvaluated = Array.from(new Set([...evaluatedSessionIds, selectedSessionId]));
           setEvaluatedSessionIds(nextEvaluated);
           const nextSess = narasumberSessions.find((s) => !nextEvaluated.includes(s.id));
-          if (nextSess) setSelectedSessionId(nextSess.id);
-          setNarasumberRatings({});
-          setNarasumberNotes("");
+          if (nextSess) {
+            setSelectedSessionId(nextSess.id);
+            populateNarasumberFromEval(nextSess.id, updatedNarasumberEvals);
+          }
           showToast.success("Evaluasi Narasumber Disimpan", "Silakan lanjut menilai narasumber sesi berikutnya.");
         } else {
           showToast.success("Tahap 1 Selesai!", "Seluruh evaluasi narasumber berhasil disimpan.");
@@ -510,7 +611,11 @@ export default function FourStageEvaluationWizard({
                 </label>
                 <select
                   value={selectedSessionId}
-                  onChange={(e) => setSelectedSessionId(e.target.value)}
+                  onChange={(e) => {
+                    const nextId = e.target.value;
+                    setSelectedSessionId(nextId);
+                    populateNarasumberFromEval(nextId, savedNarasumberEvals);
+                  }}
                   className="w-full px-3 py-2 bg-oxford-50 dark:bg-oxford-900 border border-oxford-200 dark:border-oxford-700 rounded-xl text-xs font-bold text-oxford-900 dark:text-white"
                 >
                   {narasumberSessions.map((s) => (
@@ -576,14 +681,37 @@ export default function FourStageEvaluationWizard({
               />
             </div>
 
-            <button
-              type="submit"
-              disabled={submitting}
-              className="w-full py-3 bg-gradient-to-r from-gold-500 to-gold-400 hover:from-gold-400 text-oxford-950 font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-md disabled:opacity-50 transition-all"
-            >
-              {submitting ? <Loader2 size={16} className="animate-spin" /> : <ChevronRight size={16} />}
-              <span>Simpan & Lanjut ke Tahap 2: Kualitas Penyelenggaraan</span>
-            </button>
+            {evaluatedSessionIds.includes(selectedSessionId) && (
+              <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 rounded-xl border border-emerald-300 dark:border-emerald-800 text-xs font-bold text-emerald-800 dark:text-emerald-200 flex items-center gap-2">
+                <CheckCircle2 size={16} className="text-emerald-500 shrink-0" />
+                <span>Penilaian narasumber sesi ini telah tersimpan. Anda dapat memperbarui penilaian atau lanjut ke tahap berikutnya.</span>
+              </div>
+            )}
+
+            <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
+              <button
+                type="submit"
+                disabled={submitting}
+                className="w-full sm:flex-1 py-3 bg-gradient-to-r from-gold-500 to-gold-400 hover:from-gold-400 text-oxford-950 font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-md disabled:opacity-50 transition-all"
+              >
+                {submitting ? <Loader2 size={16} className="animate-spin" /> : <ChevronRight size={16} />}
+                <span>
+                  {evaluatedSessionIds.includes(selectedSessionId)
+                    ? "Simpan Ulang Penilaian Narasumber"
+                    : "Simpan & Lanjut ke Tahap 2: Kualitas Penyelenggaraan"}
+                </span>
+              </button>
+              {stagesStatus.narasumber && (
+                <button
+                  type="button"
+                  onClick={() => setCurrentStage("organizer")}
+                  className="w-full sm:w-auto px-5 py-3 rounded-xl border border-oxford-300 dark:border-oxford-700 bg-white dark:bg-oxford-900 text-xs font-bold text-oxford-800 dark:text-oxford-200 hover:border-gold-400 flex items-center justify-center gap-1.5 transition-all shadow-xs"
+                >
+                  <span>Lanjut ke Penyelenggara</span>
+                  <ChevronRight size={15} />
+                </button>
+              )}
+            </div>
           </form>
         )}
 
@@ -661,18 +789,47 @@ export default function FourStageEvaluationWizard({
               />
             </div>
 
-            <button
-              type="submit"
-              disabled={submitting}
-              className="w-full py-3 bg-gradient-to-r from-gold-500 to-gold-400 hover:from-gold-400 text-oxford-950 font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-md disabled:opacity-50 transition-all"
-            >
-              {submitting ? <Loader2 size={16} className="animate-spin" /> : <ChevronRight size={16} />}
-              <span>
-                {isUnderstandingEnabled
-                  ? "Simpan & Lanjut ke Tahap 3: Pemahaman Materi"
-                  : "Simpan & Lanjut ke Tahap 3: Survei SKM"}
-              </span>
-            </button>
+            {stagesStatus.organizer && (
+              <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 rounded-xl border border-emerald-300 dark:border-emerald-800 text-xs font-bold text-emerald-800 dark:text-emerald-200 flex items-center gap-2">
+                <CheckCircle2 size={16} className="text-emerald-500 shrink-0" />
+                <span>Penilaian penyelenggaraan telah tersimpan. Anda dapat memperbarui penilaian atau kembali / lanjut ke tahap lain.</span>
+              </div>
+            )}
+
+            <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setCurrentStage("narasumber")}
+                className="w-full sm:w-auto px-5 py-3 rounded-xl border border-oxford-300 dark:border-oxford-700 bg-white dark:bg-oxford-900 text-xs font-bold text-oxford-800 dark:text-oxford-200 hover:border-gold-400 flex items-center justify-center gap-1.5 transition-all shadow-xs"
+              >
+                <ChevronLeft size={15} />
+                <span>Kembali ke Narasumber</span>
+              </button>
+              <button
+                type="submit"
+                disabled={submitting}
+                className="w-full sm:flex-1 py-3 bg-gradient-to-r from-gold-500 to-gold-400 hover:from-gold-400 text-oxford-950 font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-md disabled:opacity-50 transition-all"
+              >
+                {submitting ? <Loader2 size={16} className="animate-spin" /> : <ChevronRight size={16} />}
+                <span>
+                  {stagesStatus.organizer
+                    ? "Simpan Ulang Penyelenggara"
+                    : isUnderstandingEnabled
+                    ? "Simpan & Lanjut ke Tahap 3: Pemahaman Materi"
+                    : "Simpan & Lanjut ke Tahap 3: Survei SKM"}
+                </span>
+              </button>
+              {stagesStatus.organizer && (
+                <button
+                  type="button"
+                  onClick={() => setCurrentStage(isUnderstandingEnabled ? "understanding" : "skm")}
+                  className="w-full sm:w-auto px-5 py-3 rounded-xl border border-oxford-300 dark:border-oxford-700 bg-white dark:bg-oxford-900 text-xs font-bold text-oxford-800 dark:text-oxford-200 hover:border-gold-400 flex items-center justify-center gap-1.5 transition-all shadow-xs"
+                >
+                  <span>Lanjut</span>
+                  <ChevronRight size={15} />
+                </button>
+              )}
+            </div>
           </form>
         )}
 
@@ -737,14 +894,41 @@ export default function FourStageEvaluationWizard({
               ))}
             </div>
 
-            <button
-              type="submit"
-              disabled={submitting}
-              className="w-full py-3 bg-gradient-to-r from-gold-500 to-gold-400 hover:from-gold-400 text-oxford-950 font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-md disabled:opacity-50 transition-all"
-            >
-              {submitting ? <Loader2 size={16} className="animate-spin" /> : <ChevronRight size={16} />}
-              <span>Simpan & Lanjut ke Tahap 4: Survei Kepuasan Masyarakat (SKM)</span>
-            </button>
+            {stagesStatus.understanding && (
+              <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 rounded-xl border border-emerald-300 dark:border-emerald-800 text-xs font-bold text-emerald-800 dark:text-emerald-200 flex items-center gap-2">
+                <CheckCircle2 size={16} className="text-emerald-500 shrink-0" />
+                <span>Evaluasi pemahaman materi telah tersimpan. Anda dapat memperbarui jawaban atau kembali / lanjut ke tahap lain.</span>
+              </div>
+            )}
+
+            <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setCurrentStage("organizer")}
+                className="w-full sm:w-auto px-5 py-3 rounded-xl border border-oxford-300 dark:border-oxford-700 bg-white dark:bg-oxford-900 text-xs font-bold text-oxford-800 dark:text-oxford-200 hover:border-gold-400 flex items-center justify-center gap-1.5 transition-all shadow-xs"
+              >
+                <ChevronLeft size={15} />
+                <span>Kembali ke Penyelenggara</span>
+              </button>
+              <button
+                type="submit"
+                disabled={submitting}
+                className="w-full sm:flex-1 py-3 bg-gradient-to-r from-gold-500 to-gold-400 hover:from-gold-400 text-oxford-950 font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-md disabled:opacity-50 transition-all"
+              >
+                {submitting ? <Loader2 size={16} className="animate-spin" /> : <ChevronRight size={16} />}
+                <span>{stagesStatus.understanding ? "Simpan Ulang Jawaban Pemahaman" : "Simpan & Lanjut ke Tahap 4: Survei SKM"}</span>
+              </button>
+              {stagesStatus.understanding && (
+                <button
+                  type="button"
+                  onClick={() => setCurrentStage("skm")}
+                  className="w-full sm:w-auto px-5 py-3 rounded-xl border border-oxford-300 dark:border-oxford-700 bg-white dark:bg-oxford-900 text-xs font-bold text-oxford-800 dark:text-oxford-200 hover:border-gold-400 flex items-center justify-center gap-1.5 transition-all shadow-xs"
+                >
+                  <span>Lanjut ke SKM</span>
+                  <ChevronRight size={15} />
+                </button>
+              )}
+            </div>
           </form>
         )}
 
@@ -821,14 +1005,33 @@ export default function FourStageEvaluationWizard({
               />
             </div>
 
-            <button
-              type="submit"
-              disabled={submitting}
-              className="w-full py-3.5 bg-gradient-to-r from-emerald-600 via-emerald-500 to-emerald-600 hover:from-emerald-500 hover:to-emerald-400 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 disabled:opacity-50 transition-all"
-            >
-              {submitting ? <Loader2 size={16} className="animate-spin" /> : <Award size={16} />}
-              <span>Selesaikan Rangkaian Evaluasi & Ajukan Kelulusan Sertifikat</span>
-            </button>
+            {stagesStatus.skm && (
+              <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 rounded-xl border border-emerald-300 dark:border-emerald-800 text-xs font-bold text-emerald-800 dark:text-emerald-200 flex items-center gap-2">
+                <CheckCircle2 size={16} className="text-emerald-500 shrink-0" />
+                <span>Kuesioner SKM telah selesai Anda kirim. Anda dapat meninjau atau memperbarui jawaban jika diperlukan.</span>
+              </div>
+            )}
+
+            <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setCurrentStage(isUnderstandingEnabled ? "understanding" : "organizer")}
+                className="w-full sm:w-auto px-5 py-3 rounded-xl border border-oxford-300 dark:border-oxford-700 bg-white dark:bg-oxford-900 text-xs font-bold text-oxford-800 dark:text-oxford-200 hover:border-gold-400 flex items-center justify-center gap-1.5 transition-all shadow-xs"
+              >
+                <ChevronLeft size={15} />
+                <span>
+                  {isUnderstandingEnabled ? "Kembali ke Pemahaman Materi" : "Kembali ke Penyelenggara"}
+                </span>
+              </button>
+              <button
+                type="submit"
+                disabled={submitting}
+                className="w-full sm:flex-1 py-3.5 bg-gradient-to-r from-emerald-600 via-emerald-500 to-emerald-600 hover:from-emerald-500 hover:to-emerald-400 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 disabled:opacity-50 transition-all"
+              >
+                {submitting ? <Loader2 size={16} className="animate-spin" /> : <Award size={16} />}
+                <span>{stagesStatus.skm ? "Perbarui & Kirim Ulang SKM" : "Selesaikan Rangkaian Evaluasi & Ajukan Kelulusan Sertifikat"}</span>
+              </button>
+            </div>
           </form>
         )}
       </div>

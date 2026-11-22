@@ -18,6 +18,7 @@ export interface AuthUser {
   jabatan?: string;
   tempatLahir?: string;
   tanggalLahir?: string;
+  phone?: string;
 }
 
 export interface AuthSession {
@@ -88,7 +89,8 @@ export async function getServerSession(token: string): Promise<AuthSession | nul
            user_account.image, user_account.instansi_asal AS "instansiAsal",
            user_account.pangkat, user_account.jabatan,
            user_account.tempat_lahir AS "tempatLahir",
-           user_account.tanggal_lahir AS "tanggalLahir"
+           user_account.tanggal_lahir AS "tanggalLahir",
+           user_account.phone
     FROM auth_sessions session
     JOIN users user_account ON user_account.id = session.user_id
     WHERE session.token_hash = ${hashToken(token)}
@@ -128,6 +130,7 @@ export async function getServerSession(token: string): Promise<AuthSession | nul
       jabatan: row.jabatan ? String(row.jabatan) : undefined,
       tempatLahir: row.tempatLahir ? String(row.tempatLahir) : undefined,
       tanggalLahir: row.tanggalLahir ? String(row.tanggalLahir) : undefined,
+      phone: row.phone ? String(row.phone) : undefined,
     },
   };
 }

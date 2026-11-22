@@ -101,6 +101,7 @@ export async function getTrainingEvaluations(courseId: string) {
         narasumber: {
           completed: Boolean(enrollment.eval_narasumber_completed),
           sessions: narasumberStatus,
+          evaluations: evaluations.filter((e) => e.stage === "narasumber") || [],
         },
         organizer: {
           completed: Boolean(enrollment.eval_organizer_completed),

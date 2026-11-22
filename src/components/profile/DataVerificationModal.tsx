@@ -45,11 +45,18 @@ export default function DataVerificationModal({
 
   useEffect(() => {
     if (!isOpen) return;
+    if (initialProfile.name !== undefined) setName(initialProfile.name || "");
+    if (initialProfile.nip !== undefined) setNip(initialProfile.nip || "");
+    if (initialProfile.instansiAsal !== undefined) setInstansiAsal(initialProfile.instansiAsal || "");
+    if (initialProfile.jabatan !== undefined) setJabatan(initialProfile.jabatan || "");
+    if (initialProfile.pangkat !== undefined) setPangkat(initialProfile.pangkat || "");
+    if (initialProfile.phone !== undefined) setPhone(initialProfile.phone || "");
+
     let active = true;
     getDistinctInstansiList().then((list) => {
       if (!active) return;
       setInstansiList(list);
-      const current = (instansiAsal || "").trim();
+      const current = (initialProfile.instansiAsal || instansiAsal || "").trim();
       if (current && !list.includes(current)) {
         setIsOtherInstansi(true);
       }
@@ -57,7 +64,7 @@ export default function DataVerificationModal({
     return () => {
       active = false;
     };
-  }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isOpen, initialProfile]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!isOpen) return null;
 

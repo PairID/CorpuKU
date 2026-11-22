@@ -43,6 +43,10 @@ export interface UserSession {
         image?: string | null;
         role?: "student" | "instructor" | "admin";
         instansiAsal?: string;
+        nip?: string;
+        jabatan?: string;
+        pangkat?: string;
+        phone?: string;
     };
 }
 
