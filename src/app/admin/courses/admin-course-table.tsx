@@ -252,98 +252,130 @@ export default function AdminCourseTable({
                                             </div>
                                         </div>
                                     ) : (
-                                        <div className="grid grid-cols-4 sm:grid-cols-8 gap-1.5">
+                                        <div className="grid grid-cols-8 gap-1 sm:gap-1.5">
                                             {/* 1. QR Enroll */}
-                                            <button
-                                                type="button"
-                                                onClick={() => setQrCourse({ id: course.id, title: course.title })}
-                                                className={`p-2 rounded-lg transition-all flex flex-col items-center justify-center gap-1 relative ${
-                                                    (course.pendingCount || 0) > 0
-                                                        ? "bg-amber-500 text-oxford-950 ring-2 ring-amber-400 font-black shadow"
-                                                        : "bg-white dark:bg-oxford-900 text-oxford-700 dark:text-oxford-200 hover:bg-gold-50 dark:hover:bg-oxford-800 hover:text-gold-600 border border-oxford-200 dark:border-oxford-700"
-                                                }`}
-                                                title="Pendaftaran Peserta & QR Approval"
-                                            >
-                                                <QrCode size={16} />
-                                                <span className="text-[9px] font-bold">QR Masuk</span>
-                                                {(course.pendingCount || 0) > 0 && (
-                                                    <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-crimson-600 text-white text-[9px] font-black flex items-center justify-center">
-                                                        {course.pendingCount}
-                                                    </span>
-                                                )}
-                                            </button>
+                                            <div className="relative group flex items-center justify-center">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setQrCourse({ id: course.id, title: course.title })}
+                                                    className={`w-full aspect-square p-2 rounded-xl transition-all flex items-center justify-center relative cursor-pointer ${
+                                                        (course.pendingCount || 0) > 0
+                                                            ? "bg-amber-500 text-oxford-950 ring-2 ring-amber-400 font-black shadow"
+                                                            : "bg-white dark:bg-oxford-900 text-oxford-700 dark:text-oxford-200 hover:bg-gold-50 dark:hover:bg-oxford-800 hover:text-gold-600 border border-oxford-200 dark:border-oxford-700 hover:border-gold-400"
+                                                    }`}
+                                                    aria-label="QR Masuk"
+                                                >
+                                                    <QrCode size={18} />
+                                                    {(course.pendingCount || 0) > 0 && (
+                                                        <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-crimson-600 text-white text-[9px] font-black flex items-center justify-center shadow">
+                                                            {course.pendingCount}
+                                                        </span>
+                                                    )}
+                                                </button>
+                                                <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-oxford-950 text-white text-[10px] font-bold rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-150 whitespace-nowrap shadow-lg z-30 border border-white/10">
+                                                    QR Masuk
+                                                </span>
+                                            </div>
 
                                             {/* 2. QR Attendance */}
-                                            <button
-                                                type="button"
-                                                onClick={() => setAttendanceQrCourse({ id: course.id, title: course.title })}
-                                                className="p-2 rounded-lg bg-white dark:bg-oxford-900 text-oxford-700 dark:text-oxford-200 hover:bg-emerald-50 dark:hover:bg-oxford-800 hover:text-emerald-600 border border-oxford-200 dark:border-oxford-700 transition-all flex flex-col items-center justify-center gap-1"
-                                                title="QR Presensi Sesi & Modul"
-                                            >
-                                                <ScanLine size={16} />
-                                                <span className="text-[9px] font-bold">Presensi</span>
-                                            </button>
+                                            <div className="relative group flex items-center justify-center">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setAttendanceQrCourse({ id: course.id, title: course.title })}
+                                                    className="w-full aspect-square p-2 rounded-xl bg-white dark:bg-oxford-900 text-oxford-700 dark:text-oxford-200 hover:bg-emerald-50 dark:hover:bg-oxford-800 hover:text-emerald-600 border border-oxford-200 dark:border-oxford-700 hover:border-emerald-400 transition-all flex items-center justify-center cursor-pointer"
+                                                    aria-label="Presensi"
+                                                >
+                                                    <ScanLine size={18} />
+                                                </button>
+                                                <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-oxford-950 text-white text-[10px] font-bold rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-150 whitespace-nowrap shadow-lg z-30 border border-white/10">
+                                                    Presensi
+                                                </span>
+                                            </div>
 
                                             {/* 3. Manage Content */}
-                                            <Link
-                                                href={`${basePath}/courses/${course.id}/content`}
-                                                className="p-2 rounded-lg bg-white dark:bg-oxford-900 text-oxford-700 dark:text-oxford-200 hover:bg-indigo-50 dark:hover:bg-oxford-800 hover:text-indigo-600 border border-oxford-200 dark:border-oxford-700 transition-all flex flex-col items-center justify-center gap-1"
-                                                title="Kelola Materi & Kurikulum"
-                                            >
-                                                <Layers size={16} />
-                                                <span className="text-[9px] font-bold">Materi</span>
-                                            </Link>
+                                            <div className="relative group flex items-center justify-center">
+                                                <Link
+                                                    href={`${basePath}/courses/${course.id}/content`}
+                                                    className="w-full aspect-square p-2 rounded-xl bg-white dark:bg-oxford-900 text-oxford-700 dark:text-oxford-200 hover:bg-indigo-50 dark:hover:bg-oxford-800 hover:text-indigo-600 border border-oxford-200 dark:border-oxford-700 hover:border-indigo-400 transition-all flex items-center justify-center"
+                                                    aria-label="Materi"
+                                                >
+                                                    <Layers size={18} />
+                                                </Link>
+                                                <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-oxford-950 text-white text-[10px] font-bold rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-150 whitespace-nowrap shadow-lg z-30 border border-white/10">
+                                                    Materi
+                                                </span>
+                                            </div>
 
                                             {/* 4. Live Attendance Monitoring */}
-                                            <Link
-                                                href={`/admin/courses/${course.id}/attendance`}
-                                                className="p-2 rounded-lg bg-white dark:bg-oxford-900 text-oxford-700 dark:text-oxford-200 hover:bg-rose-50 dark:hover:bg-oxford-800 hover:text-rose-600 border border-oxford-200 dark:border-oxford-700 transition-all flex flex-col items-center justify-center gap-1"
-                                                title="Monitoring Kehadiran Live Peserta"
-                                            >
-                                                <Radio size={16} />
-                                                <span className="text-[9px] font-bold">Monitor</span>
-                                            </Link>
+                                            <div className="relative group flex items-center justify-center">
+                                                <Link
+                                                    href={`/admin/courses/${course.id}/attendance`}
+                                                    className="w-full aspect-square p-2 rounded-xl bg-white dark:bg-oxford-900 text-oxford-700 dark:text-oxford-200 hover:bg-rose-50 dark:hover:bg-oxford-800 hover:text-rose-600 border border-oxford-200 dark:border-oxford-700 hover:border-rose-400 transition-all flex items-center justify-center"
+                                                    aria-label="Monitor"
+                                                >
+                                                    <Radio size={18} />
+                                                </Link>
+                                                <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-oxford-950 text-white text-[10px] font-bold rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-150 whitespace-nowrap shadow-lg z-30 border border-white/10">
+                                                    Monitor
+                                                </span>
+                                            </div>
 
                                             {/* 5. Analytics */}
-                                            <Link
-                                                href={`/admin/courses/${course.id}/analytics`}
-                                                className="p-2 rounded-lg bg-white dark:bg-oxford-900 text-oxford-700 dark:text-oxford-200 hover:bg-blue-50 dark:hover:bg-oxford-800 hover:text-blue-600 border border-oxford-200 dark:border-oxford-700 transition-all flex flex-col items-center justify-center gap-1"
-                                                title="Grafik Analitik & Retensi"
-                                            >
-                                                <BarChart3 size={16} />
-                                                <span className="text-[9px] font-bold">Analitik</span>
-                                            </Link>
+                                            <div className="relative group flex items-center justify-center">
+                                                <Link
+                                                    href={`/admin/courses/${course.id}/analytics`}
+                                                    className="w-full aspect-square p-2 rounded-xl bg-white dark:bg-oxford-900 text-oxford-700 dark:text-oxford-200 hover:bg-blue-50 dark:hover:bg-oxford-800 hover:text-blue-600 border border-oxford-200 dark:border-oxford-700 hover:border-blue-400 transition-all flex items-center justify-center"
+                                                    aria-label="Analitik"
+                                                >
+                                                    <BarChart3 size={18} />
+                                                </Link>
+                                                <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-oxford-950 text-white text-[10px] font-bold rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-150 whitespace-nowrap shadow-lg z-30 border border-white/10">
+                                                    Analitik
+                                                </span>
+                                            </div>
 
                                             {/* 6. Edit Metadata */}
-                                            <Link
-                                                href={`${basePath}/courses/${course.id}/edit`}
-                                                className="p-2 rounded-lg bg-white dark:bg-oxford-900 text-oxford-700 dark:text-oxford-200 hover:bg-gold-50 dark:hover:bg-oxford-800 hover:text-gold-600 border border-oxford-200 dark:border-oxford-700 transition-all flex flex-col items-center justify-center gap-1"
-                                                title="Edit Metadata & Pengaturan"
-                                            >
-                                                <Edit size={16} />
-                                                <span className="text-[9px] font-bold">Edit</span>
-                                            </Link>
+                                            <div className="relative group flex items-center justify-center">
+                                                <Link
+                                                    href={`${basePath}/courses/${course.id}/edit`}
+                                                    className="w-full aspect-square p-2 rounded-xl bg-white dark:bg-oxford-900 text-oxford-700 dark:text-oxford-200 hover:bg-gold-50 dark:hover:bg-oxford-800 hover:text-gold-600 border border-oxford-200 dark:border-oxford-700 hover:border-gold-400 transition-all flex items-center justify-center"
+                                                    aria-label="Edit"
+                                                >
+                                                    <Edit size={18} />
+                                                </Link>
+                                                <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-oxford-950 text-white text-[10px] font-bold rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-150 whitespace-nowrap shadow-lg z-30 border border-white/10">
+                                                    Edit
+                                                </span>
+                                            </div>
 
                                             {/* 7. Certificates */}
-                                            <Link
-                                                href={`/admin/courses/${course.id}/certificates`}
-                                                className="p-2 rounded-lg bg-white dark:bg-oxford-900 text-oxford-700 dark:text-oxford-200 hover:bg-emerald-50 dark:hover:bg-oxford-800 hover:text-emerald-600 border border-oxford-200 dark:border-oxford-700 transition-all flex flex-col items-center justify-center gap-1"
-                                                title="Penerbitan Sertifikat Resmi"
-                                            >
-                                                <Award size={16} />
-                                                <span className="text-[9px] font-bold">Sertifikat</span>
-                                            </Link>
+                                            <div className="relative group flex items-center justify-center">
+                                                <Link
+                                                    href={`/admin/courses/${course.id}/certificates`}
+                                                    className="w-full aspect-square p-2 rounded-xl bg-white dark:bg-oxford-900 text-oxford-700 dark:text-oxford-200 hover:bg-emerald-50 dark:hover:bg-oxford-800 hover:text-emerald-600 border border-oxford-200 dark:border-oxford-700 hover:border-emerald-400 transition-all flex items-center justify-center"
+                                                    aria-label="Sertifikat"
+                                                >
+                                                    <Award size={18} />
+                                                </Link>
+                                                <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-oxford-950 text-white text-[10px] font-bold rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-150 whitespace-nowrap shadow-lg z-30 border border-white/10">
+                                                    Sertifikat
+                                                </span>
+                                            </div>
 
                                             {/* 8. Delete */}
-                                            <button
-                                                type="button"
-                                                onClick={() => setConfirmDeleteId(course.id)}
-                                                className="p-2 rounded-lg bg-white dark:bg-oxford-900 text-oxford-700 dark:text-oxford-200 hover:bg-crimson-50 dark:hover:bg-oxford-800 hover:text-crimson-600 border border-oxford-200 dark:border-oxford-700 transition-all flex flex-col items-center justify-center gap-1"
-                                                title="Hapus Kursus"
-                                            >
-                                                <Trash2 size={16} />
-                                                <span className="text-[9px] font-bold">Hapus</span>
-                                            </button>
+                                            <div className="relative group flex items-center justify-center">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setConfirmDeleteId(course.id)}
+                                                    className="w-full aspect-square p-2 rounded-xl bg-white dark:bg-oxford-900 text-oxford-700 dark:text-oxford-200 hover:bg-crimson-50 dark:hover:bg-oxford-800 hover:text-crimson-600 border border-oxford-200 dark:border-oxford-700 hover:border-crimson-400 transition-all flex items-center justify-center cursor-pointer"
+                                                    aria-label="Hapus"
+                                                >
+                                                    <Trash2 size={18} />
+                                                </button>
+                                                <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-crimson-950 text-white text-[10px] font-bold rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-150 whitespace-nowrap shadow-lg z-30 border border-white/10">
+                                                    Hapus
+                                                </span>
+                                            </div>
                                         </div>
                                     )}
                                 </div>
