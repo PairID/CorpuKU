@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowLeft, Edit, ThumbsUp, MessageSquare, Eye, Clock, Share2, Bookmark, FileText, ExternalLink, Folder, Globe, Video } from "lucide-react";
+import { ArrowLeft, Edit, ThumbsUp, MessageSquare, Eye, Clock, Share2, Bookmark, FileText, ExternalLink, Folder, Globe, Video, BookOpen, Maximize2 } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { toggleKnowledgeLike, postKnowledgeComment } from "@/app/actions/knowledge";
 import type { AuthUser } from "@/lib/session";
@@ -55,6 +55,11 @@ export default function KnowledgeDetailClient({ item, serverUser }: { item: Know
     const [likedBy, setLikedBy] = useState<string[]>(item.likedBy || []);
     const [comments, setComments] = useState<KnowledgeComment[]>(item.comments || []);
     
+    const driveFiles = (item.attachments || []).filter(a => !!a.url && (a.url.includes("drive.google.com/file") || a.url.includes("id=")));
+    const [selectedDocIndex, setSelectedDocIndex] = useState(0);
+    const activeFile = driveFiles[selectedDocIndex] || driveFiles[0];
+    const activeDriveId = activeFile?.url ? (activeFile.url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/)?.[1] || activeFile.url.match(/id=([a-zA-Z0-9_-]+)/)?.[1]) : null;
+
     const [commentText, setCommentText] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -184,10 +189,98 @@ export default function KnowledgeDetailClient({ item, serverUser }: { item: Know
 
                 {/* CONTENT */}
                 <article className="prose prose-lg prose-oxford max-w-none mt-10 text-oxford-700 dark:text-oxford-200 bg-white dark:bg-[#161B2A] p-8 sm:p-12 rounded-3xl shadow-sm border border-oxford-200 dark:border-oxford-700">
-                    <div className="whitespace-pre-line text-lg leading-relaxed text-oxford-800 dark:text-oxford-100">
-                        {item.description}
-                    </div>
+                    <FormattedContent content={item.description || ""} />
                 </article>
+
+                {/* INTERACTIVE DOCUMENT & SLIDE VIEWER */}
+                {activeDriveId && (
+                    <section className="mt-10 bg-white dark:bg-[#161B2A] rounded-3xl border border-oxford-200 dark:border-oxford-700 shadow-md overflow-hidden">
+                        <div className="p-6 border-b border-oxford-200 dark:border-oxford-700 bg-oxford-50 dark:bg-oxford-900/50 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2.5 bg-gold-100 dark:bg-gold-900/40 text-gold-700 dark:text-gold-400 rounded-xl">
+                                    <BookOpen size={22} />
+                                </div>
+                                <div>
+                                    <h3 className="font-serif font-bold text-lg text-oxford-900 dark:text-white">
+                                        Pratinjau Materi & Paparan Langsung
+                                    </h3>
+                                    <p className="text-xs text-oxford-500 dark:text-oxford-400">
+                                        Pelajari dan baca berkas naskah/slide secara interaktif langsung di halaman ini
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                                <a
+                                    href={activeFile?.url || "#"}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-2 px-4 py-2 bg-oxford-900 hover:bg-gold-500 hover:text-oxford-950 text-white rounded-xl text-xs font-bold transition-all shadow-sm"
+                                >
+                                    <Maximize2 size={14} /> Buka di Tab Baru
+                                </a>
+                            </div>
+                        </div>
+
+                        {/* DOCUMENT SELECTOR TABS IF MULTIPLE */}
+                        {driveFiles.length > 1 && (
+                            <div className="flex gap-2 p-3 bg-oxford-100 dark:bg-oxford-950 border-b border-oxford-200 dark:border-oxford-700 overflow-x-auto">
+                                {driveFiles.map((df, idx) => (
+                                    <button
+                                        key={idx}
+                                        type="button"
+                                        onClick={() => setSelectedDocIndex(idx)}
+                                        className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-2 ${
+                                            selectedDocIndex === idx
+                                                ? "bg-white dark:bg-[#161B2A] text-oxford-900 dark:text-white shadow-sm border border-oxford-200 dark:border-oxford-700"
+                                                : "text-oxford-600 dark:text-oxford-400 hover:text-oxford-900 dark:hover:text-white"
+                                        }`}
+                                    >
+                                        <FileText size={14} />
+                                        {df.name || `Dokumen ${idx + 1}`}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+
+                        {/* EMBEDDED IFRAME VIEWER */}
+                        <div className="relative w-full h-[600px] sm:h-[720px] bg-oxford-950">
+                            <iframe
+                                src={`https://drive.google.com/file/d/${activeDriveId}/preview`}
+                                className="w-full h-full border-0"
+                                allow="autoplay"
+                                title={activeFile?.name || "Pratinjau Materi"}
+                            />
+                        </div>
+                    </section>
+                )}
+
+                {/* PORTAL LAUNCHER CARD IF NO DRIVE EMBED */}
+                {!activeDriveId && item.attachments && item.attachments.some(a => a.type === "portal" || a.url?.includes("go.id")) && (
+                    <section className="mt-10 p-8 sm:p-10 bg-gradient-to-br from-oxford-900 to-oxford-950 text-white rounded-3xl shadow-xl border border-gold-500/30">
+                        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+                            <div>
+                                <span className="inline-block text-[11px] font-bold text-gold-400 uppercase tracking-widest bg-gold-950/80 px-3 py-1 rounded-full border border-gold-500/20">
+                                    Platform Resmi Pemerintah
+                                </span>
+                                <h3 className="text-2xl font-serif font-bold text-white mt-3">
+                                    Akses Portal Sistem Informasi SDGs-KU
+                                </h3>
+                                <p className="text-oxford-300 text-sm mt-2 max-w-xl leading-relaxed">
+                                    Sistem informasi digital resmi BAPPERIDA Provinsi Kalimantan Utara untuk penginputan capaian indikator, monitoring, dan pelaporan Tujuan Pembangunan Berkelanjutan terintegrasi.
+                                </p>
+                            </div>
+                            <a 
+                                href="https://sdgs.kaltaraprov.go.id/" 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="px-6 py-3.5 bg-gold-500 hover:bg-gold-400 text-oxford-950 font-bold rounded-xl text-sm transition-all shadow-lg flex items-center gap-2 whitespace-nowrap"
+                            >
+                                <Globe size={18} /> Buka Platform SDGs-KU <ExternalLink size={16} />
+                            </a>
+                        </div>
+                    </section>
+                )}
 
                 {/* VIDEO IF ANY */}
                 {item.videoUrl && (
@@ -341,4 +434,61 @@ export default function KnowledgeDetailClient({ item, serverUser }: { item: Know
             </main>
         </div>
     );
+}
+
+function FormattedContent({ content }: { content: string }) {
+    const lines = content.split('\n');
+    return (
+        <div className="space-y-4 text-oxford-800 dark:text-oxford-100 leading-relaxed font-sans text-base sm:text-lg">
+            {lines.map((line, idx) => {
+                const trimmed = line.trim();
+                if (!trimmed) return <div key={idx} className="h-2" />;
+                if (trimmed.startsWith('### ')) {
+                    return (
+                        <h3 key={idx} className="text-xl sm:text-2xl font-serif font-bold text-oxford-950 dark:text-white pt-4 pb-1 border-b border-oxford-100 dark:border-oxford-800">
+                            {trimmed.replace('### ', '')}
+                        </h3>
+                    );
+                }
+                if (trimmed.startsWith('• ')) {
+                    const itemContent = trimmed.replace('• ', '');
+                    return (
+                        <div key={idx} className="flex items-start gap-3 pl-2">
+                            <span className="w-2 h-2 rounded-full bg-gold-500 mt-2.5 flex-shrink-0" />
+                            <div className="flex-1">
+                                {formatBold(itemContent)}
+                            </div>
+                        </div>
+                    );
+                }
+                if (/^\d+\.\s/.test(trimmed)) {
+                    return (
+                        <div key={idx} className="flex items-start gap-3 pl-2">
+                            <span className="font-bold text-gold-600 dark:text-gold-400 min-w-5 flex-shrink-0">
+                                {trimmed.match(/^\d+\./)?.[0]}
+                            </span>
+                            <div className="flex-1">
+                                {formatBold(trimmed.replace(/^\d+\.\s*/, ''))}
+                            </div>
+                        </div>
+                    );
+                }
+                return (
+                    <p key={idx}>
+                        {formatBold(trimmed)}
+                    </p>
+                );
+            })}
+        </div>
+    );
+}
+
+function formatBold(text: string) {
+    const parts = text.split(/(\*\*[^*]+\*\*)/g);
+    return parts.map((part, i) => {
+        if (part.startsWith('**') && part.endsWith('**')) {
+            return <strong key={i} className="font-bold text-oxford-950 dark:text-white">{part.slice(2, -2)}</strong>;
+        }
+        return part;
+    });
 }
