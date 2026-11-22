@@ -234,7 +234,9 @@ export default function KnowledgeClient({
                                         {item.title}
                                     </h3>
                                     <p className="font-sans text-sm text-oxford-500 dark:text-oxford-400 line-clamp-2 mb-4 flex-1">
-                                        {item.description || "Tidak ada deskripsi."}
+                                        {item.description 
+                                            ? item.description.replace(/###\s*\d*\.?\s*/g, "").replace(/\*\*/g, "").trim() 
+                                            : "Tidak ada deskripsi."}
                                     </p>
                                     
                                     {/* FOOTER METADATA */}
