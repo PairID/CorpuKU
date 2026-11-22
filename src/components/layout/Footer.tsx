@@ -34,7 +34,8 @@ export function Footer() {
                         <ul className="space-y-3 text-sm">
                             <li><Link href="/search" className="hover:text-gold-400 transition-colors">Jelajahi Kursus</Link></li>
                             <li><Link href="/knowledge" className="hover:text-gold-400 transition-colors">Pusat Pengetahuan</Link></li>
-                            <li><Link href="/paths" className="hover:text-gold-400 transition-colors">Learning Paths</Link></li>
+                            {/* ponytail: Dinonaktifkan sementara sampai konsep learning path matang */}
+                            {/* <li><Link href="/paths" className="hover:text-gold-400 transition-colors">Learning Paths</Link></li> */}
                         </ul>
                     </div>
                 </div>

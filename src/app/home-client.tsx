@@ -536,9 +536,10 @@ export default function HomeClient({ courses, featuredWebinar }: { courses: Cour
               </div>
             ))}
           </div>
+          {/* ponytail: Diarahkan ke katalog kursus sementara konsep learning path dimatangkan */}
           <div className="mt-10 text-center">
-            <Link href="/paths" className="inline-flex items-center gap-2 rounded-full bg-oxford-900 px-7 py-3 font-bold text-white transition-colors hover:bg-gold-500 hover:text-oxford-950">
-              Jelajahi learning path <Award size={18} />
+            <Link href="/search" className="inline-flex items-center gap-2 rounded-full bg-oxford-900 px-7 py-3 font-bold text-white transition-colors hover:bg-gold-500 hover:text-oxford-950">
+              Jelajahi katalog kursus <BookOpen size={18} />
             </Link>
           </div>
         </div>

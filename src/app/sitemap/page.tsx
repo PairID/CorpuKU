@@ -3,7 +3,7 @@ import Link from "next/link";
 export const metadata = { title: "Peta Situs | CorpuKU Academy" };
 
 const groups = [
-  ["Belajar", [["Kursus", "/search"], ["Webinar", "/webinars"], ["Learning Paths", "/paths"], ["Program", "/programs"], ["Pusat Pengetahuan", "/knowledge"]]],
+  ["Belajar", [["Kursus", "/search"], ["Webinar", "/webinars"], ["Program", "/programs"], ["Pusat Pengetahuan", "/knowledge"]]],
   ["Informasi", [["Tentang Kami", "/about"], ["Mitra", "/partners"], ["Berita", "/news"]]],
   ["Akun", [["Masuk", "/login"], ["Daftar", "/register"], ["Dashboard", "/dashboard"], ["Pengaturan", "/settings"]]],
   ["Kebijakan", [["Syarat dan Ketentuan", "/terms"], ["Privasi", "/privacy"], ["Aksesibilitas", "/accessibility"]]],
