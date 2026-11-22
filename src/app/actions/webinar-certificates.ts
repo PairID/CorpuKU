@@ -82,6 +82,38 @@ export async function issueAllEligibleWebinarCertificates(formData: FormData) {
   revalidatePath(`/dashboard/webinars/${webinarId}`);
 }
 
+export async function issueWebinarCertificateManualAction(webinarId: string, userId: string) {
+  try {
+    await requireAdminSession();
+    if (!validId(webinarId) || !validId(userId)) {
+      return { success: false, error: 'Data peserta atau webinar tidak valid.' };
+    }
+    const registration = await sql`
+      SELECT id FROM webinar_registrations WHERE webinar_id = ${webinarId} AND user_id = ${userId}
+    `;
+    if (!registration[0]) {
+      return { success: false, error: 'Registrasi peserta tidak ditemukan.' };
+    }
+    const cert = await issueWebinarCertificate(userId, webinarId);
+    if (!cert) {
+      return { success: false, error: 'Gagal menerbitkan sertifikat webinar: pastikan peserta memenuhi syarat atau sertifikat belum dicabut.' };
+    }
+    revalidatePath(`/admin/webinars/${webinarId}/certificates`);
+    revalidatePath(`/dashboard/webinars/${webinarId}`);
+    return {
+      success: true,
+      message: `Sertifikat ${cert.certificateNumber} berhasil diterbitkan resmi!`,
+      certificateNumber: cert.certificateNumber,
+    };
+  } catch (err: any) {
+    console.error('[issueWebinarCertificateManualAction] error:', err);
+    return {
+      success: false,
+      error: err.message || 'Terjadi kesalahan saat memproses penerbitan sertifikat webinar.',
+    };
+  }
+}
+
 export async function issueSingleWebinarCertificate(formData: FormData) {
   await requireAdminSession();
   const webinarId = formData.get('webinarId');

@@ -103,8 +103,8 @@ export async function issueCourseCertificate(userId: string, courseId: string, o
   const el = eligibleRows[0];
   if (!el) return null;
 
-  // Persyaratan khusus Classical Facilitation Training:
-  if (el.training_type === 'classical_facilitation') {
+  // Persyaratan khusus Classical Facilitation Training (Dikecualikan jika Admin forceManualIssue):
+  if (el.training_type === 'classical_facilitation' && !options?.forceManualIssue) {
     const requiredThreshold = Number(el.attendance_threshold || 80);
     const actualAttendance = Number(el.attendance_percentage || 0);
 
@@ -122,30 +122,32 @@ export async function issueCourseCertificate(userId: string, courseId: string, o
     }
   }
 
-  // Persyaratan Kuis Wajib: Jika kelas memiliki kuis, seluruh kuis wajib lulus
-  const courseQuizRows = await sql`
-    SELECT DISTINCT l.id, l.title
-    FROM lessons l
-    JOIN modules m ON m.id = l.module_id
-    LEFT JOIN quiz_questions qq ON qq.lesson_id = l.id
-    WHERE (m.course_id = ${courseId} OR m.course_id = ${courseId.replace(/^course_/, '')} OR m.course_id = ${'course_' + courseId})
-      AND (l.type = 'quiz' OR qq.id IS NOT NULL)
-  `;
-
-  if (courseQuizRows.length > 0) {
-    const quizIds = courseQuizRows.map((q) => String(q.id));
-    const passedAttempts = await sql`
-      SELECT DISTINCT lesson_id
-      FROM quiz_attempts
-      WHERE user_id = ${userId} AND passed = TRUE AND lesson_id = ANY(${quizIds})
+  // Persyaratan Kuis Wajib: Jika kelas memiliki kuis, seluruh kuis wajib lulus (Dikecualikan jika Admin forceManualIssue)
+  if (!options?.forceManualIssue) {
+    const courseQuizRows = await sql`
+      SELECT DISTINCT l.id, l.title
+      FROM lessons l
+      JOIN modules m ON m.id = l.module_id
+      LEFT JOIN quiz_questions qq ON qq.lesson_id = l.id
+      WHERE (m.course_id = ${courseId} OR m.course_id = ${courseId.replace(/^course_/, '')} OR m.course_id = ${'course_' + courseId})
+        AND (l.type = 'quiz' OR qq.id IS NOT NULL)
     `;
-    const passedSet = new Set(passedAttempts.map((p) => String(p.lesson_id)));
-    const unpassed = courseQuizRows.filter((q) => !passedSet.has(String(q.id)));
-    if (unpassed.length > 0) {
-      console.warn(
-        `[Certificate] Peserta belum lulus ${unpassed.length} kuis wajib untuk kursus ${courseId}: ${unpassed.map((q) => q.title).join(", ")}`
-      );
-      return null;
+
+    if (courseQuizRows.length > 0) {
+      const quizIds = courseQuizRows.map((q) => String(q.id));
+      const passedAttempts = await sql`
+        SELECT DISTINCT lesson_id
+        FROM quiz_attempts
+        WHERE user_id = ${userId} AND passed = TRUE AND lesson_id = ANY(${quizIds})
+      `;
+      const passedSet = new Set(passedAttempts.map((p) => String(p.lesson_id)));
+      const unpassed = courseQuizRows.filter((q) => !passedSet.has(String(q.id)));
+      if (unpassed.length > 0) {
+        console.warn(
+          `[Certificate] Peserta belum lulus ${unpassed.length} kuis wajib untuk kursus ${courseId}: ${unpassed.map((q) => q.title).join(", ")}`
+        );
+        return null;
+      }
     }
   }
 

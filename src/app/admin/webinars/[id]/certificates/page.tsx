@@ -3,7 +3,8 @@ import { ArrowLeft, Award, CheckCircle2, ExternalLink, Settings2, Users } from '
 import type { LucideIcon } from 'lucide-react';
 import { DownloadCertificateButton } from '@/components/DownloadCertificateButton';
 import { getAdminWebinar } from '@/app/actions/webinars';
-import { getWebinarCertificateDashboard, issueAllEligibleWebinarCertificates, issueSingleWebinarCertificate } from '@/app/actions/webinar-certificates';
+import { getWebinarCertificateDashboard, issueAllEligibleWebinarCertificates } from '@/app/actions/webinar-certificates';
+import { IssueWebinarCertificateButton } from '@/components/certificates/IssueWebinarCertificateButton';
 import { notFound } from 'next/navigation';
 
 export const dynamic = 'force-dynamic';
@@ -65,7 +66,11 @@ export default async function WebinarCertificatesPage({ params }: { params: Prom
                         )}
                       </div>
                     ) : isReady && webinar.certificateEnabled ? (
-                      <form action={issueSingleWebinarCertificate}><input type="hidden" name="webinarId" value={id} /><input type="hidden" name="userId" value={String(item.userId)} /><button className="rounded-lg bg-oxford-900 px-3 py-2 text-xs font-bold text-white">Terbitkan</button></form>
+                      <IssueWebinarCertificateButton
+                        webinarId={id}
+                        userId={String(item.userId)}
+                        participantName={String(item.participantName)}
+                      />
                     ) : '-'}
                   </td>
                 </tr>

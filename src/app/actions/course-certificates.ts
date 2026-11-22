@@ -72,6 +72,65 @@ export async function getCourseCertificateDashboard(courseId: string) {
   `;
 }
 
+export async function issueCourseCertificateManualAction(courseId: string, userId: string) {
+  try {
+    if (
+      typeof courseId !== "string" || !/^[A-Za-z0-9_-]{1,255}$/.test(courseId) ||
+      typeof userId !== "string" || !/^[A-Za-z0-9_-]{1,255}$/.test(userId)
+    ) {
+      return { success: false, error: "Data kursus atau peserta tidak valid." };
+    }
+
+    const session = await requireCourseEditor(courseId);
+
+    const eligible = await sql`
+      SELECT enrollment.id, enrollment.status, enrollment.progress, enrollment.completed_at,
+             course.training_type
+      FROM enrollments enrollment
+      JOIN courses course ON course.id = enrollment.course_id
+      WHERE enrollment.user_id = ${userId} AND enrollment.course_id = ${courseId}
+        AND enrollment.status = 'completed' AND enrollment.progress = 100 AND enrollment.completed_at IS NOT NULL
+      LIMIT 1
+    `;
+
+    if (!eligible[0]) {
+      return { success: false, error: "Peserta belum menyelesaikan seluruh modul pembelajaran kursus (progress belum 100%)." };
+    }
+
+    // Force manual issuance by administrator
+    const certificate = await issueCourseCertificate(userId, courseId, { forceManualIssue: true });
+    if (!certificate) {
+      return {
+        success: false,
+        error: "Gagal menerbitkan sertifikat: pastikan fitur penerbitan sertifikat telah diaktifkan pada pengaturan kursus.",
+      };
+    }
+
+    await writeAuditLog({
+      actorUserId: session.user.id,
+      action: "certificate.manually_issued",
+      entityType: "course_certificate",
+      entityId: certificate.id,
+      metadata: { courseId, userId, certificateNumber: certificate.certificateNumber },
+    });
+
+    revalidatePath(`/admin/courses/${courseId}/certificates`);
+    revalidatePath("/admin/certificates/issued");
+
+    return {
+      success: true,
+      message: `Sertifikat ${certificate.certificateNumber} berhasil diterbitkan resmi!`,
+      certificateNumber: certificate.certificateNumber,
+    };
+  } catch (err: any) {
+    console.error("[issueCourseCertificateManualAction] error:", err);
+    return {
+      success: false,
+      error: err.message || "Terjadi kendala saat memproses penerbitan sertifikat.",
+    };
+  }
+}
+
 export async function issueSingleCourseCertificate(formData: FormData) {
   const courseId = formData.get("courseId");
   const userId = formData.get("userId");
@@ -82,9 +141,7 @@ export async function issueSingleCourseCertificate(formData: FormData) {
   const session = await requireCourseEditor(courseId);
   const eligible = await sql`
     SELECT enrollment.id, enrollment.status, enrollment.progress, enrollment.completed_at,
-           enrollment.attendance_percentage, enrollment.all_evaluations_completed,
-           enrollment.statement_accepted,
-           course.training_type, course.attendance_threshold
+           course.training_type
     FROM enrollments enrollment
     JOIN courses course ON course.id = enrollment.course_id
     WHERE enrollment.user_id = ${userId} AND enrollment.course_id = ${courseId}
@@ -92,18 +149,7 @@ export async function issueSingleCourseCertificate(formData: FormData) {
     LIMIT 1
   `;
   if (!eligible[0]) throw new Error("Peserta belum memenuhi persyaratan kelulusan.");
-  const el = eligible[0];
-  if (el.training_type === 'classical_facilitation') {
-    if (Number(el.attendance_percentage || 0) < Number(el.attendance_threshold || 80)) {
-      throw new Error(`Kehadiran JP belum memenuhi batas minimal ${el.attendance_threshold || 80}%.`);
-    }
-    if (!el.all_evaluations_completed) {
-      throw new Error("Peserta belum menyelesaikan seluruh tahapan evaluasi wajib.");
-    }
-    if (!el.statement_accepted) {
-      throw new Error("Peserta belum menyetujui pernyataan kebenaran data.");
-    }
-  }
+
   const certificate = await issueCourseCertificate(userId, courseId, { forceManualIssue: true });
   if (!certificate) throw new Error("Penerbitan sertifikat dinonaktifkan atau sertifikat telah dicabut.");
   await writeAuditLog({

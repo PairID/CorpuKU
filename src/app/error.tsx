@@ -11,14 +11,16 @@ export default function ErrorBoundary({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const msg = error?.message || "";
+  const isChunkOrDeploymentError =
+    msg.includes("ChunkLoadError") ||
+    msg.includes("Loading chunk") ||
+    msg.includes("Failed to fetch dynamically imported module") ||
+    msg.includes("Failed to find Server Action");
+
   useEffect(() => {
     // Check if error is due to stale deployment chunks
-    const msg = error?.message || "";
-    if (
-      msg.includes("ChunkLoadError") ||
-      msg.includes("Loading chunk") ||
-      msg.includes("Failed to fetch dynamically imported module")
-    ) {
+    if (isChunkOrDeploymentError) {
       // Automatic reload to fetch fresh deployment assets
       const reloadKey = "chunk_reload_" + window.location.pathname;
       const lastReload = sessionStorage.getItem(reloadKey);
@@ -28,7 +30,7 @@ export default function ErrorBoundary({
       }
     }
     console.error("Client error caught by ErrorBoundary:", error);
-  }, [error]);
+  }, [error, isChunkOrDeploymentError]);
 
   return (
     <div className="min-h-[70vh] flex flex-col items-center justify-center p-6 text-center">
@@ -36,10 +38,12 @@ export default function ErrorBoundary({
         <AlertTriangle size={32} />
       </div>
       <h2 className="text-2xl font-bold text-oxford-900 dark:text-white mb-2">
-        Pembaruan Halaman Diperlukan
+        {isChunkOrDeploymentError ? "Pembaruan Versi Diperlukan" : "Terjadi Kendala Teknis"}
       </h2>
-      <p className="text-sm text-oxford-500 dark:text-oxford-400 max-w-md mb-6">
-        Sistem baru saja diperbarui atau sesi peramban Anda perlu disegarkan. Silakan muat ulang halaman untuk memperbarui ke versi terbaru.
+      <p className="text-sm text-oxford-500 dark:text-oxford-400 max-w-md mb-6 leading-relaxed">
+        {isChunkOrDeploymentError
+          ? "Sistem baru saja diperbarui atau sesi peramban Anda perlu disegarkan. Silakan muat ulang halaman untuk memperbarui ke versi terbaru."
+          : (msg || "Terjadi kesalahan saat memproses permintaan. Silakan coba kembali beberapa saat lagi.")}
       </p>
       <div className="flex flex-wrap gap-3 justify-center">
         <button
