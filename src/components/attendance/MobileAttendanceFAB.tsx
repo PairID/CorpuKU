@@ -81,7 +81,7 @@ export default function MobileAttendanceFAB({
 
   const executeAttendance = async (rawCode: string, explicitLessonId?: string) => {
     if (!rawCode.trim()) {
-      showToast.warning("Kode Presensi Kosong", "Scan QR Code atau masukkan token presensi.");
+      showToast.warning("Kode Presensi Kosong", "Scan QR Code atau masukkan kode presensi.");
       return;
     }
 
@@ -260,7 +260,7 @@ export default function MobileAttendanceFAB({
           setActiveTab("code");
           showToast.warning(
             "QR Tidak Terbaca",
-            "Gambar QR tidak terbaca jelas. Silakan masukkan token presensi secara manual."
+            "Gambar QR tidak terbaca jelas. Silakan masukkan kode presensi secara manual."
           );
         }
       };
@@ -284,7 +284,7 @@ export default function MobileAttendanceFAB({
           onClick={() => setIsOpen(true)}
           className="relative flex items-center gap-2 px-3.5 py-3 md:px-4 md:py-3 bg-gold-500 hover:bg-gold-400 text-oxford-950 font-bold text-xs rounded-full shadow-[0_10px_25px_-5px_rgba(239,177,25,0.5)] active:scale-95 transition-all group border border-gold-300"
           aria-label="Scan QR Presensi Materi"
-          title="Buka form presensi materi (Scan QR / Upload Foto / Input Token)"
+          title="Buka form presensi materi (Scan QR / Upload Foto / Kode Presensi)"
         >
           <QrCode size={20} className="stroke-[2.25] group-hover:scale-110 transition-transform shrink-0" />
           <span className="hidden sm:inline font-sans">Presensi Kehadiran</span>
@@ -390,7 +390,7 @@ export default function MobileAttendanceFAB({
                 }`}
               >
                 <Keyboard size={14} />
-                <span>Input Token</span>
+                <span>Kode Presensi</span>
               </button>
               <button
                 type="button"
@@ -457,7 +457,7 @@ export default function MobileAttendanceFAB({
                         onClick={() => setActiveTab("code")}
                         className="px-4 py-2 bg-gold-500 text-oxford-950 font-bold rounded-lg text-xs"
                       >
-                        Beralih ke Input Token Manual
+                        Beralih ke Input Kode Presensi Manual
                       </button>
                     </div>
                   )}

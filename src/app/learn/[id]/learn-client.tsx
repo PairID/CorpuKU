@@ -906,7 +906,7 @@ export default function LearnClient({ course, courseContent, session, enrollment
                         type="button"
                         onClick={() => setIsAttendanceModalOpen(true)}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-gold-500 hover:bg-gold-400 text-oxford-950 transition-colors shadow-xs shrink-0 active:scale-95"
-                        title="Isi presensi materi (Input Token / Scan QR)"
+                        title="Isi presensi materi (Kode Presensi / Scan QR)"
                     >
                         <QrCode size={14} className="stroke-[2.5]" />
                         <span className="hidden sm:inline">Presensi</span>
@@ -1259,7 +1259,7 @@ export default function LearnClient({ course, courseContent, session, enrollment
                                                     <p className="text-xs mt-0.5 text-oxford-600 dark:text-oxford-300 font-sans">
                                                         {completedLessons[activeLesson.id]
                                                             ? "Kehadiran Anda pada sesi ini telah tercatat dan tervalidasi."
-                                                            : "Bagi pengguna laptop, Anda bisa memasukkan kode token sesi atau menggunakan kamera / upload foto QR."}
+                                                            : "Bagi pengguna laptop, Anda bisa memasukkan kode presensi sesi atau menggunakan kamera / upload foto QR."}
                                                     </p>
                                                 </div>
                                             </div>

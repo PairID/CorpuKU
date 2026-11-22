@@ -197,7 +197,7 @@ export default function CourseAttendanceQrManagerModal({
         setDraftCode(res.code || "");
         setQrDataUrl(res.qrDataUrl);
         setAttendanceUrl(res.attendanceUrl || "");
-        showToast.success("QR Presensi Diperbarui", `Token baru: ${res.code}`);
+        showToast.success("QR Presensi Diperbarui", `Kode Presensi baru: ${res.code}`);
       } else {
         showToast.error("Gagal", res.error || "Gagal men-generate ulang QR.");
       }
@@ -216,9 +216,9 @@ export default function CourseAttendanceQrManagerModal({
         setDraftCode(res.code || "");
         setQrDataUrl(res.qrDataUrl);
         setAttendanceUrl(res.attendanceUrl || "");
-        showToast.success("Token Disimpan", `Token & QR diperbarui menjadi ${res.code}`);
+        showToast.success("Kode Presensi Disimpan", `Kode & QR diperbarui menjadi ${res.code}`);
       } else {
-        showToast.error("Gagal Menyimpan Token", res.error || "Token tidak valid.");
+        showToast.error("Gagal Menyimpan", res.error || "Kode presensi tidak valid.");
       }
     } finally {
       setSavingCode(false);
@@ -660,7 +660,7 @@ export default function CourseAttendanceQrManagerModal({
                     }`}
                   >
                     <QrCode size={14} />
-                    <span>Kode QR &amp; Token</span>
+                    <span>Kode QR &amp; Kode Presensi</span>
                   </button>
                   <button
                     type="button"
@@ -735,7 +735,7 @@ export default function CourseAttendanceQrManagerModal({
                             disabled={savingCode || draftCode.trim().length < 3}
                             className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold disabled:opacity-50 shrink-0"
                           >
-                            {savingCode ? "Menyimpan..." : "Simpan Token"}
+                            {savingCode ? "Menyimpan..." : "Simpan Kode"}
                           </button>
                         )}
                         <button
