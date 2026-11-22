@@ -15,6 +15,7 @@ export interface CourseInstructor {
     id: string;
     name: string;
     email: string;
+    role?: string;
 }
 
 export interface CourseFormData {
@@ -483,21 +484,52 @@ export default function CourseForm({ initialData, instructors, mode, basePath = 
                     </div>
 
                     <div className="bg-oxford-50 dark:bg-oxford-950 p-5 rounded-xl border border-oxford-100 dark:border-oxford-800">
-                        <label className="block text-sm font-bold text-oxford-900 dark:text-white mb-2">Instruktur Pengajar</label>
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-2">
+                            <label className="block text-sm font-bold text-oxford-900 dark:text-white">Instruktur Pengajar</label>
+                            <span className="text-[11px] text-oxford-500">Semua pengguna aktif dapat dipilih sebagai pengajar</span>
+                        </div>
                         <select
                             value={instructorId}
                             onChange={(e) => setInstructorId(e.target.value)}
-                            className="w-full px-4 py-3 bg-white dark:bg-[#161B2A] border border-oxford-200 dark:border-oxford-700 rounded-lg text-sm focus:outline-none focus:border-gold-500 text-oxford-900 dark:text-white"
+                            className="w-full px-4 py-3 bg-white dark:bg-[#161B2A] border border-oxford-200 dark:border-oxford-700 rounded-lg text-sm focus:outline-none focus:border-gold-500 text-oxford-900 dark:text-white cursor-pointer"
                         >
-                            <option value="" disabled>Pilih Instruktur...</option>
-                            {instructors.map((inst) => (
-                                <option key={inst.id} value={inst.id}>
-                                    {inst.name} ({inst.email})
-                                </option>
-                            ))}
+                            <option value="" disabled>Pilih Pengajar / Instruktur...</option>
+
+                            {/* Kelompok Instruktur Resmi */}
+                            {instructors.filter(i => i.role === 'instructor').length > 0 && (
+                                <optgroup label="Pengajar / Widyaiswara Terdaftar">
+                                    {instructors.filter(i => i.role === 'instructor').map((inst) => (
+                                        <option key={inst.id} value={inst.id}>
+                                            {inst.name} ({inst.email}) — [Instruktur]
+                                        </option>
+                                    ))}
+                                </optgroup>
+                            )}
+
+                            {/* Kelompok Administrator */}
+                            {instructors.filter(i => i.role === 'admin').length > 0 && (
+                                <optgroup label="Administrator & Fasilitator BPSDM">
+                                    {instructors.filter(i => i.role === 'admin').map((inst) => (
+                                        <option key={inst.id} value={inst.id}>
+                                            {inst.name} ({inst.email}) — [Admin]
+                                        </option>
+                                    ))}
+                                </optgroup>
+                            )}
+
+                            {/* Kelompok Pegawai / User Non-Pengajar */}
+                            {instructors.filter(i => !['instructor', 'admin'].includes(i.role || '')).length > 0 && (
+                                <optgroup label="Pegawai / Narasumber Lainnya (User Non-Pengajar)">
+                                    {instructors.filter(i => !['instructor', 'admin'].includes(i.role || '')).map((inst) => (
+                                        <option key={inst.id} value={inst.id}>
+                                            {inst.name} ({inst.email}) — [Pegawai/Peserta]
+                                        </option>
+                                    ))}
+                                </optgroup>
+                            )}
                         </select>
                         {instructors.length === 0 && (
-                            <p className="text-xs text-crimson-500 mt-2">Belum ada akun instruktur terdaftar di sistem.</p>
+                            <p className="text-xs text-crimson-500 mt-2">Belum ada akun pengguna terdaftar di sistem.</p>
                         )}
                     </div>
 

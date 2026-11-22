@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { motion } from "framer-motion";
-import { PlusCircle, Trash2, Edit2, PlayCircle, FileText, CheckCircle2, Save, Loader2, ListPlus, FileUp, Sparkles, Search, QrCode, Copy, Check, HelpCircle, Camera, Link2, Lock, Unlock, Clock } from "lucide-react";
+import { PlusCircle, Trash2, Edit2, PlayCircle, FileText, CheckCircle2, Save, Loader2, ListPlus, FileUp, Sparkles, Search, QrCode, Copy, Check, HelpCircle, Camera, Link2, Lock, Unlock, Clock, AlertCircle, RefreshCw } from "lucide-react";
 import { saveCourseContent, generateMaterialAttendanceQr, getMaterialAttendanceQr, getCourseContentForBuilder, updateModuleAccess } from "@/app/actions/builder";
 import { evaluateModuleAccess, toDateTimeLocalValue, type ModuleAccessMode } from "@/lib/module-access";
 import { updateCourseDocumentationUrl } from "@/app/actions/courses";
@@ -139,6 +139,48 @@ export default function ContentBuilder({
         questions: [] as string[],
         options: [] as string[]
     });
+
+    // Auto-save & change tracking state
+    const [autoSaveEnabled, setAutoSaveEnabled] = useState<boolean>(true);
+    const [lastSavedHash, setLastSavedHash] = useState<string>(() =>
+        JSON.stringify({ modules: initialData || [], deletions: { modules: [], lessons: [], questions: [], options: [] } })
+    );
+    const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
+    const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+    // Initialize autoSaveEnabled from localStorage on mount
+    useEffect(() => {
+        try {
+            const stored = localStorage.getItem("corpuku_builder_autosave");
+            if (stored !== null) {
+                setAutoSaveEnabled(stored === "true");
+            }
+        } catch {
+            // Ignore storage errors
+        }
+    }, []);
+
+    const toggleAutoSave = () => {
+        setAutoSaveEnabled((prev) => {
+            const next = !prev;
+            try {
+                localStorage.setItem("corpuku_builder_autosave", String(next));
+            } catch {}
+            if (next) {
+                showToast.success("Auto-Save Diaktifkan", "Perubahan kurikulum akan otomatis tersimpan dalam sekejap.");
+            } else {
+                showToast.info("Auto-Save Dinonaktifkan", "Pastikan menekan tombol Simpan Perubahan secara manual.");
+            }
+            return next;
+        });
+    };
+
+    const currentHash = useMemo(
+        () => JSON.stringify({ modules, deletions }),
+        [modules, deletions]
+    );
+
+    const hasUnsavedChanges = currentHash !== lastSavedHash;
 
     const addModule = () => {
         setModules([...modules, { id: "", title: "Modul Baru", order: "0", isActive: true, accessMode: "manual", activeFrom: null, activeUntil: null, lessons: [] }]);
@@ -299,34 +341,158 @@ export default function ContentBuilder({
         setModules(temp);
     };
 
-    const handleSave = async () => {
+    const handleSave = async (silent = false) => {
+        if (isSaving) return;
         setIsSaving(true);
         const res = await saveCourseContent(courseId, modules, deletions);
         if (res.error) {
             setIsSaving(false);
-            showToast.error("Gagal Menyimpan Materi", res.error);
+            if (!silent) {
+                showToast.error("Gagal Menyimpan Materi", res.error);
+            }
         } else {
             const refreshed = await getCourseContentForBuilder(courseId);
             setModules(refreshed as unknown as CourseContentModule[]);
-            setIsSaving(false);
-            showToast.success("Materi Berhasil Disimpan", "Seluruh kurikulum kursus telah diperbarui.");
             setDeletions({ modules: [], lessons: [], questions: [], options: [] });
+            const newHash = JSON.stringify({
+                modules: refreshed,
+                deletions: { modules: [], lessons: [], questions: [], options: [] }
+            });
+            setLastSavedHash(newHash);
+            setIsSaving(false);
+
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+            setLastSavedTime(timeStr);
+
+            if (!silent) {
+                showToast.success("Materi Berhasil Disimpan", "Seluruh kurikulum kursus telah diperbarui.");
+            }
             router.refresh();
         }
     };
 
+    // Auto-Save Debounce Effect (2.5 seconds after inactivity)
+    useEffect(() => {
+        if (!autoSaveEnabled || !hasUnsavedChanges || isSaving) return;
+
+        if (autoSaveTimerRef.current) {
+            clearTimeout(autoSaveTimerRef.current);
+        }
+
+        autoSaveTimerRef.current = setTimeout(() => {
+            handleSave(true);
+        }, 2500);
+
+        return () => {
+            if (autoSaveTimerRef.current) {
+                clearTimeout(autoSaveTimerRef.current);
+            }
+        };
+    }, [autoSaveEnabled, hasUnsavedChanges, currentHash, isSaving]);
+
+    // Prevent accidental tab close with unsaved changes
+    useEffect(() => {
+        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+            if (hasUnsavedChanges) {
+                e.preventDefault();
+                e.returnValue = "Ada perubahan materi yang belum disimpan. Yakin ingin meninggalkan halaman?";
+                return e.returnValue;
+            }
+        };
+        window.addEventListener("beforeunload", handleBeforeUnload);
+        return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+    }, [hasUnsavedChanges]);
+
     return (
         <div className="space-y-8 pb-32">
-            <div className="flex justify-between items-center bg-white dark:bg-[#161B2A] p-4 rounded-xl border border-oxford-200 dark:border-oxford-700 shadow-sm sticky top-24 z-20">
-                <p className="text-sm text-oxford-600 dark:text-oxford-300 font-medium">Auto-Save dimatikan. Pastikan menekan tombol Simpan sebelum keluar halaman.</p>
-                <button
-                    onClick={handleSave}
-                    disabled={isSaving}
-                    className="flex items-center gap-2 bg-oxford-900 text-gold-400 hover:text-gold-300 font-bold px-6 py-2 rounded-lg transition-colors cursor-pointer"
-                >
-                    {isSaving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
-                    {isSaving ? "Menyimpan..." : "Simpan Perubahan"}
-                </button>
+            {/* Top Action Toolbar with Auto-Save Switch and Live Status */}
+            <div className="sticky top-20 z-20 backdrop-blur-md bg-white/95 dark:bg-[#161B2A]/95 p-4 rounded-2xl border border-oxford-200 dark:border-oxford-700 shadow-lg shadow-oxford-900/5 transition-all">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    {/* Left: Auto-save toggle + Live Status */}
+                    <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+                        {/* Auto-Save Toggle Pill */}
+                        <div className="flex items-center gap-2.5 bg-oxford-50 dark:bg-oxford-900/60 px-3.5 py-1.5 rounded-xl border border-oxford-200 dark:border-oxford-700/80">
+                            <span className="text-xs font-bold text-oxford-800 dark:text-oxford-200">
+                                Auto-Save
+                            </span>
+                            <button
+                                type="button"
+                                role="switch"
+                                aria-checked={autoSaveEnabled}
+                                onClick={toggleAutoSave}
+                                className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                                    autoSaveEnabled ? "bg-emerald-500" : "bg-oxford-300 dark:bg-oxford-700"
+                                }`}
+                                title={autoSaveEnabled ? "Klik untuk mematikan Auto-Save" : "Klik untuk menyalakan Auto-Save"}
+                            >
+                                <span className="sr-only">Toggle Auto-Save</span>
+                                <span
+                                    aria-hidden="true"
+                                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                        autoSaveEnabled ? "translate-x-5" : "translate-x-0"
+                                    }`}
+                                />
+                            </button>
+                            <span className={`text-[11px] font-semibold ${autoSaveEnabled ? "text-emerald-600 dark:text-emerald-400" : "text-oxford-500 dark:text-oxford-400"}`}>
+                                {autoSaveEnabled ? "Aktif" : "Mati"}
+                            </span>
+                        </div>
+
+                        {/* Status Indicator */}
+                        <div className="flex items-center gap-2 text-xs">
+                            {isSaving ? (
+                                <div className="flex items-center gap-1.5 text-blue-600 dark:text-blue-400 font-medium">
+                                    <RefreshCw size={14} className="animate-spin" />
+                                    <span>Menyimpan ke server...</span>
+                                </div>
+                            ) : hasUnsavedChanges ? (
+                                autoSaveEnabled ? (
+                                    <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 font-medium">
+                                        <Clock size={14} className="animate-pulse text-amber-500" />
+                                        <span>Perubahan terdeteksi, menyimpan otomatis...</span>
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 font-medium">
+                                        <AlertCircle size={14} className="text-amber-500" />
+                                        <span>Ada perubahan belum tersimpan</span>
+                                    </div>
+                                )
+                            ) : (
+                                <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-medium">
+                                    <CheckCircle2 size={14} className="text-emerald-500" />
+                                    <span>
+                                        {lastSavedTime ? `Tersimpan otomatis pkl ${lastSavedTime}` : "Semua perubahan tersimpan"}
+                                    </span>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Right: Manual Save Button & Actions */}
+                    <div className="flex items-center gap-2 self-end sm:self-auto">
+                        <button
+                            type="button"
+                            onClick={() => handleSave(false)}
+                            disabled={isSaving}
+                            className={`flex items-center gap-2 font-bold px-5 py-2.5 rounded-xl transition-all cursor-pointer shadow-sm text-xs sm:text-sm ${
+                                hasUnsavedChanges
+                                    ? "bg-gold-500 hover:bg-gold-400 text-oxford-950 shadow-gold-500/20 hover:scale-[1.02] active:scale-[0.98] ring-2 ring-gold-400/50"
+                                    : "bg-oxford-900 hover:bg-oxford-800 text-gold-400 hover:text-gold-300 border border-oxford-700"
+                            } ${isSaving ? "opacity-75 cursor-wait" : ""}`}
+                        >
+                            {isSaving ? (
+                                <Loader2 size={16} className="animate-spin" />
+                            ) : (
+                                <Save size={16} />
+                            )}
+                            <span>{isSaving ? "Menyimpan..." : hasUnsavedChanges ? "Simpan Perubahan Sekarang" : "Simpan Perubahan"}</span>
+                            {hasUnsavedChanges && (
+                                <span className="w-2 h-2 rounded-full bg-oxford-950 animate-ping ml-0.5" />
+                            )}
+                        </button>
+                    </div>
+                </div>
             </div>
 
             {/* Link Dokumentasi Kegiatan (Sidebar Kelas Peserta) */}

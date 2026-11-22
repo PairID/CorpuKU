@@ -182,8 +182,8 @@ export default function LearnClient({ course, courseContent, session, enrollment
 
         // Hanya deteksi gesture swipe horizontal yang tegas (bukan scrolling vertikal)
         if (deltaY < 80) {
-            // Geser ke kanan (swipe right min 45px): buka menu jika ditarik dari sisi kiri layar
-            if (deltaX > 45 && !mobileSidebarOpen && touchStartX < 100) {
+            // Geser ke kanan (swipe right min 40px): buka menu modul dari manapun di layar (tengah atau tepi)
+            if (deltaX > 40 && !mobileSidebarOpen) {
                 setMobileSidebarOpen(true);
             }
             // Geser ke kiri (swipe left min 45px): tutup menu jika sedang terbuka

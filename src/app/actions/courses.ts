@@ -273,9 +273,13 @@ async function requireCourseAccess(courseId: string) {
     if (!enrollment[0]) throw new Error("Anda belum terdaftar pada kursus ini.");
     if (enrollment[0].status === "pending_approval") throw new Error("Pendaftaran Anda masih menunggu persetujuan admin.");
     if (enrollment[0].status === "rejected") throw new Error("Pendaftaran Anda ditolak oleh admin.");
-    const schedule = await sql`SELECT pacing_type, start_date FROM courses WHERE id = ${courseId} LIMIT 1`;
-    if (schedule[0]?.pacing_type === "instructor_paced" && schedule[0].start_date && new Date(String(schedule[0].start_date)).getTime() > Date.now()) {
-        throw new Error("Materi kursus akan terbuka pada tanggal mulai yang ditetapkan instruktur.");
+    const schedule = await sql`SELECT pacing_type, start_date, status FROM courses WHERE id = ${courseId} LIMIT 1`;
+    if (schedule[0]?.status !== "active" && schedule[0]?.pacing_type === "instructor_paced" && schedule[0].start_date) {
+        const startDay = new Date(String(schedule[0].start_date));
+        startDay.setHours(0, 0, 0, 0);
+        if (startDay.getTime() > Date.now()) {
+            throw new Error("Materi kursus akan terbuka pada tanggal mulai yang ditetapkan instruktur.");
+        }
     }
     return session;
 }
@@ -1102,6 +1106,11 @@ export async function createCourse(input: unknown) {
         const instructorId = session.user.role === "admin" && data.instructorId
             ? String(data.instructorId)
             : session.user.id;
+
+        // Jika user yang ditunjuk sebagai pengajar masih berstatus 'student', otomatis upgrade menjadi 'instructor'
+        if (instructorId) {
+            await sql`UPDATE users SET role = 'instructor' WHERE id = ${instructorId} AND role = 'student'`;
+        }
         
         await ensureEvaluationConfigColumn();
         const evalConfigJson = data.evaluationConfig ? JSON.stringify(data.evaluationConfig) : null;
@@ -1146,6 +1155,11 @@ export async function updateCourseDetails(id: string, input: unknown) {
         const hasEvalConfig = data.evaluationConfig !== undefined;
         const evalConfigJson = data.evaluationConfig ? JSON.stringify(data.evaluationConfig) : null;
 
+        const targetInstructorId = session.user.role === "admin" && data.instructorId ? String(data.instructorId) : session.user.id;
+        if (targetInstructorId) {
+            await sql`UPDATE users SET role = 'instructor' WHERE id = ${targetInstructorId} AND role = 'student'`;
+        }
+
         const now = new Date().toISOString();
         await sql`
             UPDATE courses 
@@ -1154,7 +1168,7 @@ export async function updateCourseDetails(id: string, input: unknown) {
                 category = ${sanitizePlainText(data.category)},
                 level = ${data.level}, 
                 thumbnail_url = ${data.thumbnailUrl || null},
-                instructor_id = ${session.user.role === "admin" && data.instructorId ? data.instructorId : session.user.id},
+                instructor_id = ${targetInstructorId},
                 pacing_type = ${data.pacingType},
                 start_date = ${data.startDate || null}, end_date = ${data.endDate || null}, jp = ${data.jp},
                 certificate_type = ${data.certificateType}, certificate_enabled = ${data.certificateEnabled},

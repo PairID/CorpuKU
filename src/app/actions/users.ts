@@ -65,7 +65,18 @@ export async function getCurrentUser() {
 export async function getInstructors() {
     try {
         await requireUserSession();
-        const users = await sql`SELECT id, name, email, role, joined_at as "joinedAt" FROM users WHERE role = 'instructor'`;
+        const users = await sql`
+            SELECT id, name, email, role, joined_at as "joinedAt" 
+            FROM users 
+            ORDER BY 
+                CASE 
+                    WHEN role = 'instructor' THEN 1 
+                    WHEN role = 'admin' THEN 2 
+                    ELSE 3 
+                END, 
+                name ASC
+            LIMIT 500
+        `;
         return users;
     } catch { return []; }
 }
