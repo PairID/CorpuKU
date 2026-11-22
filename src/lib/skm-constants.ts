@@ -219,9 +219,9 @@ export const NARASUMBER_EVALUATION_QUESTIONS: EvaluationCriterion[] = [
 ];
 
 /**
- * Pertanyaan Evaluasi Kualitas Penyelenggaraan Pelatihan
+ * Pertanyaan Evaluasi Kualitas Penyelenggaraan Pelatihan - Khusus LURING / KLASIKAL (Tatap Muka)
  */
-export const ORGANIZER_EVALUATION_QUESTIONS: EvaluationCriterion[] = [
+export const ORGANIZER_EVALUATION_QUESTIONS_LURING: EvaluationCriterion[] = [
   {
     id: 1,
     criterion: "Kesiapan & Pelayanan Panitia",
@@ -236,7 +236,7 @@ export const ORGANIZER_EVALUATION_QUESTIONS: EvaluationCriterion[] = [
   {
     id: 2,
     criterion: "Fasilitas & Kebersihan Ruang Kelas",
-    question: "Bagaimana kenyamanan, pendingin ruangan (AC), dan kebersihan ruang pelatihan?",
+    question: "Bagaimana kenyamanan, pendingin ruangan (AC), pencahayaan, dan kebersihan ruang pelatihan?",
     options: [
       { key: "A", text: "Sangat Nyaman & Bersih", score: 4 },
       { key: "B", text: "Nyaman & Bersih", score: 3 },
@@ -246,8 +246,8 @@ export const ORGANIZER_EVALUATION_QUESTIONS: EvaluationCriterion[] = [
   },
   {
     id: 3,
-    criterion: "Sarana Audio-Visual & Jaringan Internet",
-    question: "Bagaimana kualitas suara pengeras suara, proyektor, dan koneksi internet WiFi?",
+    criterion: "Sarana Audio-Visual & Multimedia",
+    question: "Bagaimana kualitas suara pengeras suara (mic), proyektor/layar, dan koneksi internet WiFi ruangan?",
     options: [
       { key: "A", text: "Sangat Jelas & Lancar", score: 4 },
       { key: "B", text: "Jelas & Lancar", score: 3 },
@@ -258,7 +258,7 @@ export const ORGANIZER_EVALUATION_QUESTIONS: EvaluationCriterion[] = [
   {
     id: 4,
     criterion: "Kualitas & Ketepatan Konsumsi",
-    question: "Bagaimana ketepatan waktu penyajian, rasa, dan higienitas konsumsi/snack?",
+    question: "Bagaimana ketepatan waktu penyajian, rasa, dan higienitas konsumsi/snack/makan siang?",
     options: [
       { key: "A", text: "Sangat Memuaskan & Higienis", score: 4 },
       { key: "B", text: "Baik & Cukup", score: 3 },
@@ -269,7 +269,7 @@ export const ORGANIZER_EVALUATION_QUESTIONS: EvaluationCriterion[] = [
   {
     id: 5,
     criterion: "Ketertiban & Kepatuhan Jadwal",
-    question: "Bagaimana kepatuhan panitia terhadap susunan acara (rundown) pelatihan?",
+    question: "Bagaimana kepatuhan panitia terhadap susunan acara (rundown) dan ketepatan waktu sesi tatap muka?",
     options: [
       { key: "A", text: "Sangat Tertib Sesuai Jadwal", score: 4 },
       { key: "B", text: "Tertib", score: 3 },
@@ -278,6 +278,146 @@ export const ORGANIZER_EVALUATION_QUESTIONS: EvaluationCriterion[] = [
     ],
   },
 ];
+
+/**
+ * Pertanyaan Evaluasi Kualitas Penyelenggaraan Pelatihan - Khusus DARING / ONLINE (Webinar / LMS)
+ */
+export const ORGANIZER_EVALUATION_QUESTIONS_DARING: EvaluationCriterion[] = [
+  {
+    id: 1,
+    criterion: "Kesiapan & Keramahan Panitia Daring",
+    question: "Bagaimana keramahan, responsivitas, dan pelayanan panitia/moderator dalam memfasilitasi sesi daring?",
+    options: [
+      { key: "A", text: "Sangat Ramah & Sigap", score: 4 },
+      { key: "B", text: "Baik & Responsif", score: 3 },
+      { key: "C", text: "Cukup Baik", score: 2 },
+      { key: "D", text: "Kurang Responsif", score: 1 },
+    ],
+  },
+  {
+    id: 2,
+    criterion: "Kualitas Platform & Aksesibilitas Sistem",
+    question: "Bagaimana kemudahan akses link room (Zoom/Meet/LMS), stabilitas siaran, dan kelancaran fitur interaksi?",
+    options: [
+      { key: "A", text: "Sangat Lancar & Stabil", score: 4 },
+      { key: "B", text: "Lancar & Cukup Stabil", score: 3 },
+      { key: "C", text: "Kadang Terkendala", score: 2 },
+      { key: "D", text: "Sering Terkendala Teknis", score: 1 },
+    ],
+  },
+  {
+    id: 3,
+    criterion: "Kualitas Audio, Video & Bahan Tayang",
+    question: "Bagaimana kejernihan audio narasumber/host, ketajaman video siaran, dan keterbacaan materi presentasi?",
+    options: [
+      { key: "A", text: "Sangat Jernih & Jelas", score: 4 },
+      { key: "B", text: "Jernih & Terbaca Baik", score: 3 },
+      { key: "C", text: "Kurang Jernih / Kadang Putus", score: 2 },
+      { key: "D", text: "Buruk & Sulit Dipahami", score: 1 },
+    ],
+  },
+  {
+    id: 4,
+    criterion: "Ketersediaan Bahan & Materi Pembelajaran Digital",
+    question: "Bagaimana kemudahan mengunduh materi bahan tayang, e-modul, atau rekaman sesi pembelajaran daring?",
+    options: [
+      { key: "A", text: "Sangat Lengkap & Mudah Diakses", score: 4 },
+      { key: "B", text: "Lengkap & Dapat Diakses", score: 3 },
+      { key: "C", text: "Cukup Lengkap", score: 2 },
+      { key: "D", text: "Kurang Lengkap / Sulit Diakses", score: 1 },
+    ],
+  },
+  {
+    id: 5,
+    criterion: "Manajemen Waktu & Ketertiban Sesi Daring",
+    question: "Bagaimana ketepatan waktu mulai, manajemen durasi istirahat (screen break), dan keteraturan rundown sesi daring?",
+    options: [
+      { key: "A", text: "Sangat Tertib & Tepat Waktu", score: 4 },
+      { key: "B", text: "Tertib Sesuai Jadwal", score: 3 },
+      { key: "C", text: "Cukup Tertib", score: 2 },
+      { key: "D", text: "Tidak Tertib / Molor", score: 1 },
+    ],
+  },
+];
+
+/**
+ * Pertanyaan Evaluasi Kualitas Penyelenggaraan Pelatihan - Khusus BLENDED LEARNING (Hybrid)
+ */
+export const ORGANIZER_EVALUATION_QUESTIONS_BLENDED: EvaluationCriterion[] = [
+  {
+    id: 1,
+    criterion: "Pelayanan Panitia & Koordinasi Hybrid",
+    question: "Bagaimana kesiapan dan pelayanan panitia dalam memfasilitasi peserta baik di ruang kelas fisik maupun virtual?",
+    options: [
+      { key: "A", text: "Sangat Sigap & Terkoordinasi", score: 4 },
+      { key: "B", text: "Baik & Responsif", score: 3 },
+      { key: "C", text: "Cukup Baik", score: 2 },
+      { key: "D", text: "Kurang Terkoordinasi", score: 1 },
+    ],
+  },
+  {
+    id: 2,
+    criterion: "Integrasi Fasilitas Kelas & Siaran Daring",
+    question: "Bagaimana kualitas integrasi kamera, mikrofon ruangan, dan tampilan visual antara kelas fisik dan ruang daring?",
+    options: [
+      { key: "A", text: "Sangat Baik & Terintegrasi", score: 4 },
+      { key: "B", text: "Baik & Cukup Jelas", score: 3 },
+      { key: "C", text: "Kadang Terkendala", score: 2 },
+      { key: "D", text: "Kurang Memadai", score: 1 },
+    ],
+  },
+  {
+    id: 3,
+    criterion: "Sarana Pembelajaran & Akses Materi Digital",
+    question: "Bagaimana ketersediaan materi digital di LMS serta fasilitas pendukung kelas (WiFi/proyektor)?",
+    options: [
+      { key: "A", text: "Sangat Lengkap & Mudah Diakses", score: 4 },
+      { key: "B", text: "Lengkap & Berfungsi Baik", score: 3 },
+      { key: "C", text: "Cukup Lengkap", score: 2 },
+      { key: "D", text: "Kurang Lengkap", score: 1 },
+    ],
+  },
+  {
+    id: 4,
+    criterion: "Layanan Pendukung & Konsumsi (Sesi Tatap Muka)",
+    question: "Bagaimana kenyamanan ruang kelas tatap muka dan ketepatan waktu penyajian konsumsi?",
+    options: [
+      { key: "A", text: "Sangat Memuaskan", score: 4 },
+      { key: "B", text: "Baik & Cukup", score: 3 },
+      { key: "C", text: "Cukup", score: 2 },
+      { key: "D", text: "Kurang Memuaskan", score: 1 },
+    ],
+  },
+  {
+    id: 5,
+    criterion: "Ketepatan Jadwal & Sinkronisasi Sesi",
+    question: "Bagaimana kepatuhan rundown acara serta sinkronisasi waktu antara aktivitas kelas fisik dan daring?",
+    options: [
+      { key: "A", text: "Sangat Sinkron & Tepat Waktu", score: 4 },
+      { key: "B", text: "Tertib Sesuai Jadwal", score: 3 },
+      { key: "C", text: "Cukup Tertib", score: 2 },
+      { key: "D", text: "Tidak Tertib", score: 1 },
+    ],
+  },
+];
+
+/**
+ * Mengambil daftar pertanyaan evaluasi penyelenggara sesuai metode pelaksanaan (delivery mode)
+ */
+export function getOrganizerEvaluationQuestions(deliveryMode: string = "daring"): EvaluationCriterion[] {
+  if (deliveryMode === "luring") {
+    return ORGANIZER_EVALUATION_QUESTIONS_LURING;
+  }
+  if (deliveryMode === "blended") {
+    return ORGANIZER_EVALUATION_QUESTIONS_BLENDED;
+  }
+  return ORGANIZER_EVALUATION_QUESTIONS_DARING;
+}
+
+/**
+ * Default backward-compatible fallback (default daring)
+ */
+export const ORGANIZER_EVALUATION_QUESTIONS: EvaluationCriterion[] = ORGANIZER_EVALUATION_QUESTIONS_DARING;
 
 export interface SkmScoreResult {
   score: number;
@@ -312,15 +452,17 @@ export function calculateSkmScore(
 
 /**
  * Mengembalikan salinan default konfigurasi evaluasi 3 tahap (Narasumber, Penyelenggara, SKM)
+ * Otomatis menyesuaikan format pertanyaan Penyelenggara berdasarkan metode pelaksanaan (daring, luring, blended)
  */
-export function getDefaultCourseEvaluationConfig(): Required<CourseEvaluationConfig> {
+export function getDefaultCourseEvaluationConfig(deliveryMode: string = "daring"): Required<CourseEvaluationConfig> {
+  const organizerQuestions = getOrganizerEvaluationQuestions(deliveryMode);
   return {
     enableUnderstanding: false,
     narasumber: NARASUMBER_EVALUATION_QUESTIONS.map((q) => ({
       ...q,
       options: q.options.map((o) => ({ ...o })),
     })),
-    organizer: ORGANIZER_EVALUATION_QUESTIONS.map((q) => ({
+    organizer: organizerQuestions.map((q) => ({
       ...q,
       options: q.options.map((o) => ({ ...o })),
     })),

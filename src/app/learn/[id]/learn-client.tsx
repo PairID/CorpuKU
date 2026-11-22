@@ -47,6 +47,7 @@ interface Course {
     title: string;
     description: string | null;
     trainingType?: string;
+    deliveryMode?: string;
     targetOpd?: string | null;
     attendanceThreshold?: number;
     documentationUrl?: string | null;
@@ -1552,6 +1553,7 @@ export default function LearnClient({ course, courseContent, session, enrollment
                             courseId={course.id}
                             courseTitle={course.title}
                             evaluationConfig={course.evaluationConfig}
+                            deliveryMode={course.deliveryMode || "daring"}
                             requestedStage={requestedEvalStage}
                             sessions={allLessons.map((l) => ({
                                 id: l.id,
@@ -1568,27 +1570,27 @@ export default function LearnClient({ course, courseContent, session, enrollment
                 </div>
             )}
 
-            {/* FLOATING BOTTOM DOCK: TOMBOL BACK & NEXT (FLOATING DI TENGAH BAWAH) */}
+            {/* FLOATING BOTTOM DOCK: TOMBOL BACK & NEXT (FLOATING DI TENGAH BAWAH DENGAN UKURAN PROPORSIONAL) */}
             {activeLesson && !showEvaluationWizard && (
-                <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 p-1.5 px-3 bg-oxford-950/90 dark:bg-[#161B2A]/95 backdrop-blur-md rounded-full border border-oxford-800/80 dark:border-oxford-700/80 shadow-2xl transition-all ring-1 ring-white/10">
+                <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 sm:gap-2 p-1 sm:p-1.5 px-2 sm:px-3 bg-oxford-950/95 dark:bg-[#161B2A]/95 backdrop-blur-md rounded-full border border-oxford-800/80 dark:border-oxford-700/80 shadow-2xl transition-all ring-1 ring-white/10 max-w-[92vw]">
                     {/* Tombol Back */}
                     {prevLesson ? (
                         <button
                             type="button"
                             onClick={() => handleLessonClick(prevLesson)}
-                            className="px-4 py-2 rounded-full text-xs font-bold font-sans transition-all flex items-center gap-1.5 bg-oxford-900/80 hover:bg-oxford-800 text-oxford-200 hover:text-white border border-oxford-700/60 active:scale-95 shadow-sm"
+                            className="px-3 py-1.5 sm:px-4 sm:py-2 rounded-full text-xs font-bold font-sans transition-all flex items-center gap-1 bg-oxford-900/80 hover:bg-oxford-800 text-oxford-200 hover:text-white border border-oxford-700/60 active:scale-95 shadow-sm shrink-0"
                             title={`Kembali ke: ${prevLesson.title}`}
                         >
-                            <ChevronLeft size={16} />
+                            <ChevronLeft size={15} />
                             <span>Back</span>
                         </button>
                     ) : (
                         <button
                             type="button"
                             disabled
-                            className="px-3.5 py-2 rounded-full text-xs font-bold font-sans flex items-center gap-1.5 bg-oxford-900/40 text-oxford-600 border border-white/5 cursor-not-allowed opacity-50"
+                            className="px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-full text-xs font-bold font-sans flex items-center gap-1 bg-oxford-900/40 text-oxford-600 border border-white/5 cursor-not-allowed opacity-40 shrink-0"
                         >
-                            <ChevronLeft size={16} />
+                            <ChevronLeft size={15} />
                             <span>Back</span>
                         </button>
                     )}
@@ -1598,14 +1600,14 @@ export default function LearnClient({ course, courseContent, session, enrollment
                         type="button"
                         onClick={markAsComplete}
                         disabled={completedLessons[activeLesson.id]}
-                        className={`px-3.5 py-2 rounded-full text-xs font-bold font-sans transition-all flex items-center gap-1.5 ${
+                        className={`px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-full text-xs font-bold font-sans transition-all flex items-center gap-1.5 shrink-0 ${
                             completedLessons[activeLesson.id]
                                 ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 cursor-default"
                                 : "bg-gold-500 hover:bg-gold-400 text-oxford-950 shadow-md shadow-gold-500/20 active:scale-95"
                         }`}
                         title={completedLessons[activeLesson.id] ? "Materi telah selesai dipelajari" : "Tandai materi ini telah selesai"}
                     >
-                        <CheckCircle size={15} />
+                        <CheckCircle size={14} />
                         <span className="hidden sm:inline">
                             {completedLessons[activeLesson.id] ? "Selesai" : "Tandai Selesai"}
                         </span>
@@ -1621,11 +1623,11 @@ export default function LearnClient({ course, courseContent, session, enrollment
                                 }
                                 handleLessonClick(nextLesson);
                             }}
-                            className="px-5 py-2 rounded-full text-xs font-bold font-sans transition-all flex items-center gap-1.5 bg-gold-500 hover:bg-gold-400 text-oxford-950 font-black shadow-md shadow-gold-500/20 active:scale-95"
+                            className="px-3.5 py-1.5 sm:px-5 sm:py-2 rounded-full text-xs font-bold font-sans transition-all flex items-center gap-1 bg-gold-500 hover:bg-gold-400 text-oxford-950 font-black shadow-md shadow-gold-500/20 active:scale-95 shrink-0"
                             title={`Lanjut ke: ${nextLesson.title}`}
                         >
                             <span>Next</span>
-                            <ChevronRight size={16} />
+                            <ChevronRight size={15} />
                         </button>
                     ) : isEvaluationUnlocked ? (
                         <button
@@ -1636,20 +1638,21 @@ export default function LearnClient({ course, courseContent, session, enrollment
                                 }
                                 setShowEvaluationWizard(true);
                             }}
-                            className="px-5 py-2 rounded-full text-xs font-bold font-sans transition-all flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-400 text-white font-black shadow-md shadow-emerald-500/20 active:scale-95"
+                            className="px-3.5 py-1.5 sm:px-5 sm:py-2 rounded-full text-xs font-bold font-sans transition-all flex items-center gap-1 bg-emerald-500 hover:bg-emerald-400 text-white font-black shadow-md shadow-emerald-500/20 active:scale-95 shrink-0"
                             title="Lanjut ke Evaluasi & Sertifikat"
                         >
-                            <span>Next (Evaluasi)</span>
-                            <ChevronRight size={16} />
+                            <span>Next</span>
+                            <span className="hidden sm:inline">(Evaluasi)</span>
+                            <ChevronRight size={15} />
                         </button>
                     ) : (
                         <button
                             type="button"
                             disabled
-                            className="px-4 py-2 rounded-full text-xs font-bold font-sans flex items-center gap-1.5 bg-oxford-900/40 text-oxford-600 border border-white/5 cursor-not-allowed opacity-50"
+                            className="px-3 py-1.5 sm:px-4 sm:py-2 rounded-full text-xs font-bold font-sans flex items-center gap-1 bg-oxford-900/40 text-oxford-600 border border-white/5 cursor-not-allowed opacity-40 shrink-0"
                         >
                             <span>Next</span>
-                            <ChevronRight size={16} />
+                            <ChevronRight size={15} />
                         </button>
                     )}
                 </div>

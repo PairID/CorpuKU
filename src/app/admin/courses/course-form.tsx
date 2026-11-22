@@ -6,7 +6,7 @@ import Link from "next/link";
 import { createCourse, updateCourseDetails } from "@/app/actions/courses";
 import { COURSE_CATEGORIES } from "@/lib/constants";
 import { showToast } from "@/lib/toast";
-import { CourseEvaluationConfig, getDefaultCourseEvaluationConfig } from "@/lib/skm-constants";
+import { CourseEvaluationConfig, getDefaultCourseEvaluationConfig, getOrganizerEvaluationQuestions } from "@/lib/skm-constants";
 import { DEFAULT_ORGANIZER_NAME, type DeliveryMode } from "@/lib/certificate-activity";
 import CourseEvaluationConfigEditor from "@/components/evaluations/CourseEvaluationConfigEditor";
 
@@ -442,13 +442,28 @@ export default function CourseForm({ initialData, instructors, mode, basePath = 
                             </label>
                             <select
                                 value={deliveryMode}
-                                onChange={(e) => setDeliveryMode(e.target.value as DeliveryMode)}
+                                onChange={(e) => {
+                                    const nextMode = e.target.value as DeliveryMode;
+                                    setDeliveryMode(nextMode);
+                                    // Otomatis sinkronkan format pertanyaan evaluasi penyelenggara sesuai metode yang dipilih
+                                    const nextQuestions = getOrganizerEvaluationQuestions(nextMode);
+                                    setEvaluationConfig((prev) => ({
+                                        ...prev,
+                                        organizer: nextQuestions.map((q) => ({
+                                            ...q,
+                                            options: q.options.map((o) => ({ ...o })),
+                                        })),
+                                    }));
+                                }}
                                 className="w-full px-4 py-2.5 bg-white dark:bg-[#161B2A] border border-oxford-200 dark:border-oxford-700 rounded-lg text-sm focus:outline-none focus:border-gold-500 text-oxford-900 dark:text-white font-medium"
                             >
                                 <option value="daring">Daring (Online)</option>
                                 <option value="luring">Luring / Klasikal (Tatap Muka)</option>
                                 <option value="blended">Blended Learning</option>
                             </select>
+                            <p className="text-[11px] text-oxford-500 dark:text-oxford-400 mt-1">
+                                Format instrumen evaluasi penyelenggara otomatis berganti ke format {deliveryMode === "daring" ? "Daring (Platform, Audio-Visual, Materi Digital)" : deliveryMode === "luring" ? "Luring (Ruang Kelas, AC, Konsumsi, Sound)" : "Blended Learning (Hybrid)"}.
+                            </p>
                         </div>
 
                         {(deliveryMode === "luring" || deliveryMode === "blended") && (
@@ -679,6 +694,7 @@ export default function CourseForm({ initialData, instructors, mode, basePath = 
                 <CourseEvaluationConfigEditor
                     value={evaluationConfig}
                     onChange={setEvaluationConfig}
+                    deliveryMode={deliveryMode}
                 />
             )}
         </form>

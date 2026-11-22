@@ -277,8 +277,8 @@ export default function MobileAttendanceFAB({
 
   return (
     <>
-      {/* Persistent Bottom-Right Floating Action Button (Mobile & Laptop/Desktop) */}
-      <div className="fixed bottom-5 right-4 md:bottom-6 md:right-6 z-40 pointer-events-auto">
+      {/* Persistent Bottom-Right Floating Action Button (Mobile floats above bottom dock, Laptop/Desktop bottom-right) */}
+      <div className="fixed bottom-20 right-3.5 sm:bottom-6 sm:right-6 z-30 pointer-events-auto">
         <button
           type="button"
           onClick={() => setIsOpen(true)}

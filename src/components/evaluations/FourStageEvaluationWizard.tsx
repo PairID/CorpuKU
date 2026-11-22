@@ -21,6 +21,7 @@ import {
   ORGANIZER_EVALUATION_QUESTIONS,
   DEFAULT_COMPREHENSION_QUESTIONS,
   calculateSkmScore,
+  getOrganizerEvaluationQuestions,
 } from "@/lib/skm-constants";
 import {
   getTrainingEvaluations,
@@ -41,6 +42,7 @@ interface FourStageEvaluationWizardProps {
   courseTitle?: string;
   sessions?: SessionInfo[];
   evaluationConfig?: CourseEvaluationConfig | null;
+  deliveryMode?: string;
   requestedStage?: EvaluationStage | null;
   onEvaluationsComplete?: () => void;
 }
@@ -50,6 +52,7 @@ export default function FourStageEvaluationWizard({
   courseTitle,
   sessions = [],
   evaluationConfig,
+  deliveryMode = "daring",
   requestedStage = null,
   onEvaluationsComplete,
 }: FourStageEvaluationWizardProps) {
@@ -58,10 +61,22 @@ export default function FourStageEvaluationWizard({
     evaluationConfig?.narasumber && evaluationConfig.narasumber.length > 0
       ? evaluationConfig.narasumber
       : NARASUMBER_EVALUATION_QUESTIONS;
-  const organizerQuestions =
-    evaluationConfig?.organizer && evaluationConfig.organizer.length > 0
-      ? evaluationConfig.organizer
-      : ORGANIZER_EVALUATION_QUESTIONS;
+  
+  // Format pertanyaan penyelenggara otomatis beradaptasi dengan metode kegiatan (Daring/Luring/Blended)
+  const organizerQuestions = (() => {
+    if (evaluationConfig?.organizer && evaluationConfig.organizer.length > 0) {
+      // Jika kegiatan daring namun pertanyaan tersimpan masih berformat luring (misal: tanya AC ruang kelas/konsumsi), adaptasikan ke daring
+      const isLuringInDaringMode = deliveryMode === "daring" && evaluationConfig.organizer.some(q =>
+        q.question.toLowerCase().includes("pendingin ruangan") ||
+        q.question.toLowerCase().includes("kebersihan ruang") ||
+        q.question.toLowerCase().includes("konsumsi")
+      );
+      if (!isLuringInDaringMode) {
+        return evaluationConfig.organizer;
+      }
+    }
+    return getOrganizerEvaluationQuestions(deliveryMode);
+  })();
   const comprehensionQuestions =
     evaluationConfig?.understanding && evaluationConfig.understanding.length > 0
       ? evaluationConfig.understanding
@@ -582,7 +597,11 @@ export default function FourStageEvaluationWizard({
                   Tahap 2: Evaluasi Kualitas Penyelenggaraan Pelatihan
                 </h4>
                 <p className="text-xs text-oxford-500">
-                  Penilaian kepanitiaan, fasilitas kelas, konsumsi, dan sarana prasarana pelatihan.
+                  {deliveryMode === "daring"
+                    ? "Penilaian kepanitiaan daring, platform webinar/LMS, audio-visual, dan bahan materi digital."
+                    : deliveryMode === "blended"
+                    ? "Penilaian kepanitiaan hybrid, integrasi kelas fisik & daring, konsumsi, dan sarana prasarana."
+                    : "Penilaian kepanitiaan tatap muka, fasilitas ruang kelas, konsumsi, dan sarana prasarana."}
                 </p>
               </div>
             </div>
@@ -633,7 +652,11 @@ export default function FourStageEvaluationWizard({
                 rows={3}
                 value={organizerNotes}
                 onChange={(e) => setOrganizerNotes(e.target.value)}
-                placeholder="Tuliskan saran untuk penyempurnaan fasilitas dan pelayanan panitia..."
+                placeholder={
+                  deliveryMode === "daring"
+                    ? "Tuliskan saran untuk penyempurnaan platform webinar, materi digital, dan pelayanan panitia daring..."
+                    : "Tuliskan saran untuk penyempurnaan fasilitas dan pelayanan panitia..."
+                }
                 className="w-full px-3.5 py-2.5 bg-oxford-50 dark:bg-oxford-900 border border-oxford-200 dark:border-oxford-700 rounded-xl text-xs text-oxford-900 dark:text-white focus:outline-none focus:border-gold-500"
               />
             </div>

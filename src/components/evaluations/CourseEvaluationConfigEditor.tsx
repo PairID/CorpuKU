@@ -24,6 +24,7 @@ import {
   ORGANIZER_EVALUATION_QUESTIONS,
   SKM_QUESTIONS,
   DEFAULT_COMPREHENSION_QUESTIONS,
+  getOrganizerEvaluationQuestions,
 } from "@/lib/skm-constants";
 
 type EvaluationTab = "narasumber" | "organizer" | "understanding" | "skm";
@@ -31,6 +32,7 @@ type EvaluationTab = "narasumber" | "organizer" | "understanding" | "skm";
 interface CourseEvaluationConfigEditorProps {
   value: Required<CourseEvaluationConfig>;
   onChange: (next: Required<CourseEvaluationConfig>) => void;
+  deliveryMode?: string;
 }
 
 const BASE_TABS: {
@@ -65,12 +67,12 @@ const BASE_TABS: {
   },
 ];
 
-function cloneDefaultCriterionList(tab: "narasumber" | "organizer" | "skm"): EvaluationCriterion[] {
+function cloneDefaultCriterionList(tab: "narasumber" | "organizer" | "skm", mode = "daring"): EvaluationCriterion[] {
   const source =
     tab === "narasumber"
       ? NARASUMBER_EVALUATION_QUESTIONS
       : tab === "organizer"
-        ? ORGANIZER_EVALUATION_QUESTIONS
+        ? getOrganizerEvaluationQuestions(mode)
         : SKM_QUESTIONS;
   return source.map((item) => ({
     ...item,
@@ -88,6 +90,7 @@ function cloneDefaultUnderstanding(): ComprehensionQuestion[] {
 export default function CourseEvaluationConfigEditor({
   value,
   onChange,
+  deliveryMode = "daring",
 }: CourseEvaluationConfigEditorProps) {
   const [activeTab, setActiveTab] = useState<EvaluationTab>("narasumber");
   const isUnderstandingEnabled = Boolean(value.enableUnderstanding);
@@ -106,6 +109,7 @@ export default function CourseEvaluationConfigEditor({
       setActiveTab("narasumber");
     }
   };
+
 
   // Criterion questions (narasumber, organizer, skm)
   const currentCriteria = (activeTab !== "understanding" ? value[activeTab] : []) || [];
@@ -221,7 +225,7 @@ export default function CourseEvaluationConfigEditor({
     if (activeTab === "understanding") {
       updateUnderstandingQuestions(cloneDefaultUnderstanding());
     } else {
-      updateCriteria(cloneDefaultCriterionList(activeTab));
+      updateCriteria(cloneDefaultCriterionList(activeTab, deliveryMode));
     }
   };
 
@@ -341,6 +345,72 @@ export default function CourseEvaluationConfigEditor({
       <p className="mt-3 text-xs text-oxford-600 dark:text-oxford-300 bg-oxford-50 dark:bg-oxford-900/60 border border-oxford-200/80 dark:border-oxford-800 rounded-xl px-3.5 py-2.5">
         {activeMeta.desc}
       </p>
+
+      {/* Preset Format Instrumen Penyelenggara (Daring / Luring / Blended) */}
+      {activeTab === "organizer" && (
+        <div className="mt-3 p-3.5 bg-gold-50/70 dark:bg-gold-950/30 border border-gold-200 dark:border-gold-800/80 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-oxford-900 dark:text-white">Pola Instrumen:</span>
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-gold-500 text-oxford-950 shadow-xs">
+              {deliveryMode === "daring" ? "Daring (Online)" : deliveryMode === "luring" ? "Luring (Tatap Muka)" : "Blended Learning"}
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[11px] text-oxford-600 dark:text-oxford-400 font-medium mr-1">Muat Cepat Format:</span>
+            <button
+              type="button"
+              onClick={() => {
+                const q = getOrganizerEvaluationQuestions("daring");
+                onChange({
+                  ...value,
+                  organizer: q.map((item) => ({ ...item, options: item.options.map((o) => ({ ...o })) })),
+                });
+              }}
+              className={`px-3 py-1 text-[11px] font-bold rounded-lg border transition-colors ${
+                deliveryMode === "daring"
+                  ? "bg-oxford-900 text-gold-400 border-oxford-900"
+                  : "bg-white dark:bg-[#161B2A] border-oxford-200 dark:border-oxford-700 hover:bg-gold-500 hover:text-oxford-950"
+              }`}
+            >
+              Daring
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const q = getOrganizerEvaluationQuestions("luring");
+                onChange({
+                  ...value,
+                  organizer: q.map((item) => ({ ...item, options: item.options.map((o) => ({ ...o })) })),
+                });
+              }}
+              className={`px-3 py-1 text-[11px] font-bold rounded-lg border transition-colors ${
+                deliveryMode === "luring"
+                  ? "bg-oxford-900 text-gold-400 border-oxford-900"
+                  : "bg-white dark:bg-[#161B2A] border-oxford-200 dark:border-oxford-700 hover:bg-gold-500 hover:text-oxford-950"
+              }`}
+            >
+              Luring
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const q = getOrganizerEvaluationQuestions("blended");
+                onChange({
+                  ...value,
+                  organizer: q.map((item) => ({ ...item, options: item.options.map((o) => ({ ...o })) })),
+                });
+              }}
+              className={`px-3 py-1 text-[11px] font-bold rounded-lg border transition-colors ${
+                deliveryMode === "blended"
+                  ? "bg-oxford-900 text-gold-400 border-oxford-900"
+                  : "bg-white dark:bg-[#161B2A] border-oxford-200 dark:border-oxford-700 hover:bg-gold-500 hover:text-oxford-950"
+              }`}
+            >
+              Blended
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Mode A: Tab Pemahaman Materi (Understanding) */}
       {activeTab === "understanding" ? (
