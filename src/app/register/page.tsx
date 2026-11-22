@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { BookOpen, Mail, Lock, User, Briefcase, Building2, ArrowRight, CheckCircle2, Loader2, Eye, EyeOff, Search, PenLine, X } from "lucide-react";
+import { BookOpen, Mail, Lock, User, Briefcase, Building2, ArrowRight, CheckCircle2, Loader2, Eye, EyeOff, Search, Plus, X } from "lucide-react";
 import { useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
@@ -24,20 +24,15 @@ function RegisterForm() {
     const [confirmPassword, setConfirmPassword] = useState("");
     const [nip, setNip] = useState("");
     const [instansiAsal, setInstansiAsal] = useState("");
-    const [instansiMode, setInstansiMode] = useState<"search" | "manual">("search");
-    const [instansiQuery, setInstansiQuery] = useState("");
-    const [showInstansiResults, setShowInstansiResults] = useState(false);
+    const [instansiDropdownOpen, setInstansiDropdownOpen] = useState(false);
     const [isEmailSent, setIsEmailSent] = useState(false);
 
-    const filteredInstansi = instansiQuery.trim()
+    const trimmedInstansi = instansiAsal.trim();
+    const filteredInstansi = trimmedInstansi
         ? DAFTAR_INSTANSI_KALTARA.filter((item) =>
-              item.toLowerCase().includes(instansiQuery.trim().toLowerCase())
+              item.toLowerCase().includes(trimmedInstansi.toLowerCase())
           )
         : [];
-
-    const handleSearchInstansi = () => {
-        setShowInstansiResults(true);
-    };
     const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
     const [success, setSuccess] = useState(false);
@@ -76,14 +71,12 @@ function RegisterForm() {
             }
         }
 
-        const resolvedInstansi = (instansiAsal || instansiQuery).trim();
-
         const { error } = await authClient.signUp.email({
             email,
             password,
             name,
             nip: cleanNip || undefined,
-            instansiAsal: resolvedInstansi,
+            instansiAsal: trimmedInstansi,
         });
 
         if (error) {
@@ -204,174 +197,85 @@ function RegisterForm() {
                                     <p className="text-xs text-oxford-400 mt-1">Opsional saat mendaftar. NIP/NIK digunakan untuk pencetakan sertifikat.</p>
                                 </div>
 
-                                <div>
-                                    <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                                        <label className="block text-sm font-bold text-oxford-900 dark:text-white" htmlFor="instansiAsal">
-                                            Instansi Asal
-                                        </label>
-                                        <div className="inline-flex rounded-lg border border-oxford-200 dark:border-oxford-700 bg-oxford-100/70 dark:bg-oxford-900 p-0.5 text-xs font-semibold">
+                                <div className="relative">
+                                    <label className="block text-sm font-bold text-oxford-900 dark:text-white mb-2" htmlFor="instansiAsal">
+                                        Instansi Asal
+                                    </label>
+                                    <div className="relative">
+                                        <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 text-oxford-400" size={20} />
+                                        <input
+                                            type="text"
+                                            id="instansiAsal"
+                                            name="instansiAsal"
+                                            value={instansiAsal}
+                                            onChange={(e) => {
+                                                setInstansiAsal(e.target.value);
+                                                setInstansiDropdownOpen(e.target.value.trim().length > 0);
+                                            }}
+                                            onFocus={() => {
+                                                if (trimmedInstansi && !DAFTAR_INSTANSI_KALTARA.includes(trimmedInstansi)) {
+                                                    setInstansiDropdownOpen(true);
+                                                }
+                                            }}
+                                            placeholder="Ketik nama instansi / OPD (atau instansi non-Kaltara)..."
+                                            autoComplete="off"
+                                            className="w-full pl-12 pr-10 py-3 border border-oxford-200 dark:border-oxford-700 bg-white dark:bg-[#161B2A] rounded-xl focus:outline-none focus:ring-4 focus:ring-gold-500/10 focus:border-gold-500 transition-all font-sans text-oxford-900 dark:text-white text-sm"
+                                        />
+                                        {instansiAsal ? (
                                             <button
                                                 type="button"
                                                 onClick={() => {
-                                                    setInstansiMode("search");
-                                                    setShowInstansiResults(false);
+                                                    setInstansiAsal("");
+                                                    setInstansiDropdownOpen(false);
                                                 }}
-                                                className={`px-2.5 py-1 rounded-md transition-colors flex items-center gap-1 ${
-                                                    instansiMode === "search"
-                                                        ? "bg-white dark:bg-[#161B2A] text-oxford-900 dark:text-white shadow-sm"
-                                                        : "text-oxford-500 dark:text-oxford-400 hover:text-oxford-800 dark:hover:text-white"
-                                                }`}
+                                                aria-label="Hapus instansi"
+                                                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-oxford-400 hover:text-oxford-600 dark:hover:text-oxford-200"
                                             >
-                                                <Search size={12} /> Cari OPD Kaltara
+                                                <X size={16} />
                                             </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    setInstansiMode("manual");
-                                                    setShowInstansiResults(false);
-                                                }}
-                                                className={`px-2.5 py-1 rounded-md transition-colors flex items-center gap-1 ${
-                                                    instansiMode === "manual"
-                                                        ? "bg-white dark:bg-[#161B2A] text-oxford-900 dark:text-white shadow-sm"
-                                                        : "text-oxford-500 dark:text-oxford-400 hover:text-oxford-800 dark:hover:text-white"
-                                                }`}
-                                            >
-                                                <PenLine size={12} /> Input Manual
-                                            </button>
-                                        </div>
+                                        ) : (
+                                            <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 text-oxford-400 pointer-events-none" size={16} />
+                                        )}
                                     </div>
 
-                                    {instansiMode === "search" ? (
-                                        <div className="space-y-2">
-                                            <div className="flex gap-2">
-                                                <div className="relative flex-1">
-                                                    <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 text-oxford-400" size={20} />
-                                                    <input
-                                                        type="text"
-                                                        id="instansiAsal"
-                                                        name="instansiAsal"
-                                                        value={instansiQuery}
-                                                        onChange={(e) => {
-                                                            setInstansiQuery(e.target.value);
-                                                            if (instansiAsal) setInstansiAsal("");
-                                                        }}
-                                                        onKeyDown={(e) => {
-                                                            if (e.key === "Enter") {
-                                                                e.preventDefault();
-                                                                handleSearchInstansi();
-                                                            }
-                                                        }}
-                                                        placeholder="Ketik kata kunci OPD/Instansi Kaltara..."
-                                                        className="w-full pl-12 pr-9 py-3 border border-oxford-200 dark:border-oxford-700 bg-white dark:bg-[#161B2A] rounded-xl focus:outline-none focus:ring-4 focus:ring-gold-500/10 focus:border-gold-500 transition-all font-sans text-oxford-900 dark:text-white text-sm"
-                                                    />
-                                                    {(instansiQuery || instansiAsal) && (
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => {
-                                                                setInstansiQuery("");
-                                                                setInstansiAsal("");
-                                                                setShowInstansiResults(false);
-                                                            }}
-                                                            aria-label="Hapus pencarian instansi"
-                                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-oxford-400 hover:text-oxford-600 dark:hover:text-oxford-200"
-                                                        >
-                                                            <X size={16} />
-                                                        </button>
-                                                    )}
-                                                </div>
-                                                <button
-                                                    type="button"
-                                                    onClick={handleSearchInstansi}
-                                                    className="px-4 py-3 bg-oxford-900 dark:bg-gold-500 text-white dark:text-oxford-950 font-bold text-sm rounded-xl hover:bg-oxford-800 dark:hover:bg-gold-400 transition-colors flex items-center gap-1.5 shrink-0"
-                                                >
-                                                    <Search size={16} /> Cari
-                                                </button>
-                                            </div>
-
-                                            {instansiAsal && (
-                                                <div className="flex items-center justify-between gap-2 px-3.5 py-2.5 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-xl text-sm">
-                                                    <span className="font-medium text-emerald-800 dark:text-emerald-200 truncate">
-                                                        Terpilih: <strong>{instansiAsal}</strong>
-                                                    </span>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => {
-                                                            setInstansiAsal("");
-                                                            setInstansiQuery("");
-                                                        }}
-                                                        className="text-xs font-bold text-emerald-700 dark:text-emerald-300 hover:underline shrink-0"
-                                                    >
-                                                        Ganti
-                                                    </button>
-                                                </div>
-                                            )}
-
-                                            {showInstansiResults && !instansiAsal && (
-                                                <div className="border border-oxford-200 dark:border-oxford-700 bg-white dark:bg-[#161B2A] rounded-xl shadow-lg overflow-hidden">
-                                                    {!instansiQuery.trim() ? (
-                                                        <p className="px-4 py-3 text-xs text-oxford-500 dark:text-oxford-400">
-                                                            Masukkan kata kunci terlebih dahulu (misal: <strong>BPSDM</strong>, <strong>Dinas Kesehatan</strong>, <strong>RSUD</strong>) lalu klik Cari.
-                                                        </p>
-                                                    ) : filteredInstansi.length > 0 ? (
-                                                        <ul className="max-h-52 overflow-y-auto divide-y divide-oxford-100 dark:divide-oxford-800">
-                                                            {filteredInstansi.map((instansi) => (
-                                                                <li key={instansi}>
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => {
-                                                                            setInstansiAsal(instansi);
-                                                                            setInstansiQuery(instansi);
-                                                                            setShowInstansiResults(false);
-                                                                        }}
-                                                                        className="w-full text-left px-4 py-2.5 text-sm text-oxford-800 dark:text-oxford-200 hover:bg-gold-50 dark:hover:bg-oxford-800 transition-colors"
-                                                                    >
-                                                                        {instansi}
-                                                                    </button>
-                                                                </li>
-                                                            ))}
-                                                        </ul>
-                                                    ) : (
-                                                        <div className="p-4 space-y-2 text-xs text-oxford-500 dark:text-oxford-400">
-                                                            <p>Instansi &ldquo;{instansiQuery.trim()}&rdquo; tidak ditemukan dalam daftar OPD Pemprov Kaltara.</p>
+                                    {instansiDropdownOpen && trimmedInstansi.length > 0 && (
+                                        <div className="mt-1.5 border border-oxford-200 dark:border-oxford-700 bg-white dark:bg-[#161B2A] rounded-xl shadow-lg overflow-hidden z-30">
+                                            {filteredInstansi.length > 0 ? (
+                                                <ul className="max-h-52 overflow-y-auto divide-y divide-oxford-100 dark:divide-oxford-800">
+                                                    {filteredInstansi.map((instansi) => (
+                                                        <li key={instansi}>
                                                             <button
                                                                 type="button"
                                                                 onClick={() => {
-                                                                    setInstansiAsal(instansiQuery.trim());
-                                                                    setInstansiMode("manual");
-                                                                    setShowInstansiResults(false);
+                                                                    setInstansiAsal(instansi);
+                                                                    setInstansiDropdownOpen(false);
                                                                 }}
-                                                                className="inline-flex items-center gap-1.5 font-bold text-gold-600 dark:text-gold-400 hover:underline"
+                                                                className="w-full text-left px-4 py-2.5 text-sm text-oxford-800 dark:text-oxford-200 hover:bg-gold-50 dark:hover:bg-oxford-800 transition-colors"
                                                             >
-                                                                <PenLine size={13} /> Gunakan &ldquo;{instansiQuery.trim()}&rdquo; sebagai Input Manual
+                                                                {instansi}
                                                             </button>
-                                                        </div>
-                                                    )}
-                                                </div>
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            ) : (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setInstansiAsal(trimmedInstansi);
+                                                        setInstansiDropdownOpen(false);
+                                                    }}
+                                                    className="w-full flex items-center gap-2 px-4 py-3 text-left text-sm font-semibold text-gold-700 dark:text-gold-400 hover:bg-gold-50 dark:hover:bg-oxford-800 transition-colors"
+                                                >
+                                                    <Plus size={16} className="shrink-0" />
+                                                    <span>Tambah Instansi Manual: &ldquo;{trimmedInstansi}&rdquo;</span>
+                                                </button>
                                             )}
-
-                                            <p className="text-xs text-oxford-400">
-                                                Ketik kata kunci lalu klik <strong>Cari</strong>. Bukan ASN Pemprov Kaltara? Pilih tab <strong>Input Manual</strong> di atas.
-                                            </p>
-                                        </div>
-                                    ) : (
-                                        <div>
-                                            <div className="relative">
-                                                <PenLine className="absolute left-4 top-1/2 -translate-y-1/2 text-oxford-400" size={20} />
-                                                <input
-                                                    type="text"
-                                                    id="instansiAsal"
-                                                    name="instansiAsal"
-                                                    value={instansiAsal}
-                                                    onChange={(e) => setInstansiAsal(e.target.value)}
-                                                    placeholder="Contoh: Kemendagri / Pemkab Bulungan / Swasta / Umum"
-                                                    className="w-full pl-12 pr-4 py-3 border border-oxford-200 dark:border-oxford-700 bg-white dark:bg-[#161B2A] rounded-xl focus:outline-none focus:ring-4 focus:ring-gold-500/10 focus:border-gold-500 transition-all font-sans text-oxford-900 dark:text-white text-sm"
-                                                />
-                                            </div>
-                                            <p className="text-xs text-oxford-400 mt-1">
-                                                Untuk peserta non-ASN Kaltara (Kementerian/Lembaga, Pemkab/Pemkot, Akademisi, Swasta, atau Umum).
-                                            </p>
                                         </div>
                                     )}
+
+                                    <p className="text-xs text-oxford-400 mt-1">
+                                        Ketik untuk mencari OPD Pemprov Kaltara, atau tambahkan langsung secara manual jika bukan ASN Kaltara.
+                                    </p>
                                 </div>
 
                                 <div>
