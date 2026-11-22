@@ -402,7 +402,7 @@ export default function MobileAttendanceFAB({
                 }`}
               >
                 <Camera size={14} />
-                <span>Kamera / Webcam</span>
+                <span>Kamera</span>
               </button>
               <button
                 type="button"

@@ -165,6 +165,35 @@ export default function LearnClient({ course, courseContent, session, enrollment
     const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
     const [showEvaluationWizard, setShowEvaluationWizard] = useState(false);
     const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+    const [touchStartX, setTouchStartX] = useState<number | null>(null);
+    const [touchStartY, setTouchStartY] = useState<number | null>(null);
+
+    const handleTouchStart = (e: React.TouchEvent) => {
+        const touch = e.touches[0];
+        setTouchStartX(touch.clientX);
+        setTouchStartY(touch.clientY);
+    };
+
+    const handleTouchEnd = (e: React.TouchEvent) => {
+        if (touchStartX === null || touchStartY === null) return;
+        const touch = e.changedTouches[0];
+        const deltaX = touch.clientX - touchStartX;
+        const deltaY = Math.abs(touch.clientY - touchStartY);
+
+        // Hanya deteksi gesture swipe horizontal yang tegas (bukan scrolling vertikal)
+        if (deltaY < 80) {
+            // Geser ke kanan (swipe right min 45px): buka menu jika ditarik dari sisi kiri layar
+            if (deltaX > 45 && !mobileSidebarOpen && touchStartX < 100) {
+                setMobileSidebarOpen(true);
+            }
+            // Geser ke kiri (swipe left min 45px): tutup menu jika sedang terbuka
+            else if (deltaX < -45 && mobileSidebarOpen) {
+                setMobileSidebarOpen(false);
+            }
+        }
+        setTouchStartX(null);
+        setTouchStartY(null);
+    };
     const [requestedEvalStage, setRequestedEvalStage] = useState<"narasumber" | "organizer" | "understanding" | "skm" | null>(null);
     const [attendanceStats, setAttendanceStats] = useState({
         attendedJp: Number(enrollment?.attendedJp || 0),
@@ -831,16 +860,36 @@ export default function LearnClient({ course, courseContent, session, enrollment
     };
 
     return (
-        <div className="min-h-screen bg-oxford-50 dark:bg-oxford-950 flex flex-col">
+        <div 
+            className="min-h-screen bg-oxford-50 dark:bg-oxford-950 flex flex-col"
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+        >
+            {/* Mobile Floating Edge Handle ">" (Klik atau Swipe ke kanan untuk Buka Menu) */}
+            {!mobileSidebarOpen && (
+                <button
+                    type="button"
+                    onClick={() => setMobileSidebarOpen(true)}
+                    className="md:hidden fixed left-0 top-1/2 -translate-y-1/2 z-30 bg-oxford-950/90 dark:bg-[#161B2A]/95 text-gold-400 hover:text-white hover:bg-oxford-900 shadow-2xl border border-l-0 border-gold-500/50 py-3.5 px-1.5 rounded-r-2xl flex flex-col items-center justify-center gap-1 backdrop-blur-md active:scale-95 transition-all group ring-2 ring-gold-500/20"
+                    aria-label="Buka Menu Modul Kursus"
+                    title="Geser ke kanan atau sentuh untuk melihat menu modul"
+                >
+                    <ChevronRight size={18} className="animate-pulse group-hover:translate-x-0.5 transition-transform text-gold-400" />
+                    <span className="text-[9px] font-black tracking-widest uppercase [writing-mode:vertical-lr] rotate-180 text-oxford-200 group-hover:text-gold-300">
+                        Menu
+                    </span>
+                </button>
+            )}
+
             {/* Top Navigation Bar - sticky at top since global header is hidden */}
             <div className="bg-oxford-950 text-white h-14 flex items-center px-3 md:px-6 sticky top-0 z-30 shadow-md gap-2">
                 <button
                     type="button"
                     onClick={() => setMobileSidebarOpen((prev) => !prev)}
-                    className="md:hidden inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-oxford-800 hover:bg-oxford-700 text-gold-400 text-xs font-bold shrink-0"
+                    className="md:hidden inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-oxford-800 hover:bg-oxford-700 text-gold-400 text-xs font-bold shrink-0 border border-gold-500/30 active:scale-95 transition-all"
                     aria-label="Buka Menu Kurikulum & Evaluasi"
                 >
-                    {mobileSidebarOpen ? <X size={16} /> : <Menu size={16} />}
+                    {mobileSidebarOpen ? <X size={15} /> : <ChevronRight size={15} className="animate-pulse" />}
                     <span>Menu</span>
                 </button>
                 <Link href={`/courses/${course.id}`} className="flex items-center text-oxford-300 hover:text-white transition-colors mr-1 md:mr-4 shrink-0">
@@ -1209,7 +1258,7 @@ export default function LearnClient({ course, courseContent, session, enrollment
                                                     <p className="text-xs mt-0.5 text-oxford-600 dark:text-oxford-300 font-sans">
                                                         {completedLessons[activeLesson.id]
                                                             ? "Kehadiran Anda pada sesi ini telah tercatat dan tervalidasi."
-                                                            : "Bagi pengguna laptop, Anda bisa memasukkan kode token sesi atau menggunakan kamera webcam / upload foto QR."}
+                                                            : "Bagi pengguna laptop, Anda bisa memasukkan kode token sesi atau menggunakan kamera / upload foto QR."}
                                                     </p>
                                                 </div>
                                             </div>

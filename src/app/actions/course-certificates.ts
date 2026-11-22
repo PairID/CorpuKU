@@ -143,6 +143,14 @@ export async function issueSingleCourseCertificate(formData: FormData): Promise<
   }
 }
 
+export async function issueCourseCertificateManualAction(courseId: string, userId: string) {
+  const fd = new FormData();
+  fd.append("courseId", courseId);
+  fd.append("userId", userId);
+  const res = await issueSingleCourseCertificate(fd);
+  return { success: res.success, message: res.message, error: res.success ? undefined : res.message };
+}
+
 export async function checkUserCertificateEligibility(courseId: string) {
   const session = await requireUserSession();
   return checkCourseCertificateEligibility(session.user.id, courseId);
