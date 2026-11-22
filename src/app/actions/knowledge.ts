@@ -40,6 +40,7 @@ interface KnowledgeItemRecord {
     likedBy: string[];
     privacy: string;
     status: string;
+    attachments?: unknown[];
     createdAt: string;
     updatedAt: string;
 }
@@ -121,6 +122,7 @@ export async function getKnowledgeItemById(id: string): Promise<(KnowledgeItemRe
                    k.thumbnail_url as "thumbnailUrl", k.video_url as "videoUrl", 
                    k.author_id as "authorId", k.views, k.likes, 
                    k.liked_by as "likedBy", k.privacy, k.status, 
+                   k.attachments, k.comments,
                    k.created_at as "createdAt", k.updated_at as "updatedAt",
                    u.name as "authorName", u.instansi_asal as "authorInstansi"
             FROM knowledge_items k
@@ -152,8 +154,15 @@ export async function getKnowledgeItemById(id: string): Promise<(KnowledgeItemRe
             };
         }));
 
+        let parsedAttachments = item.attachments;
+        if (typeof parsedAttachments === "string") {
+            try { parsedAttachments = JSON.parse(parsedAttachments); } catch { parsedAttachments = []; }
+        }
+        if (!Array.isArray(parsedAttachments)) parsedAttachments = [];
+
         return {
             ...(item as unknown as KnowledgeItemRecord),
+            attachments: parsedAttachments,
             comments: populatedComments.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
         };
     } catch (err: unknown) {
@@ -179,7 +188,7 @@ export async function createKnowledgeItem(data: KnowledgeInput) {
 
         await sql`
             INSERT INTO knowledge_items (id, title, description, category, tags, thumbnail_url, video_url, author_id, views, likes, liked_by, privacy, status, created_at, updated_at, attachments, comments)
-            VALUES (${id}, ${sanitizePlainText(String(data.title)).slice(0, 255)}, ${sanitizePlainText(String(data.description)).slice(0, 5000)}, ${sanitizePlainText(String(data.category || "Umum")).slice(0, 100)}, ${Array.isArray(data.tags) ? data.tags.slice(0, 20).map((tag: unknown) => sanitizePlainText(String(tag)).slice(0, 50)) : []}, ${data.thumbnailUrl}, ${data.videoUrl}, ${user.id}, 0, 0, '[]', ${data.privacy || 'public'}, ${status}, ${now}, ${now}, '[]', '[]')
+            VALUES (${id}, ${sanitizePlainText(String(data.title)).slice(0, 255)}, ${sanitizePlainText(String(data.description)).slice(0, 5000)}, ${sanitizePlainText(String(data.category || "Umum")).slice(0, 100)}, ${Array.isArray(data.tags) ? data.tags.slice(0, 20).map((tag: unknown) => sanitizePlainText(String(tag)).slice(0, 50)) : []}, ${data.thumbnailUrl}, ${data.videoUrl}, ${user.id}, 0, 0, '{}', ${data.privacy || 'public'}, ${status}, ${now}, ${now}, ${JSON.stringify(data.attachments || [])}, '[]')
         `;
         return { success: true, id };
     } catch (err) {

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowLeft, Edit, ThumbsUp, MessageSquare, Eye, Clock, Share2, Bookmark, FileText } from "lucide-react";
+import { ArrowLeft, Edit, ThumbsUp, MessageSquare, Eye, Clock, Share2, Bookmark, FileText, ExternalLink, Folder, Globe, Video } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { toggleKnowledgeLike, postKnowledgeComment } from "@/app/actions/knowledge";
 import type { AuthUser } from "@/lib/session";
@@ -20,6 +20,7 @@ export interface KnowledgeComment {
 export interface KnowledgeAttachment {
     name?: string;
     url?: string;
+    type?: string;
     createdAt?: string;
 }
 
@@ -30,6 +31,7 @@ export interface KnowledgeDetailItem {
     category: string;
     tags: string[];
     thumbnailUrl: string | null;
+    videoUrl?: string | null;
     authorId: string;
     authorName?: string;
     authorInstansi?: string;
@@ -182,34 +184,74 @@ export default function KnowledgeDetailClient({ item, serverUser }: { item: Know
 
                 {/* CONTENT */}
                 <article className="prose prose-lg prose-oxford max-w-none mt-10 text-oxford-700 dark:text-oxford-200 bg-white dark:bg-[#161B2A] p-8 sm:p-12 rounded-3xl shadow-sm border border-oxford-200 dark:border-oxford-700">
-                    <p className="lead text-xl text-oxford-900 dark:text-white font-medium">{item.description}</p>
-                    
-                    {/* Placeholder for complex rendering. Real app would have WYSIWYG HTML here */}
-                    <div className="whitespace-pre-line mt-6 leading-relaxed">
-                        Dokumen ini adalah ringkasan yang disediakan oleh CorpuKU Knowledge Space. 
-                        Isi teknis bisa diakses melalui lampiran (jika ada).
-                        <br/><br/>
-                        Pemerintah Daerah terus mendorong kapasitas literasi digital ASN. Dengan adanya {item.title}, 
-                        diharapkan pelayanan kepada masyarakat menjadi lebih prima dan terukur.
+                    <div className="whitespace-pre-line text-lg leading-relaxed text-oxford-800 dark:text-oxford-100">
+                        {item.description}
                     </div>
                 </article>
 
-                {/* ATTACHMENTS */}
+                {/* VIDEO IF ANY */}
+                {item.videoUrl && (
+                    <div className="mt-10 bg-white dark:bg-[#161B2A] p-6 rounded-2xl border border-oxford-200 dark:border-oxford-700 shadow-sm">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="p-2 bg-crimson-50 text-crimson-600 rounded-lg">
+                                <Video size={20} />
+                            </div>
+                            <h3 className="font-bold text-lg text-oxford-900 dark:text-white">Rekaman / Video Terkait</h3>
+                        </div>
+                        <a 
+                            href={item.videoUrl} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-2 px-5 py-2.5 bg-oxford-900 text-white rounded-xl text-sm font-bold hover:bg-gold-500 hover:text-oxford-950 transition-colors shadow-sm"
+                        >
+                            <ExternalLink size={16} /> Tonton Video di Portal Eksternal
+                        </a>
+                    </div>
+                )}
+
+                {/* ATTACHMENTS & RESOURCES */}
                 {item.attachments && item.attachments.length > 0 && (
                     <div className="mt-10">
-                        <h3 className="font-bold text-lg text-oxford-900 dark:text-white mb-4">Lampiran ({item.attachments.length})</h3>
+                        <h3 className="font-bold text-lg text-oxford-900 dark:text-white mb-4">Lampiran & Tautan Sumber ({item.attachments.length})</h3>
                         <div className="space-y-3">
-                            {item.attachments.map((file, i) => (
-                                <a key={i} href="#" className="flex items-center gap-4 p-4 bg-white dark:bg-[#161B2A] rounded-xl border border-oxford-200 dark:border-oxford-700 hover:border-gold-400 shadow-sm transition-colors group">
-                                    <div className="bg-oxford-50 dark:bg-oxford-950 p-3 rounded-lg text-oxford-600 dark:text-oxford-300 group-hover:bg-gold-50 group-hover:text-gold-600 transition-colors">
-                                        <FileText size={24} />
-                                    </div>
-                                    <div>
-                                        <p className="font-bold text-oxford-900 dark:text-white group-hover:text-gold-600 transition-colors">{file.name || "Dokumen Lampiran"}</p>
-                                        <p className="text-xs text-oxford-500 dark:text-oxford-400">PDF Document • 2.4 MB</p>
-                                    </div>
-                                </a>
-                            ))}
+                            {item.attachments.map((file, i) => {
+                                const isExternal = !!file.url && (file.url.startsWith("http://") || file.url.startsWith("https://"));
+                                const isDrive = file.url?.includes("drive.google.com");
+                                const isGov = file.url?.includes("go.id");
+
+                                return (
+                                    <a 
+                                        key={i} 
+                                        href={file.url || "#"} 
+                                        target={isExternal ? "_blank" : undefined}
+                                        rel={isExternal ? "noopener noreferrer" : undefined}
+                                        className="flex items-center justify-between gap-4 p-4 bg-white dark:bg-[#161B2A] rounded-xl border border-oxford-200 dark:border-oxford-700 hover:border-gold-400 shadow-sm transition-all group hover:-translate-y-0.5"
+                                    >
+                                        <div className="flex items-center gap-4">
+                                            <div className="bg-oxford-50 dark:bg-oxford-950 p-3 rounded-lg text-oxford-600 dark:text-oxford-300 group-hover:bg-gold-50 group-hover:text-gold-600 transition-colors">
+                                                {isDrive ? (
+                                                    <Folder size={24} />
+                                                ) : isGov ? (
+                                                    <Globe size={24} />
+                                                ) : (
+                                                    <FileText size={24} />
+                                                )}
+                                            </div>
+                                            <div>
+                                                <p className="font-bold text-oxford-900 dark:text-white group-hover:text-gold-600 transition-colors">
+                                                    {file.name || "Tautan Dokumen"}
+                                                </p>
+                                                <p className="text-xs text-oxford-500 dark:text-oxford-400">
+                                                    {isDrive ? "Google Drive Cloud Resource" : isGov ? "Portal Resmi Pemerintah" : "Tautan Eksternal"}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        {isExternal && (
+                                            <ExternalLink size={18} className="text-oxford-400 group-hover:text-gold-600 transition-colors flex-shrink-0" />
+                                        )}
+                                    </a>
+                                );
+                            })}
                         </div>
                     </div>
                 )}
