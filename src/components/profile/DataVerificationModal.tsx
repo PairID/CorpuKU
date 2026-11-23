@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ShieldCheck, UserCheck, AlertCircle, CheckCircle2, Loader2, FileText } from "lucide-react";
 import { PANGKAT_GOLONGAN } from "@/lib/constants";
 import { confirmParticipantData, getDistinctInstansiList } from "@/app/actions/attendance";
@@ -42,9 +42,20 @@ export default function DataVerificationModal({
   const [phone, setPhone] = useState(initialProfile.phone || "");
   const [statementAccepted, setStatementAccepted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const wasOpenRef = useRef(false);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      wasOpenRef.current = false;
+      return;
+    }
+
+    // Hanya inisialisasi ulang field saat modal baru dibuka (transisi false -> true),
+    // agar re-render parent tidak menimpa input/pilihan yang sedang diisi peserta.
+    const justOpened = !wasOpenRef.current;
+    wasOpenRef.current = true;
+    if (!justOpened) return;
+
     if (initialProfile.name !== undefined) setName(initialProfile.name || "");
     if (initialProfile.nip !== undefined) setNip(initialProfile.nip || "");
     if (initialProfile.instansiAsal !== undefined) setInstansiAsal(initialProfile.instansiAsal || "");
@@ -56,15 +67,13 @@ export default function DataVerificationModal({
     getDistinctInstansiList().then((list) => {
       if (!active) return;
       setInstansiList(list);
-      const current = (initialProfile.instansiAsal || instansiAsal || "").trim();
-      if (current && !list.includes(current)) {
-        setIsOtherInstansi(true);
-      }
+      const current = (initialProfile.instansiAsal || "").trim();
+      setIsOtherInstansi(Boolean(current && !list.includes(current)));
     });
     return () => {
       active = false;
     };
-  }, [isOpen, initialProfile]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isOpen, initialProfile]);
 
   if (!isOpen) return null;
 
