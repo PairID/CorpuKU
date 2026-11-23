@@ -80,6 +80,95 @@ export interface CourseAnalyticsData {
     completedCount: number;
     completionRatePct: number;
   }>;
+  allOpdBreakdown: Array<{
+    name: string;
+    participantCount: number;
+    completedCount: number;
+    completionRatePct: number;
+  }>;
+  quizzes: Array<{
+    lessonId: string;
+    title: string;
+    moduleTitle: string;
+    order: number;
+  }>;
+  allSessions: Array<{
+    lessonId: string;
+    title: string;
+    moduleTitle: string;
+    type: string;
+    order: number;
+    jp: number;
+    hasAttendance: boolean;
+    narasumberName: string | null;
+    sessionDate: string | null;
+    attendedCount: number;
+    attendanceRatePct: number;
+  }>;
+  participantsDetail: Array<{
+    enrollmentId: string;
+    userId: string;
+    name: string;
+    nip: string;
+    pangkat: string;
+    jabatan: string;
+    instansiAsal: string;
+    email: string;
+    phone: string;
+    status: string;
+    enrolledAt: string | null;
+    completedAt: string | null;
+    progress: number;
+    attendedJp: number;
+    attendancePercentage: number;
+    attendedSessionCount: number;
+    totalAttendanceSessions: number;
+    quizScores: Record<string, { bestScore: number; latestScore: number; attempts: number; passed: boolean }>;
+    avgQuizScore: number | null;
+    bestQuizScore: number | null;
+    totalQuizAttempts: number;
+    quizzesPassedCount: number;
+    evalNarasumberCompleted: boolean;
+    evalOrganizerCompleted: boolean;
+    evalUnderstandingCompleted: boolean;
+    evalSkmCompleted: boolean;
+    evalsDoneCount: number;
+    allEvaluationsCompleted: boolean;
+    certificateNumber: string | null;
+    certificateIssuedAt: string | null;
+  }>;
+  detailedQuizAttempts: Array<{
+    attemptId: string;
+    userId: string;
+    participantName: string;
+    nip: string;
+    instansiAsal: string;
+    lessonId: string;
+    quizTitle: string;
+    moduleTitle: string;
+    score: number;
+    passed: boolean;
+    createdAt: string;
+  }>;
+  detailedAttendances: Array<{
+    userId: string;
+    lessonId: string;
+    attendedAt: string | null;
+    overrideNote: string | null;
+    overrideBy: string | null;
+  }>;
+  detailedEvaluations: Array<{
+    userId: string;
+    participantName: string;
+    nip: string;
+    instansiAsal: string;
+    stage: string;
+    sessionId: string | null;
+    sessionTitle: string | null;
+    score: number | null;
+    notes: string | null;
+    createdAt: string | null;
+  }>;
 }
 
 export async function getCourseAnalytics(courseId: string): Promise<{ success: boolean; data?: CourseAnalyticsData; error?: string }> {
@@ -114,9 +203,11 @@ export async function getCourseAnalytics(courseId: string): Promise<{ success: b
       return { success: false, error: "Kursus tidak ditemukan." };
     }
 
-    // 2. Ambil Sesi / Materi dengan JP
+    // 2. Ambil Seluruh Sesi / Materi (termasuk Kuis, Narasumber, Tanggal Sesi)
     const sessionRows = await sql`
-      SELECT l.id, l.title, l.jp, l.has_attendance AS "hasAttendance",
+      SELECT l.id, l.title, l.type, l.jp, l.has_attendance AS "hasAttendance",
+             l.narasumber_name AS "narasumberName",
+             TO_CHAR(l.session_date::date, 'YYYY-MM-DD') AS "sessionDate",
              l."order" AS "lessonOrder", m.title AS "moduleTitle", m."order" AS "moduleOrder"
       FROM lessons l
       JOIN modules m ON m.id = l.module_id
@@ -126,26 +217,40 @@ export async function getCourseAnalytics(courseId: string): Promise<{ success: b
 
     const attendanceSessions = sessionRows.filter((s) => s.hasAttendance !== false && Number(s.jp || 0) > 0);
     const totalClassJp = sessionRows.reduce((acc, s) => acc + Math.max(0, Number(s.jp || 0)), 0);
+    const quizLessons = sessionRows
+      .filter((s) => String(s.type) === "quiz")
+      .map((s, idx) => ({
+        lessonId: String(s.id),
+        title: String(s.title || `Kuis ${idx + 1}`),
+        moduleTitle: String(s.moduleTitle || "Modul"),
+        order: Number(s.lessonOrder || idx + 1),
+      }));
 
-    // 3. Ambil Seluruh Peserta Terdaftar
+    // 3. Ambil Seluruh Peserta Terdaftar beserta Detail Profil & Tanggal
     const participantRows = await sql`
       SELECT e.id AS "enrollmentId", e.user_id AS "userId", e.status, e.progress,
+             e.enrolled_at AS "enrolledAt", e.completed_at AS "completedAt",
              e.attended_jp AS "attendedJp", e.attendance_percentage AS "attendancePercentage",
              e.all_evaluations_completed AS "allEvaluationsCompleted",
              e.eval_narasumber_completed AS "evalNarasumberCompleted",
              e.eval_organizer_completed AS "evalOrganizerCompleted",
              e.eval_understanding_completed AS "evalUnderstandingCompleted",
              e.eval_skm_completed AS "evalSkmCompleted",
-             u.name, COALESCE(u.nip, '') AS nip, COALESCE(u.instansi_asal, 'Lainnya / Umum') AS "instansiAsal"
+             u.name, COALESCE(u.nip, '') AS nip,
+             COALESCE(u.pangkat, '') AS pangkat,
+             COALESCE(u.jabatan, '') AS jabatan,
+             COALESCE(u.email, '') AS email,
+             COALESCE(u.phone, '') AS phone,
+             COALESCE(u.instansi_asal, 'Lainnya / Umum') AS "instansiAsal"
       FROM enrollments e
       JOIN users u ON u.id = e.user_id
       WHERE e.course_id = ${courseId}
+      ORDER BY u.name ASC
     `;
 
     const activeParticipants = participantRows.filter((p) => p.status === "active" || p.status === "completed");
     const totalEnrolled = activeParticipants.length;
     const totalPending = participantRows.filter((p) => p.status === "pending_approval").length;
-    const totalCompleted = activeParticipants.filter((p) => p.status === "completed").length;
     const threshold = Number(course.attendanceThreshold || 80);
 
     // Hitung rata-rata kehadiran
@@ -156,20 +261,30 @@ export async function getCourseAnalytics(courseId: string): Promise<{ success: b
     const attendedSufficientCount = activeParticipants.filter((p) => Number(p.attendancePercentage || 0) >= threshold).length;
     const evalsCompletedCount = activeParticipants.filter((p) => Boolean(p.allEvaluationsCompleted)).length;
 
-    // Ambil data kelulusan kuis
+    // Ambil data seluruh percobaan kuis beserta ID & waktu
     const lessonIds = sessionRows.map((s) => String(s.id));
-    let quizAttempts: Array<{ userId: string; score: number; passed: boolean; lessonId: string }> = [];
+    let quizAttempts: Array<{
+      id: string;
+      userId: string;
+      score: number;
+      passed: boolean;
+      lessonId: string;
+      createdAt: string;
+    }> = [];
     if (lessonIds.length > 0) {
       const attempts = await sql`
-        SELECT user_id AS "userId", score, passed, lesson_id AS "lessonId"
+        SELECT id, user_id AS "userId", score, passed, lesson_id AS "lessonId", created_at AS "createdAt"
         FROM quiz_attempts
         WHERE lesson_id = ANY(${lessonIds})
+        ORDER BY created_at DESC
       `;
       quizAttempts = attempts.map((a) => ({
+        id: String(a.id),
         userId: String(a.userId),
         score: Number(a.score || 0),
         passed: Boolean(a.passed),
         lessonId: String(a.lessonId),
+        createdAt: a.createdAt ? new Date(String(a.createdAt)).toISOString() : "",
       }));
     }
 
@@ -178,13 +293,20 @@ export async function getCourseAnalytics(courseId: string): Promise<{ success: b
       ? attendedSufficientCount // pada klasikal, kelulusan materi berbasis presensi
       : activeParticipants.filter((p) => quizPassedUsers.has(String(p.userId)) || (p.progress || 0) >= 100).length;
 
-    // Data Sertifikat Terbit
+    // Data Sertifikat Terbit (beserta nomor & tanggal terbit)
     const issuedCertificates = await sql`
-      SELECT enrollment_id AS "enrollmentId"
+      SELECT enrollment_id AS "enrollmentId", certificate_number AS "certificateNumber", issued_at AS "issuedAt"
       FROM issued_course_certificates
       WHERE course_id = ${courseId} AND revoked_at IS NULL
     `;
-    const certifiedEnrollmentIds = new Set(issuedCertificates.map((c) => String(c.enrollmentId)));
+    const certMap = new Map<string, { certificateNumber: string; issuedAt: string | null }>();
+    for (const c of issuedCertificates) {
+      certMap.set(String(c.enrollmentId), {
+        certificateNumber: String(c.certificateNumber),
+        issuedAt: c.issuedAt ? new Date(String(c.issuedAt)).toISOString() : null,
+      });
+    }
+    const certifiedEnrollmentIds = new Set(certMap.keys());
     const certifiedCount = activeParticipants.filter((p) => certifiedEnrollmentIds.has(String(p.enrollmentId)) || p.status === "completed").length;
 
     const funnel = [
@@ -282,13 +404,14 @@ export async function getCourseAnalytics(courseId: string): Promise<{ success: b
       totalAttempts: scores.length,
     };
 
-    // 7. Kirkpatrick L1 Evaluation Score Aggregation
+    // 7. Kirkpatrick L1 Evaluation Score Aggregation + Detail Evaluasi & Catatan
     const evaluationRecords = await sql`
-      SELECT stage, score
+      SELECT user_id AS "userId", stage, session_id AS "sessionId", answers, score, created_at AS "createdAt"
       FROM training_evaluations
       WHERE enrollment_id IN (
         SELECT id FROM enrollments WHERE course_id = ${courseId}
-      ) AND score IS NOT NULL
+      )
+      ORDER BY created_at DESC
     `;
 
     const evalScoresByStage = {
@@ -299,6 +422,7 @@ export async function getCourseAnalytics(courseId: string): Promise<{ success: b
     };
 
     for (const record of evaluationRecords) {
+      if (record.score == null) continue;
       const stage = String(record.stage) as keyof typeof evalScoresByStage;
       if (evalScoresByStage[stage]) {
         evalScoresByStage[stage].push(Number(record.score));
@@ -331,7 +455,7 @@ export async function getCourseAnalytics(courseId: string): Promise<{ success: b
       understanding: understandingStats,
       skm: skmStats,
       overallIndex,
-      totalEvaluations: evaluationRecords.length,
+      totalEvaluations: evaluationRecords.filter((r) => r.score != null).length,
     };
 
     // 8. Peserta At-Risk (Perlu Perhatian)
@@ -341,7 +465,6 @@ export async function getCourseAnalytics(courseId: string): Promise<{ success: b
         const evalsIncomplete = !p.allEvaluationsCompleted;
         return attInsufficient || evalsIncomplete;
       })
-      .slice(0, 30)
       .map((p) => {
         const evalsDone = [
           p.evalNarasumberCompleted,
@@ -364,7 +487,7 @@ export async function getCourseAnalytics(courseId: string): Promise<{ success: b
         };
       });
 
-    // 9. Sebaran OPD
+    // 9. Sebaran OPD (lengkap untuk Excel, top 10 untuk grafik UI)
     const opdMap = new Map<string, { count: number; completed: number }>();
     for (const p of activeParticipants) {
       const opd = String(p.instansiAsal || "Lainnya / Umum");
@@ -376,15 +499,204 @@ export async function getCourseAnalytics(courseId: string): Promise<{ success: b
       opdMap.set(opd, current);
     }
 
-    const opdBreakdown = Array.from(opdMap.entries())
+    const allOpdBreakdown = Array.from(opdMap.entries())
       .map(([name, data]) => ({
         name,
         participantCount: data.count,
         completedCount: data.completed,
         completionRatePct: data.count > 0 ? Math.round((data.completed / data.count) * 100) : 0,
       }))
-      .sort((a, b) => b.participantCount - a.participantCount)
-      .slice(0, 10);
+      .sort((a, b) => b.participantCount - a.participantCount);
+    const opdBreakdown = allOpdBreakdown.slice(0, 10);
+
+    // 10. Detail Presensi Sesi, Nilai Kuis per Peserta, & Evaluasi Lengkap untuk UI & Ekspor Excel Super Detail
+    const attendanceDetailRows = await sql`
+      SELECT user_id AS "userId", lesson_id AS "lessonId",
+             attended_at AS "attendedAt", override_note AS "overrideNote", override_by AS "overrideBy"
+      FROM material_attendances
+      WHERE course_id = ${courseId}
+    `;
+    const detailedAttendances = attendanceDetailRows.map((a) => ({
+      userId: String(a.userId),
+      lessonId: String(a.lessonId),
+      attendedAt: a.attendedAt ? new Date(String(a.attendedAt)).toISOString() : null,
+      overrideNote: a.overrideNote ? String(a.overrideNote) : null,
+      overrideBy: a.overrideBy ? String(a.overrideBy) : null,
+    }));
+
+    const attendedSessionsByUser = new Map<string, Set<string>>();
+    for (const a of detailedAttendances) {
+      const set = attendedSessionsByUser.get(a.userId) || new Set<string>();
+      set.add(a.lessonId);
+      attendedSessionsByUser.set(a.userId, set);
+    }
+
+    const sessionById = new Map<string, { title: string; moduleTitle: string }>();
+    for (const s of sessionRows) {
+      sessionById.set(String(s.id), {
+        title: String(s.title || "Sesi"),
+        moduleTitle: String(s.moduleTitle || "Modul"),
+      });
+    }
+
+    const userById = new Map<string, { name: string; nip: string; instansiAsal: string }>();
+    for (const p of participantRows) {
+      userById.set(String(p.userId), {
+        name: String(p.name || "Peserta"),
+        nip: String(p.nip || "-"),
+        instansiAsal: String(p.instansiAsal || "-"),
+      });
+    }
+
+    // Group quiz attempts by userId -> lessonId
+    const quizAttemptsByUser = new Map<string, typeof quizAttempts>();
+    for (const a of quizAttempts) {
+      const list = quizAttemptsByUser.get(a.userId) || [];
+      list.push(a);
+      quizAttemptsByUser.set(a.userId, list);
+    }
+
+    const participantsDetail = activeParticipants.map((p) => {
+      const userId = String(p.userId);
+      const enrollmentId = String(p.enrollmentId);
+      const userAttempts = quizAttemptsByUser.get(userId) || [];
+
+      const quizScores: Record<string, { bestScore: number; latestScore: number; attempts: number; passed: boolean }> = {};
+      for (const a of userAttempts) {
+        const cur = quizScores[a.lessonId];
+        if (!cur) {
+          quizScores[a.lessonId] = {
+            bestScore: a.score,
+            latestScore: a.score, // ordered DESC
+            attempts: 1,
+            passed: a.passed,
+          };
+        } else {
+          cur.bestScore = Math.max(cur.bestScore, a.score);
+          cur.attempts += 1;
+          cur.passed = cur.passed || a.passed;
+        }
+      }
+
+      const quizValues = Object.values(quizScores);
+      const avgUserQuiz = quizValues.length > 0
+        ? Math.round(quizValues.reduce((sum, q) => sum + q.bestScore, 0) / quizValues.length)
+        : null;
+      const bestUserQuiz = quizValues.length > 0
+        ? Math.max(...quizValues.map((q) => q.bestScore))
+        : null;
+      const quizzesPassedCount = quizValues.filter((q) => q.passed).length;
+
+      const evalsDone = [
+        p.evalNarasumberCompleted,
+        p.evalOrganizerCompleted,
+        p.evalUnderstandingCompleted,
+        p.evalSkmCompleted,
+      ].filter(Boolean).length;
+
+      const cert = certMap.get(enrollmentId);
+      const attendedSet = attendedSessionsByUser.get(userId);
+
+      return {
+        enrollmentId,
+        userId,
+        name: String(p.name || "Peserta"),
+        nip: String(p.nip || "-"),
+        pangkat: String(p.pangkat || "-"),
+        jabatan: String(p.jabatan || "-"),
+        instansiAsal: String(p.instansiAsal || "-"),
+        email: String(p.email || "-"),
+        phone: String(p.phone || "-"),
+        status: String(p.status),
+        enrolledAt: p.enrolledAt ? new Date(String(p.enrolledAt)).toISOString() : null,
+        completedAt: p.completedAt ? new Date(String(p.completedAt)).toISOString() : null,
+        progress: Number(p.progress || 0),
+        attendedJp: Number(p.attendedJp || 0),
+        attendancePercentage: Number(p.attendancePercentage || 0),
+        attendedSessionCount: attendedSet ? attendedSet.size : 0,
+        totalAttendanceSessions: attendanceSessions.length,
+        quizScores,
+        avgQuizScore: avgUserQuiz,
+        bestQuizScore: bestUserQuiz,
+        totalQuizAttempts: userAttempts.length,
+        quizzesPassedCount,
+        evalNarasumberCompleted: Boolean(p.evalNarasumberCompleted),
+        evalOrganizerCompleted: Boolean(p.evalOrganizerCompleted),
+        evalUnderstandingCompleted: Boolean(p.evalUnderstandingCompleted),
+        evalSkmCompleted: Boolean(p.evalSkmCompleted),
+        evalsDoneCount: evalsDone,
+        allEvaluationsCompleted: Boolean(p.allEvaluationsCompleted),
+        certificateNumber: cert?.certificateNumber || null,
+        certificateIssuedAt: cert?.issuedAt || null,
+      };
+    });
+
+    const detailedQuizAttempts = quizAttempts.map((a) => {
+      const u = userById.get(a.userId);
+      const q = sessionById.get(a.lessonId);
+      return {
+        attemptId: a.id,
+        userId: a.userId,
+        participantName: u?.name || "Peserta",
+        nip: u?.nip || "-",
+        instansiAsal: u?.instansiAsal || "-",
+        lessonId: a.lessonId,
+        quizTitle: q?.title || "Kuis",
+        moduleTitle: q?.moduleTitle || "Modul",
+        score: a.score,
+        passed: a.passed,
+        createdAt: a.createdAt,
+      };
+    });
+
+    const allSessions = sessionRows.map((s, index) => {
+      const attended = sessionAttendanceMap.get(String(s.id)) || 0;
+      const hasAtt = s.hasAttendance !== false && Number(s.jp || 0) > 0;
+      return {
+        lessonId: String(s.id),
+        title: String(s.title || `Materi ${index + 1}`),
+        moduleTitle: String(s.moduleTitle || "Modul"),
+        type: String(s.type || "reading"),
+        order: Number(s.lessonOrder || index + 1),
+        jp: Number(s.jp || 0),
+        hasAttendance: hasAtt,
+        narasumberName: s.narasumberName ? String(s.narasumberName) : null,
+        sessionDate: s.sessionDate ? String(s.sessionDate) : null,
+        attendedCount: hasAtt ? attended : 0,
+        attendanceRatePct: hasAtt && totalEnrolled > 0 ? Math.round((attended / totalEnrolled) * 100) : 0,
+      };
+    });
+
+    const extractEvalNotes = (rawAnswers: unknown): string | null => {
+      if (!rawAnswers || typeof rawAnswers !== "object") return null;
+      const ans = rawAnswers as Record<string, unknown>;
+      const noteKeys = ["notes", "note", "comment", "comments", "feedback", "saran", "masukan", "catatan", "apresiasi"];
+      const parts: string[] = [];
+      for (const [k, v] of Object.entries(ans)) {
+        if (typeof v === "string" && v.trim() && (noteKeys.some((nk) => k.toLowerCase().includes(nk)) || v.trim().length > 15)) {
+          parts.push(v.trim());
+        }
+      }
+      return parts.length > 0 ? parts.join(" | ") : null;
+    };
+
+    const detailedEvaluations = evaluationRecords.map((r) => {
+      const u = userById.get(String(r.userId));
+      const sid = r.sessionId ? String(r.sessionId) : null;
+      const sess = sid ? sessionById.get(sid) : null;
+      return {
+        userId: String(r.userId),
+        participantName: u?.name || "Peserta",
+        nip: u?.nip || "-",
+        instansiAsal: u?.instansiAsal || "-",
+        stage: String(r.stage),
+        sessionId: sid,
+        sessionTitle: sess?.title || null,
+        score: r.score != null ? Number(r.score) : null,
+        notes: extractEvalNotes(r.answers),
+        createdAt: r.createdAt ? new Date(String(r.createdAt)).toISOString() : null,
+      };
+    });
 
     return {
       success: true,
@@ -420,6 +732,13 @@ export async function getCourseAnalytics(courseId: string): Promise<{ success: b
         kirkpatrickEvaluations,
         atRiskParticipants,
         opdBreakdown,
+        allOpdBreakdown,
+        quizzes: quizLessons,
+        allSessions,
+        participantsDetail,
+        detailedQuizAttempts,
+        detailedAttendances,
+        detailedEvaluations,
       },
     };
   } catch (err: unknown) {
