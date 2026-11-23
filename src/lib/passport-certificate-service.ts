@@ -105,64 +105,79 @@ export async function reserveOfficialCertificateNumber(
   // 1. Coba hubungi ASN Learning Passport jika konfigurasi API tersedia (DB atau ENV)
   const activeConfig = await getActivePassportConfig();
   if (activeConfig) {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3500); // 3.5s timeout
+    const baseUrl = activeConfig.apiUrl.replace(/\/+$/, '').replace(/\/api$/, '');
+    const endpoint = `${baseUrl}/api/alumni/external/issue-number`;
+    const dateString = activityDate.toISOString().slice(0, 10);
 
-      const baseUrl = activeConfig.apiUrl.replace(/\/+$/, '').replace(/\/api$/, '');
-      const endpoint = `${baseUrl}/api/alumni/external/issue-number`;
-      const dateString = activityDate.toISOString().slice(0, 10);
-
-      const payload = {
-        trainingName: options.trainingName.trim(),
-        batchCode: safeBatchCode,
-        category: options.category || 'Teknis',
-        trainingType: options.trainingType || 'E-Learning',
-        jp: Number(options.jp || 2),
-        startDate: dateString,
-        endDate: dateString,
-        participants: [
-          {
-            name: options.participant.name.trim(),
-            nip: options.participant.nip?.trim() || '-',
-            rank: options.participant.rank?.trim() || null,
-            position: options.participant.position?.trim() || null,
-            institution: options.participant.institution?.trim() || 'Peserta Eksternal CorpUKU',
-            phone: options.participant.phone?.trim() || null,
-            email: options.participant.email?.trim() || null,
-          },
-        ],
-      };
-
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': activeConfig.apiKey,
+    const payload = {
+      trainingName: options.trainingName.trim(),
+      batchCode: safeBatchCode,
+      category: options.category || 'Teknis',
+      trainingType: options.trainingType || 'E-Learning',
+      jp: Number(options.jp || 2),
+      startDate: dateString,
+      endDate: dateString,
+      participants: [
+        {
+          name: options.participant.name.trim(),
+          nip: options.participant.nip?.trim() || '-',
+          rank: options.participant.rank?.trim() || null,
+          position: options.participant.position?.trim() || null,
+          institution: options.participant.institution?.trim() || 'Peserta Eksternal CorpUKU',
+          phone: options.participant.phone?.trim() || null,
+          email: options.participant.email?.trim() || null,
         },
-        body: JSON.stringify(payload),
-        signal: controller.signal,
-      });
+      ],
+    };
 
-      clearTimeout(timeoutId);
+    const maxAttempts = 3;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
 
-      if (response.ok) {
-        const data = await response.json();
-        const cert = data?.certificates?.[0];
-        if (cert?.certificateNumber) {
-          return {
-            certificateNumber: cert.certificateNumber,
-            sequenceNumber: Number(cert.sequenceNumber) || 0,
-            source: 'passport_api',
-            verificationUrl: cert.verificationUrl,
-            registrationId: data.registrationId,
-          };
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': activeConfig.apiKey,
+          },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+
+        if (response.ok) {
+          const data = await response.json();
+          const cert = data?.certificates?.[0];
+          if (cert?.certificateNumber) {
+            return {
+              certificateNumber: cert.certificateNumber,
+              sequenceNumber: Number(cert.sequenceNumber) || 0,
+              source: 'passport_api',
+              verificationUrl: cert.verificationUrl,
+              registrationId: data.registrationId,
+            };
+          }
+          break;
         }
-      } else {
-        console.warn(`[Passport API] Gagal memesan nomor (HTTP ${response.status}):`, await response.text().catch(() => ''));
+
+        const errText = await response.text().catch(() => '');
+        console.warn(`[Passport API] Attempt ${attempt}/${maxAttempts} gagal (HTTP ${response.status}):`, errText);
+        // Retry hanya jika rate limit (429) atau error server sementara (5xx)
+        if ((response.status === 429 || response.status >= 500) && attempt < maxAttempts) {
+          await new Promise((r) => setTimeout(r, attempt * 1500));
+          continue;
+        }
+        break;
+      } catch (err: unknown) {
+        console.warn(`[Passport API] Attempt ${attempt}/${maxAttempts} error:`, err);
+        if (attempt < maxAttempts) {
+          await new Promise((r) => setTimeout(r, attempt * 1200));
+          continue;
+        }
       }
-    } catch (err: unknown) {
-      console.warn('[Passport API] Tidak dapat menghubungi server ASN Learning Passport, beralih ke counter lokal:', err);
     }
   }
 
