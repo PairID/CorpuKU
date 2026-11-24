@@ -1,19 +1,39 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { PlayCircle, FileText, CheckCircle, ChevronLeft, ChevronDown, ChevronUp, CheckCircle2, ClipboardCheck, Loader2, XCircle, ChevronRight, RotateCcw, AlertCircle, Trophy, FileUp, MessageSquare, Send, Trash2, Award, QrCode, ShieldCheck, Camera, ExternalLink, Lock, Menu, X } from "lucide-react";
+import {
+    PlayCircle,
+    FileText,
+    CheckCircle,
+    ChevronLeft,
+    ChevronDown,
+    ChevronUp,
+    CheckCircle2,
+    ClipboardCheck,
+    ChevronRight,
+    FileUp,
+    Award,
+    QrCode,
+    Camera,
+    ExternalLink,
+    Lock,
+    X,
+    BookOpen,
+    Sparkles,
+    AlertCircle,
+} from "lucide-react";
 import Link from "next/link";
-import Image from "next/image";
 import { UserSession } from "@/app/dashboard/dashboard-client";
-import { getQuizQuestions, submitQuizAttempt, getQuizAttempt, updateLessonProgress } from "@/app/actions/courses";
-import { getLessonDiscussions, addDiscussion, deleteDiscussion } from "@/app/actions/discussions";
-import { optimizeAvatar } from "@/lib/utils";
+import { updateLessonProgress } from "@/app/actions/courses";
+import { getMaterialAttendances } from "@/app/actions/attendance";
 import { toast } from "sonner";
 import DataVerificationModal from "@/components/profile/DataVerificationModal";
 import MobileAttendanceFAB from "@/components/attendance/MobileAttendanceFAB";
 import FourStageEvaluationWizard from "@/components/evaluations/FourStageEvaluationWizard";
 import DocumentViewer from "@/components/lessons/DocumentViewer";
+import InlineQuizCard from "@/components/lessons/InlineQuizCard";
+import InlineDiscussionPanel from "@/components/lessons/InlineDiscussionPanel";
 import ThemeToggle from "@/components/ThemeToggle";
 import { CourseEvaluationConfig } from "@/lib/skm-constants";
 
@@ -51,11 +71,13 @@ interface Course {
     targetOpd?: string | null;
     attendanceThreshold?: number;
     documentationUrl?: string | null;
+    certificateEnabled?: boolean;
     evaluationConfig?: CourseEvaluationConfig | null;
 }
 
 interface EnrollmentProps {
     id: string;
+    status?: string;
     completedLessons?: string[];
     statementAccepted?: boolean;
     attendedJp?: number;
@@ -68,6 +90,7 @@ interface EnrollmentProps {
     trainingType?: string;
     targetOpd?: string | null;
     attendanceThreshold?: number;
+    certificateEnabled?: boolean;
 }
 
 interface LearnClientProps {
@@ -77,97 +100,66 @@ interface LearnClientProps {
     enrollment: EnrollmentProps | null;
 }
 
-interface LessonDiscussion {
-    id: string;
-    user_id: string;
-    content: string;
-    created_at: string;
-    name: string;
-    image?: string | null;
-}
-
-// Quiz types
-interface QuizOption {
-    id: string;
-    questionId: string;
-    optionText: string;
-}
-
-interface QuizQuestion {
-    id: string;
-    lessonId: string;
-    questionText: string;
-    order: string;
-    options: QuizOption[];
-}
-
-interface ReviewItem {
-    questionId: string;
-    questionText: string;
-    explanation: string | null;
-    isCorrect: boolean;
-    selectedOptionId: string | null;
-    selectedOptionText: string | null;
-    selectedOptionExplanation: string | null;
-    correctOptionId: string | null;
-    correctOptionText: string | null;
-    options: {
-        id: string;
-        optionText: string;
-        isCorrect: boolean;
-        explanation: string | null;
-    }[];
-}
-
-interface QuizResult {
-    score: number;
-    totalQuestions: number;
-    passed: boolean;
-    scorePercent: number;
-    review: ReviewItem[];
-}
-
-type QuizPhase = "start" | "question" | "review-before-submit" | "submitting" | "results";
-
 export default function LearnClient({ course, courseContent, session, enrollment }: LearnClientProps) {
-    const [activeLesson, setActiveLesson] = useState<Lesson | null>(() => {
+    const [activeLessonId, setActiveLessonId] = useState<string | null>(() => {
         const firstUnlocked = courseContent.find((m) => !m.isLocked && m.lessons.length > 0);
-        return firstUnlocked?.lessons[0] || courseContent[0]?.lessons[0] || null;
+        return firstUnlocked?.lessons[0]?.id || courseContent[0]?.lessons[0]?.id || null;
     });
-    const activeModule = courseContent.find((m) =>
-        m.lessons.some((l) => l.id === activeLesson?.id)
-    );
     const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>(
         courseContent.reduce((acc, mod) => ({ ...acc, [mod.id]: true }), {})
     );
     const [completedLessons, setCompletedLessons] = useState<Record<string, boolean>>(() =>
         Object.fromEntries((enrollment?.completedLessons || []).map((lessonId) => [lessonId, true]))
     );
-    const [discussions, setDiscussions] = useState<LessonDiscussion[]>([]);
-    const [commentText, setCommentText] = useState("");
-    const [isSubmittingComment, setIsSubmittingComment] = useState(false);
-    const [isFetchingDiscussions, setIsFetchingDiscussions] = useState(false);
+    const [attendedLessons, setAttendedLessons] = useState<Record<string, boolean>>({});
+    const [statementAccepted, setStatementAccepted] = useState(Boolean(enrollment?.statementAccepted));
     const user = session.user;
 
-    const isClassical = course.trainingType === "classical_facilitation" || enrollment?.trainingType === "classical_facilitation";
-    
+    const isClassical =
+        course.trainingType === "classical_facilitation" ||
+        enrollment?.trainingType === "classical_facilitation";
+
+    useEffect(() => {
+        if (!isClassical) return;
+        let active = true;
+        getMaterialAttendances(course.id).then((res) => {
+            if (active && res.success && Array.isArray(res.attendedLessonIds)) {
+                setAttendedLessons(
+                    Object.fromEntries(res.attendedLessonIds.map((id) => [id, true]))
+                );
+            }
+        });
+        return () => {
+            active = false;
+        };
+    }, [course.id, isClassical]);
+
     // Gating Evaluasi: Hanya dapat diakses setelah seluruh materi pada modul terakhir dikerjakan/selesai
     const lastModule = courseContent.length > 0 ? courseContent[courseContent.length - 1] : null;
     const isLastModuleCompleted = Boolean(
         lastModule &&
-        lastModule.lessons.length > 0 &&
-        lastModule.lessons.every((lesson) => completedLessons[lesson.id])
+            lastModule.lessons.length > 0 &&
+            lastModule.lessons.every((lesson) => completedLessons[lesson.id])
     );
-    const isEvaluationUnlocked = isLastModuleCompleted || session.user.role === "admin" || session.user.role === "instructor";
+    const isEvaluationUnlocked =
+        isLastModuleCompleted || session.user.role === "admin" || session.user.role === "instructor";
 
     const [isVerificationModalOpen, setIsVerificationModalOpen] = useState(
         Boolean(isClassical && !enrollment?.statementAccepted && session.user.role === "student")
     );
     const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
-    const [showEvaluationWizard, setShowEvaluationWizard] = useState(false);
     const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
     const [touchStartX, setTouchStartX] = useState<number | null>(null);
     const [touchStartY, setTouchStartY] = useState<number | null>(null);
+
+    const [requestedEvalStage, setRequestedEvalStage] = useState<
+        "narasumber" | "organizer" | "understanding" | "skm" | null
+    >(null);
+    const [attendanceStats, setAttendanceStats] = useState({
+        attendedJp: Number(enrollment?.attendedJp || 0),
+        attendancePercentage: Number(enrollment?.attendancePercentage || 0),
+        allEvaluationsCompleted: Boolean(enrollment?.allEvaluationsCompleted),
+    });
 
     const handleTouchStart = (e: React.TouchEvent) => {
         const touch = e.touches[0];
@@ -181,726 +173,133 @@ export default function LearnClient({ course, courseContent, session, enrollment
         const deltaX = touch.clientX - touchStartX;
         const deltaY = Math.abs(touch.clientY - touchStartY);
 
-        // Hanya deteksi gesture swipe horizontal yang tegas (bukan scrolling vertikal)
         if (deltaY < 80) {
-            // Geser ke kanan (swipe right min 40px): buka menu modul dari manapun di layar (tengah atau tepi)
             if (deltaX > 40 && !mobileSidebarOpen) {
                 setMobileSidebarOpen(true);
-            }
-            // Geser ke kiri (swipe left min 45px): tutup menu jika sedang terbuka
-            else if (deltaX < -45 && mobileSidebarOpen) {
+            } else if (deltaX < -45 && mobileSidebarOpen) {
                 setMobileSidebarOpen(false);
             }
         }
         setTouchStartX(null);
         setTouchStartY(null);
     };
-    const [requestedEvalStage, setRequestedEvalStage] = useState<"narasumber" | "organizer" | "understanding" | "skm" | null>(null);
-    const [attendanceStats, setAttendanceStats] = useState({
-        attendedJp: Number(enrollment?.attendedJp || 0),
-        attendancePercentage: Number(enrollment?.attendancePercentage || 0),
-        allEvaluationsCompleted: Boolean(enrollment?.allEvaluationsCompleted),
-    });
 
-    // Quiz state
-    const [quizPhase, setQuizPhase] = useState<QuizPhase>("start");
-    const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]);
-    const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-    const [answers, setAnswers] = useState<Record<string, string>>({});
-    const [quizResult, setQuizResult] = useState<QuizResult | null>(null);
-    const [previousAttempt, setPreviousAttempt] = useState<QuizResult | null>(null);
-    const [isLoadingQuiz, setIsLoadingQuiz] = useState(false);
-
-    const toggleModule = (moduleId: string) => {
-        setExpandedModules(prev => ({ ...prev, [moduleId]: !prev[moduleId] }));
+    const scrollToElement = (elementId: string) => {
+        setMobileSidebarOpen(false);
+        const el = document.getElementById(elementId);
+        if (el) {
+            el.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
     };
 
-    const handleLessonClick = (lesson: Lesson, modIsLocked?: boolean, lockReason?: string | null) => {
+    const toggleModule = (moduleId: string) => {
+        setExpandedModules((prev) => ({ ...prev, [moduleId]: !prev[moduleId] }));
+    };
+
+    const handleLessonJump = (lesson: Lesson, modIsLocked?: boolean, lockReason?: string | null) => {
         if (modIsLocked) {
             toast.info(lockReason || "Modul ini belum diaktifkan oleh Admin.");
             return;
         }
-        setActiveLesson(lesson);
-        setMobileSidebarOpen(false);
-        // Reset quiz state when switching lessons
-        if (lesson.type === "quiz") {
-            setQuizPhase("start");
-            setQuizQuestions([]);
-            setCurrentQuestionIndex(0);
-            setAnswers({});
-            setQuizResult(null);
-            setPreviousAttempt(null);
-        }
+        setActiveLessonId(lesson.id);
+        scrollToElement(`lesson-${lesson.id}`);
     };
 
-    const markAsComplete = async () => {
-        if (activeLesson) {
-            setCompletedLessons(prev => ({ ...prev, [activeLesson.id]: true }));
-            // Persistent sync
-            await updateLessonProgress(course.id, activeLesson.id, true);
-        }
+    const markLessonAsComplete = async (lessonId: string) => {
+        setCompletedLessons((prev) => ({ ...prev, [lessonId]: true }));
+        toast.success("Materi ditandai selesai!");
+        await updateLessonProgress(course.id, lessonId, true);
     };
 
-    const loadPreviousAttempt = useCallback(async (lessonId: string) => {
-        const attempt = await getQuizAttempt(lessonId);
-        if (attempt) {
-            const quizRes: QuizResult = {
-                score: Number(attempt.score),
-                totalQuestions: 0,
-                scorePercent: Number(attempt.score),
-                passed: Boolean(attempt.passed),
-                review: [],
-            };
-            setPreviousAttempt(quizRes);
-            if (quizRes.passed) {
-                setCompletedLessons(prev => ({ ...prev, [lessonId]: true }));
-            }
-        }
-    }, []);
-
-    // Load previous quiz attempt when a quiz lesson is selected
-    useEffect(() => {
-        if (activeLesson?.type !== "quiz") return;
-        const timer = window.setTimeout(() => void loadPreviousAttempt(activeLesson.id), 0);
-        return () => window.clearTimeout(timer);
-    }, [activeLesson, loadPreviousAttempt]);
-
-    // Quiz flow handlers
-    const startQuiz = async () => {
-        if (!activeLesson) return;
-        setIsLoadingQuiz(true);
-        const questions = await getQuizQuestions(activeLesson.id);
-        setQuizQuestions(questions);
-        setCurrentQuestionIndex(0);
-        setAnswers({});
-        setQuizResult(null);
-        setQuizPhase("question");
-        setIsLoadingQuiz(false);
-    };
-
-    const selectOption = (questionId: string, optionId: string) => {
-        setAnswers(prev => ({ ...prev, [questionId]: optionId }));
-    };
-
-    const goToReviewBeforeSubmit = () => {
-        setQuizPhase("review-before-submit");
-    };
-
-    const goBackToQuestion = (index: number) => {
-        setCurrentQuestionIndex(index);
-        setQuizPhase("question");
-    };
-
-    const submitQuiz = async () => {
-        if (!activeLesson) return;
-        setQuizPhase("submitting");
-
-        const answerList = quizQuestions.map(q => ({
-            questionId: q.id,
-            selectedOptionId: answers[q.id] || "",
-        })).filter(a => a.selectedOptionId !== "");
-
-        const result = await submitQuizAttempt(activeLesson.id, answerList);
-
-        if ("error" in result && result.error) {
-            toast.error(result.error);
-            setQuizPhase("review-before-submit");
-            return;
-        }
-
-        if ("success" in result && result.success) {
-            const quizRes: QuizResult = {
-                score: result.score!,
-                totalQuestions: result.totalQuestions!,
-                passed: result.passed!,
-                scorePercent: result.scorePercent!,
-                review: result.review as ReviewItem[],
-            };
-            setQuizResult(quizRes);
-            if (quizRes.passed) {
-                setCompletedLessons(prev => ({ ...prev, [activeLesson.id]: true }));
-            }
-            setPreviousAttempt(quizRes);
-            setQuizPhase("results");
-        }
-    };
-
-    const retryQuiz = () => {
-        setQuizPhase("start");
-        setAnswers({});
-        setCurrentQuestionIndex(0);
-        setQuizResult(null);
-    };
-
-    const loadDiscussions = useCallback(async (lessonId: string) => {
-        setIsFetchingDiscussions(true);
-        const data = await getLessonDiscussions(lessonId);
-        setDiscussions(data);
-        setIsFetchingDiscussions(false);
-    }, []);
-
-    useEffect(() => {
-        if (!activeLesson) return;
-        const timer = window.setTimeout(() => void loadDiscussions(activeLesson.id), 0);
-        return () => window.clearTimeout(timer);
-    }, [activeLesson, loadDiscussions]);
-
-    const handleAddComment = async () => {
-        if (!commentText.trim() || !activeLesson) return;
-        setIsSubmittingComment(true);
-        const res = await addDiscussion(activeLesson.id, commentText);
-        if (res.success) {
-            setCommentText("");
-            loadDiscussions(activeLesson.id);
-            toast.success("Diskusi berhasil ditambahkan!");
-        } else {
-            toast.error(res.error || "Gagal menambahkan diskusi");
-        }
-        setIsSubmittingComment(false);
-    };
-
-    const handleDeleteComment = async (id: string) => {
-        if (!confirm("Hapus diskusi ini?")) return;
-        const res = await deleteDiscussion(id);
-        if (res.success && activeLesson) {
-            loadDiscussions(activeLesson.id);
-            toast.success("Diskusi berhasil dihapus!");
-        } else {
-            toast.error(res.error || "Gagal menghapus diskusi");
-        }
-    };
-
-    // Calculate Progress
     const totalLessons = courseContent.reduce((sum, mod) => sum + mod.lessons.length, 0);
-    const completedCount = Object.keys(completedLessons).length;
+    const completedCount = Object.keys(completedLessons).filter((id) => completedLessons[id]).length;
     const progressPercent = totalLessons === 0 ? 0 : Math.round((completedCount / totalLessons) * 100);
-    
-    // Navigation helpers
-    const allLessons = courseContent.flatMap(m => m.lessons);
-    const pendingAttendanceCount = isClassical
-        ? allLessons.filter((l) => l.hasAttendance !== false && !completedLessons[l.id]).length
-        : 0;
-    const currentLessonIndex = allLessons.findIndex(l => l.id === activeLesson?.id);
-    const nextLesson = allLessons[currentLessonIndex + 1];
-    const prevLesson = allLessons[currentLessonIndex - 1];
 
-    // Extract YouTube ID for embed (mendukung: watch?v=, embed/, live/, shorts/, youtu.be/)
+    const allLessons = courseContent.flatMap((m) => m.lessons);
+    const pendingAttendanceCount = isClassical
+        ? allLessons.filter((l) => l.hasAttendance !== false && !attendedLessons[l.id]).length
+        : 0;
+
+    // Eligibility sertifikat real-time
+    const quizLessons = allLessons.filter((l) => l.type === "quiz");
+    const allQuizzesPassed =
+        quizLessons.length === 0 ? true : quizLessons.every((l) => Boolean(completedLessons[l.id]));
+    const attendanceThreshold = Number(
+        enrollment?.attendanceThreshold ?? course.attendanceThreshold ?? 80
+    );
+    const isAttendanceSufficient = attendanceStats.attendancePercentage >= attendanceThreshold;
+    const isCertificateFeatureEnabled =
+        enrollment?.certificateEnabled ?? course.certificateEnabled ?? true;
+
+    const isEligibleForCertificate =
+        allQuizzesPassed &&
+        (!isClassical
+            ? progressPercent === 100
+            : isAttendanceSufficient && attendanceStats.allEvaluationsCompleted && statementAccepted);
+
+    const canOpenCertificate =
+        Boolean(enrollment?.id) && Boolean(isCertificateFeatureEnabled) && isEligibleForCertificate;
+
     const getYoutubeEmbedUrl = (url: string | null) => {
         if (!url) return null;
-        const cleanUrl = url.trim();
-        const match = cleanUrl.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|live\/|shorts\/|v\/))([a-zA-Z0-9_-]{11})/);
-        if (match && match[1]) {
-            return `https://www.youtube.com/embed/${match[1]}?rel=0`;
+        const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+        const match = url.match(regExp);
+        return match && match[2].length === 11 ? `https://www.youtube.com/embed/${match[2]}` : null;
+    };
+
+    const cleanLessonTitle = (title: string, type: string) => {
+        const lowerTitle = title.toLowerCase();
+        if (type === "quiz" && (lowerTitle === "kuis" || lowerTitle === "quiz")) {
+            return "Uji Pemahaman / Evaluasi";
         }
-        if (cleanUrl.includes("youtube.com/embed/")) {
-            return cleanUrl;
+        if (type === "file" && lowerTitle.endsWith(".pdf")) {
+            return title.slice(0, -4).replace(/_/g, " ");
         }
-        return null;
+        return title.replace(/_/g, " ");
     };
 
     const getLessonTypeLabel = (type: string) => {
         switch (type) {
-            case 'video': return 'Tonton Video';
-            case 'quiz': return 'Kerjakan Kuis';
-            case 'reading': return 'Baca Materi';
-            case 'file': return 'Unduh Materi';
-            default: return type;
-        }
-    };
-
-    const cleanLessonTitle = (title: string, type: string) => {
-        if (title.startsWith("Pelajaran Baru (") || title === "Pelajaran Baru") {
-            return getLessonTypeLabel(type);
-        }
-        return title;
-    };
-
-    // Render quiz content based on phase
-    const renderQuizContent = () => {
-        if (!activeLesson) return null;
-
-        switch (quizPhase) {
-            case "start":
-                return renderQuizStart();
-            case "question":
-                return renderQuizQuestion();
-            case "review-before-submit":
-                return renderReviewBeforeSubmit();
-            case "submitting":
-                return renderSubmitting();
-            case "results":
-                return renderResults(quizResult);
+            case "video":
+                return "Video";
+            case "quiz":
+                return "Quiz";
+            case "file":
+                return "Dokumen / File";
             default:
-                return null;
+                return "Bacaan";
         }
-    };
-
-    const renderQuizStart = () => (
-        <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="max-w-2xl mx-auto w-full"
-        >
-            {/* Quiz start card */}
-            <div className="bg-white dark:bg-[#161B2A] rounded-2xl shadow-sm border border-oxford-100 dark:border-oxford-800 overflow-hidden">
-                {/* Header gradient */}
-                <div className="bg-gradient-to-br from-oxford-900 via-oxford-800 to-oxford-950 p-8 text-white relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-40 h-40 bg-gold-500/10 rounded-full -translate-y-1/2 translate-x-1/2" />
-                    <div className="absolute bottom-0 left-0 w-24 h-24 bg-gold-500/5 rounded-full translate-y-1/2 -translate-x-1/2" />
-                    <div className="relative z-10">
-                        <div className="inline-flex items-center gap-2 bg-white dark:bg-[#161B2A]/10 backdrop-blur-sm text-gold-400 text-xs font-bold px-3 py-1.5 rounded-full mb-4 uppercase tracking-wider">
-                            <ClipboardCheck size={14} />
-                            Quiz
-                        </div>
-                        <h2 className="text-2xl md:text-3xl font-serif font-bold mb-2">{activeLesson?.title}</h2>
-                        {activeLesson?.content && (
-                            <p className="text-oxford-300 text-sm leading-relaxed mt-3">{activeLesson.content}</p>
-                        )}
-                    </div>
-                </div>
-
-                {/* Stats */}
-                <div className="grid grid-cols-3 divide-x divide-oxford-100 border-b border-oxford-100 dark:border-oxford-800">
-                    <div className="p-5 text-center">
-                        <div className="text-2xl font-bold text-oxford-900 dark:text-white font-sans">{previousAttempt ? "5" : "5"}</div>
-                        <div className="text-xs text-oxford-500 dark:text-oxford-400 mt-1 font-sans">Pertanyaan</div>
-                    </div>
-                    <div className="p-5 text-center">
-                        <div className="text-2xl font-bold text-oxford-900 dark:text-white font-sans">~10</div>
-                        <div className="text-xs text-oxford-500 dark:text-oxford-400 mt-1 font-sans">Menit</div>
-                    </div>
-                    <div className="p-5 text-center">
-                        <div className="text-2xl font-bold text-gold-600 font-sans">70%</div>
-                        <div className="text-xs text-oxford-500 dark:text-oxford-400 mt-1 font-sans">Nilai Min.</div>
-                    </div>
-                </div>
-
-                {/* Actions */}
-                <div className="p-6 space-y-3">
-                    <button
-                        onClick={startQuiz}
-                        disabled={isLoadingQuiz}
-                        className="w-full py-4 bg-gold-500 text-oxford-950 font-bold font-sans rounded-xl text-lg hover:bg-gold-400 transition-all active:scale-[0.98] shadow-lg shadow-gold-500/20 flex items-center justify-center gap-2 disabled:opacity-70"
-                    >
-                        {isLoadingQuiz ? (
-                            <Loader2 className="animate-spin" size={20} />
-                        ) : (
-                            <>
-                                <ClipboardCheck size={20} />
-                                Mulai Quiz
-                            </>
-                        )}
-                    </button>
-
-                    {previousAttempt && (
-                        <button
-                            onClick={() => {
-                                setQuizResult(previousAttempt);
-                                setQuizPhase("results");
-                            }}
-                            className="w-full py-3 bg-oxford-50 dark:bg-oxford-950 text-oxford-700 dark:text-oxford-200 font-bold font-sans rounded-xl hover:bg-oxford-100 dark:hover:bg-[#161B2A] transition-all flex items-center justify-center gap-2 border border-oxford-200 dark:border-oxford-700"
-                        >
-                            <Trophy size={18} />
-                            Lihat Hasil Sebelumnya ({previousAttempt.scorePercent}%)
-                        </button>
-                    )}
-                </div>
-            </div>
-        </motion.div>
-    );
-
-    const renderQuizQuestion = () => {
-        const question = quizQuestions[currentQuestionIndex];
-        if (!question) return null;
-
-        const answeredCount = Object.keys(answers).length;
-        const progress = ((currentQuestionIndex + 1) / quizQuestions.length) * 100;
-
-        return (
-            <motion.div
-                key={question.id}
-                initial={{ opacity: 0, x: 30 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -30 }}
-                transition={{ duration: 0.25 }}
-                className="max-w-2xl mx-auto w-full"
-            >
-                <div className="bg-white dark:bg-[#161B2A] rounded-2xl shadow-sm border border-oxford-100 dark:border-oxford-800 overflow-hidden">
-                    {/* Progress bar */}
-                    <div className="h-1.5 bg-oxford-100 dark:bg-[#161B2A]">
-                        <motion.div
-                            className="h-full bg-gradient-to-r from-gold-500 to-gold-400"
-                            initial={{ width: 0 }}
-                            animate={{ width: `${progress}%` }}
-                            transition={{ duration: 0.4, ease: "easeOut" }}
-                        />
-                    </div>
-
-                    {/* Question header */}
-                    <div className="p-6 pb-4 border-b border-oxford-50 dark:border-oxford-900">
-                        <div className="flex items-center justify-between mb-1">
-                            <span className="text-xs font-bold text-gold-600 font-sans uppercase tracking-wider">
-                                Pertanyaan {currentQuestionIndex + 1} dari {quizQuestions.length}
-                            </span>
-                            <span className="text-xs text-oxford-400 font-sans">
-                                {answeredCount}/{quizQuestions.length} terjawab
-                            </span>
-                        </div>
-                    </div>
-
-                    {/* Question */}
-                    <div className="p-6 pt-5">
-                        <h3 className="text-lg md:text-xl font-serif font-bold text-oxford-900 dark:text-white leading-relaxed mb-6">
-                            {question.questionText}
-                        </h3>
-
-                        {/* Options */}
-                        <div className="space-y-3">
-                            {question.options.map((option, idx) => {
-                                const isSelected = answers[question.id] === option.id;
-                                const labels = ["A", "B", "C", "D", "E", "F"];
-                                return (
-                                    <button
-                                        key={option.id}
-                                        onClick={() => selectOption(question.id, option.id)}
-                                        className={`w-full text-left p-4 rounded-xl border-2 transition-all duration-200 flex items-start gap-4 group
-                                            ${isSelected
-                                                ? 'border-gold-500 bg-gold-50/50 shadow-sm shadow-gold-500/10'
-                                                : 'border-oxford-100 dark:border-oxford-800 hover:border-oxford-300 dark:hover:border-oxford-600 hover:bg-oxford-50 dark:hover:bg-oxford-950/50'
-                                            }`}
-                                    >
-                                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm flex-shrink-0 transition-all
-                                            ${isSelected
-                                                ? 'bg-gold-500 text-white'
-                                                : 'bg-oxford-100 dark:bg-[#161B2A] text-oxford-500 dark:text-oxford-400 group-hover:bg-oxford-200 dark:group-hover:bg-oxford-800'
-                                            }`}
-                                        >
-                                            {labels[idx]}
-                                        </div>
-                                        <span className={`text-sm md:text-base leading-relaxed pt-1 font-sans ${isSelected ? 'text-oxford-900 dark:text-white font-medium' : 'text-oxford-700 dark:text-oxford-200'}`}>
-                                            {option.optionText}
-                                        </span>
-                                    </button>
-                                );
-                            })}
-                        </div>
-                    </div>
-
-                    {/* Navigation */}
-                    <div className="p-6 pt-4 flex items-center justify-between border-t border-oxford-50 dark:border-oxford-900">
-                        <button
-                            onClick={() => setCurrentQuestionIndex(prev => Math.max(0, prev - 1))}
-                            disabled={currentQuestionIndex === 0}
-                            className="flex items-center gap-2 text-sm font-sans font-bold text-oxford-500 dark:text-oxford-400 hover:text-oxford-900 dark:hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors py-2 px-3 rounded-lg hover:bg-oxford-50 dark:hover:bg-oxford-950"
-                        >
-                            <ChevronLeft size={16} />
-                            Sebelumnya
-                        </button>
-
-                        {/* Question dots */}
-                        <div className="hidden sm:flex items-center gap-1.5">
-                            {quizQuestions.map((q, i) => (
-                                <button
-                                    key={q.id}
-                                    onClick={() => setCurrentQuestionIndex(i)}
-                                    className={`w-2.5 h-2.5 rounded-full transition-all ${i === currentQuestionIndex
-                                        ? 'bg-gold-500 scale-125'
-                                        : answers[q.id]
-                                            ? 'bg-oxford-400'
-                                            : 'bg-oxford-200 dark:bg-oxford-800'
-                                        }`}
-                                />
-                            ))}
-                        </div>
-
-                        {currentQuestionIndex < quizQuestions.length - 1 ? (
-                            <button
-                                onClick={() => setCurrentQuestionIndex(prev => prev + 1)}
-                                className="flex items-center gap-2 text-sm font-sans font-bold text-oxford-900 dark:text-white hover:text-gold-600 transition-colors py-2 px-3 rounded-lg hover:bg-oxford-50 dark:hover:bg-oxford-950"
-                            >
-                                Berikutnya
-                                <ChevronRight size={16} />
-                            </button>
-                        ) : (
-                            <button
-                                onClick={goToReviewBeforeSubmit}
-                                className="flex items-center gap-2 text-sm font-sans font-bold bg-gold-500 text-oxford-950 py-2.5 px-5 rounded-xl hover:bg-gold-400 transition-all active:scale-95 shadow-sm"
-                            >
-                                Review
-                                <ChevronRight size={16} />
-                            </button>
-                        )}
-                    </div>
-                </div>
-            </motion.div>
-        );
-    };
-
-    const renderReviewBeforeSubmit = () => {
-        const answeredCount = Object.keys(answers).length;
-        const unansweredCount = quizQuestions.length - answeredCount;
-
-        return (
-            <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="max-w-2xl mx-auto w-full"
-            >
-                <div className="bg-white dark:bg-[#161B2A] rounded-2xl shadow-sm border border-oxford-100 dark:border-oxford-800 overflow-hidden">
-                    <div className="p-6 border-b border-oxford-100 dark:border-oxford-800">
-                        <h2 className="text-xl font-serif font-bold text-oxford-900 dark:text-white">Ringkasan Quiz</h2>
-                        <p className="text-sm text-oxford-500 dark:text-oxford-400 mt-1 font-sans">Periksa kembali jawaban Anda sebelum mengumpulkan.</p>
-                    </div>
-
-                    <div className="p-6 space-y-2">
-                        {quizQuestions.map((q, i) => {
-                            const isAnswered = !!answers[q.id];
-                            return (
-                                <button
-                                    key={q.id}
-                                    onClick={() => goBackToQuestion(i)}
-                                    className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-oxford-50 dark:hover:bg-oxford-950 transition-colors text-left group"
-                                >
-                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${isAnswered ? 'bg-green-100 text-green-600' : 'bg-amber-100 text-amber-600'}`}>
-                                        {isAnswered ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                        <div className="text-sm font-sans text-oxford-900 dark:text-white truncate">
-                                            Soal {i + 1}: {q.questionText}
-                                        </div>
-                                        <div className={`text-xs mt-0.5 font-sans ${isAnswered ? 'text-green-600' : 'text-amber-600'}`}>
-                                            {isAnswered ? 'Sudah dijawab' : 'Belum dijawab'}
-                                        </div>
-                                    </div>
-                                    <ChevronRight size={16} className="text-oxford-300 group-hover:text-oxford-500 dark:group-hover:text-oxford-400 flex-shrink-0" />
-                                </button>
-                            );
-                        })}
-                    </div>
-
-                    {/* Summary */}
-                    <div className="p-6 border-t border-oxford-100 dark:border-oxford-800 bg-oxford-50 dark:bg-oxford-950/50">
-                        <div className="flex items-center justify-between mb-4">
-                            <span className="text-sm text-oxford-600 dark:text-oxford-300 font-sans">
-                                <span className="font-bold text-oxford-900 dark:text-white">{answeredCount}/{quizQuestions.length}</span> soal terjawab
-                            </span>
-                            {unansweredCount > 0 && (
-                                <span className="text-xs text-amber-600 font-sans font-bold bg-amber-100 px-2 py-1 rounded-lg">
-                                    {unansweredCount} belum dijawab
-                                </span>
-                            )}
-                        </div>
-
-                        <div className="flex gap-3">
-                            <button
-                                onClick={() => goBackToQuestion(currentQuestionIndex)}
-                                className="flex-1 py-3 border-2 border-oxford-200 dark:border-oxford-700 text-oxford-700 dark:text-oxford-200 font-bold font-sans rounded-xl hover:bg-white dark:hover:bg-[#161B2A] transition-all flex items-center justify-center gap-2"
-                            >
-                                <ChevronLeft size={16} />
-                                Kembali
-                            </button>
-                            <button
-                                onClick={submitQuiz}
-                                disabled={answeredCount === 0}
-                                className="flex-1 py-3 bg-gold-500 text-oxford-950 font-bold font-sans rounded-xl hover:bg-gold-400 transition-all active:scale-[0.98] shadow-lg shadow-gold-500/20 flex items-center justify-center gap-2 disabled:opacity-50"
-                            >
-                                Kumpulkan Quiz
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </motion.div>
-        );
-    };
-
-    const renderSubmitting = () => (
-        <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="max-w-md mx-auto w-full flex items-center justify-center py-20"
-        >
-            <div className="text-center">
-                <Loader2 className="animate-spin text-gold-500 mx-auto mb-4" size={48} />
-                <h3 className="font-serif font-bold text-xl text-oxford-900 dark:text-white mb-2">Mengoreksi Jawaban...</h3>
-                <p className="text-sm text-oxford-500 dark:text-oxford-400 font-sans">Mohon tunggu sebentar.</p>
-            </div>
-        </motion.div>
-    );
-
-    const renderResults = (result: QuizResult | null) => {
-        if (!result) return null;
-
-        const isPass = result.passed;
-        const ringColor = isPass ? "#22c55e" : "#ef4444";
-        const strokeDasharray = 283; // 2 * PI * 45
-        const strokeDashoffset = strokeDasharray - (strokeDasharray * result.scorePercent) / 100;
-
-        return (
-            <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="max-w-2xl mx-auto w-full"
-            >
-                {/* Score Card */}
-                <div className="bg-white dark:bg-[#161B2A] rounded-2xl shadow-sm border border-oxford-100 dark:border-oxford-800 overflow-hidden mb-6">
-                    <div className={`p-8 text-center ${isPass ? 'bg-gradient-to-br from-green-50 to-emerald-50' : 'bg-gradient-to-br from-red-50 to-orange-50'}`}>
-                        {/* Score Ring */}
-                        <div className="relative w-32 h-32 mx-auto mb-6">
-                            <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
-                                <circle cx="50" cy="50" r="45" fill="none" stroke="#e5e7eb" strokeWidth="6" />
-                                <motion.circle
-                                    cx="50" cy="50" r="45"
-                                    fill="none"
-                                    stroke={ringColor}
-                                    strokeWidth="6"
-                                    strokeLinecap="round"
-                                    strokeDasharray={strokeDasharray}
-                                    initial={{ strokeDashoffset: strokeDasharray }}
-                                    animate={{ strokeDashoffset }}
-                                    transition={{ duration: 1.2, ease: "easeOut", delay: 0.3 }}
-                                />
-                            </svg>
-                            <div className="absolute inset-0 flex flex-col items-center justify-center">
-                                <motion.span
-                                    className="text-3xl font-bold font-sans text-oxford-900 dark:text-white"
-                                    initial={{ opacity: 0, scale: 0.5 }}
-                                    animate={{ opacity: 1, scale: 1 }}
-                                    transition={{ delay: 0.5, duration: 0.4 }}
-                                >
-                                    {result.scorePercent}%
-                                </motion.span>
-                                {result.totalQuestions > 0 && (
-                                    <span className="text-xs text-oxford-500 dark:text-oxford-400 font-sans">{result.score}/{result.totalQuestions}</span>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* Pass/Fail Badge */}
-                        <motion.div
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: 0.8 }}
-                        >
-                            <div className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-full font-bold font-sans text-sm ${isPass
-                                ? 'bg-green-100 text-green-700 border border-green-200'
-                                : 'bg-red-100 text-red-700 border border-red-200'
-                                }`}>
-                                {isPass ? <Trophy size={18} /> : <XCircle size={18} />}
-                                {isPass ? 'LULUS — Selamat!' : 'BELUM LULUS — Coba lagi!'}
-                            </div>
-                            {!isPass && (
-                                <p className="text-sm text-oxford-500 dark:text-oxford-400 mt-3 font-sans">Nilai minimum untuk lulus: 70%</p>
-                            )}
-                        </motion.div>
-                    </div>
-
-                    {/* Actions */}
-                    <div className="p-6 flex flex-col sm:flex-row gap-3 border-t border-oxford-100 dark:border-oxford-800">
-                        <button
-                            onClick={retryQuiz}
-                            className="flex-1 py-3 border-2 border-oxford-200 dark:border-oxford-700 text-oxford-700 dark:text-oxford-200 font-bold font-sans rounded-xl hover:bg-oxford-50 dark:hover:bg-oxford-950 transition-all flex items-center justify-center gap-2"
-                        >
-                            <RotateCcw size={16} />
-                            Ulangi Quiz
-                        </button>
-                        
-                        {nextLesson ? (
-                             <button
-                                onClick={() => {
-                                    if (!completedLessons[activeLesson?.id ?? ""]) {
-                                        markAsComplete();
-                                    }
-                                    handleLessonClick(nextLesson);
-                                }}
-                                disabled={!isPass && !completedLessons[activeLesson?.id ?? ""]}
-                                className={`flex-[1.5] py-3 font-bold font-sans rounded-xl transition-all flex items-center justify-center gap-2
-                                    ${(isPass || completedLessons[activeLesson?.id ?? ""])
-                                        ? 'bg-gold-500 text-oxford-950 hover:bg-gold-400 shadow-lg shadow-gold-500/20 active:scale-95'
-                                        : 'bg-oxford-100 dark:bg-[#161B2A] text-oxford-400 cursor-not-allowed'
-                                    }`}
-                            >
-                                <span>Next</span>
-                                <ChevronRight size={20} />
-                            </button>
-                        ) : (
-                            <button
-                                onClick={markAsComplete}
-                                disabled={completedLessons[activeLesson?.id ?? ""]}
-                                className={`flex-1 py-3 font-bold font-sans rounded-xl transition-all flex items-center justify-center gap-2
-                                    ${completedLessons[activeLesson?.id ?? ""]
-                                        ? 'bg-green-100 text-green-700 cursor-default'
-                                        : isPass
-                                            ? 'bg-gold-500 text-oxford-950 hover:bg-gold-400 active:scale-[0.98]'
-                                            : 'bg-oxford-100 dark:bg-[#161B2A] text-oxford-400 cursor-not-allowed'
-                                    }`}
-                            >
-                                <CheckCircle size={16} />
-                                {completedLessons[activeLesson?.id ?? ""] ? 'Selesai' : 'Tandai Selesai'}
-                            </button>
-                        )}
-                    </div>
-                </div>
-
-                {/* Review Section */}
-                {result.review && result.review.length > 0 && (
-                    <div className="bg-white dark:bg-[#161B2A] rounded-2xl shadow-sm border border-oxford-100 dark:border-oxford-800 overflow-hidden">
-                        <div className="p-6 border-b border-oxford-100 dark:border-oxford-800">
-                            <h3 className="font-serif font-bold text-lg text-oxford-900 dark:text-white">Review Jawaban</h3>
-                            <p className="text-sm text-oxford-500 dark:text-oxford-400 font-sans mt-1">Pelajari penjelasan untuk setiap soal.</p>
-                        </div>
-
-                        <div className="divide-y divide-oxford-100">
-                            {result.review.map((item, idx) => (
-                                <ReviewItemCard key={item.questionId} item={item} index={idx} />
-                            ))}
-                        </div>
-                    </div>
-                )}
-            </motion.div>
-        );
     };
 
     return (
-        <div 
-            className="min-h-screen bg-oxford-50 dark:bg-oxford-950 flex flex-col"
+        <div
             onTouchStart={handleTouchStart}
             onTouchEnd={handleTouchEnd}
+            className="h-screen overflow-hidden bg-oxford-50 dark:bg-oxford-950 flex flex-col"
         >
-            {/* Mobile Floating Edge Handle ">" (Klik atau Swipe ke kanan untuk Buka Menu) */}
-            {!mobileSidebarOpen && (
+            {/* Top Bar */}
+            <div className="bg-oxford-950 text-white h-14 px-3 md:px-6 flex items-center justify-between border-b border-oxford-800 sticky top-0 z-40 gap-2">
                 <button
                     type="button"
-                    onClick={() => setMobileSidebarOpen(true)}
-                    className="md:hidden fixed left-0 top-1/2 -translate-y-1/2 z-30 bg-oxford-950/90 dark:bg-[#161B2A]/95 text-gold-400 hover:text-white hover:bg-oxford-900 shadow-2xl border border-l-0 border-gold-500/50 py-3.5 px-1.5 rounded-r-2xl flex flex-col items-center justify-center gap-1 backdrop-blur-md active:scale-95 transition-all group ring-2 ring-gold-500/20"
-                    aria-label="Buka Menu Modul Kursus"
-                    title="Geser ke kanan atau sentuh untuk melihat menu modul"
-                >
-                    <ChevronRight size={18} className="animate-pulse group-hover:translate-x-0.5 transition-transform text-gold-400" />
-                    <span className="text-[9px] font-black tracking-widest uppercase [writing-mode:vertical-lr] rotate-180 text-oxford-200 group-hover:text-gold-300">
-                        Menu
-                    </span>
-                </button>
-            )}
-
-            {/* Top Navigation Bar - sticky at top since global header is hidden */}
-            <div className="bg-oxford-950 text-white h-14 flex items-center px-3 md:px-6 sticky top-0 z-30 shadow-md gap-2">
-                <button
-                    type="button"
-                    onClick={() => setMobileSidebarOpen((prev) => !prev)}
+                    onClick={() => setMobileSidebarOpen(!mobileSidebarOpen)}
                     className="md:hidden inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-oxford-800 hover:bg-oxford-700 text-gold-400 text-xs font-bold shrink-0 border border-gold-500/30 active:scale-95 transition-all"
                     aria-label="Buka Menu Kurikulum & Evaluasi"
                 >
                     {mobileSidebarOpen ? <X size={15} /> : <ChevronRight size={15} className="animate-pulse" />}
                     <span>Menu</span>
                 </button>
-                <Link href={`/courses/${course.id}`} className="flex items-center text-oxford-300 hover:text-white transition-colors mr-1 md:mr-4 shrink-0">
+                <Link
+                    href={`/courses/${course.id}`}
+                    className="flex items-center text-oxford-300 hover:text-white transition-colors mr-1 md:mr-4 shrink-0"
+                >
                     <ChevronLeft size={20} className="mr-0.5 md:mr-1" />
                     <span className="hidden sm:inline text-sm font-sans font-medium">Kembali ke Kursus</span>
                 </Link>
-                <div className="w-px h-6 bg-oxford-800 mx-4 hidden sm:block"></div>
-                <h1 className="text-sm md:text-base font-serif font-bold truncate flex-1">{activeLesson ? cleanLessonTitle(activeLesson.title, activeLesson.type) : course.title}</h1>
-                
-                {/* Presensi Kehadiran Button (Direct shortcut for laptop / desktop) */}
+                <div className="w-px h-6 bg-oxford-800 mx-2 hidden sm:block" />
+                <h1 className="text-sm md:text-base font-serif font-bold truncate flex-1">
+                    {course.title}
+                </h1>
+
                 {isClassical && (
                     <button
                         type="button"
@@ -919,12 +318,13 @@ export default function LearnClient({ course, courseContent, session, enrollment
                 )}
 
                 {enrollment?.id && (
-                    <Link
-                        href={`/dashboard/courses/${enrollment.id}/progress`}
+                    <button
+                        type="button"
+                        onClick={() => scrollToElement("section-sertifikat")}
                         className="hidden sm:inline-flex items-center gap-2 rounded-full border border-oxford-700 px-3 py-1.5 text-xs font-bold text-oxford-200 transition-colors hover:border-gold-500 hover:text-gold-400 shrink-0"
                     >
-                        <ClipboardCheck size={15} /> Progres &amp; Sertifikat
-                    </Link>
+                        <Award size={15} /> Sertifikat
+                    </button>
                 )}
 
                 <div className="flex items-center ml-2 md:ml-4 gap-3 shrink-0">
@@ -940,24 +340,35 @@ export default function LearnClient({ course, courseContent, session, enrollment
                             transition={{ duration: 0.5 }}
                         />
                     </div>
-                    {/* Theme Toggle Switch - Always on top */}
                     <div className="shrink-0">
                         <ThemeToggle />
                     </div>
                 </div>
             </div>
 
-            <div className="flex flex-1 h-[calc(100vh-56px)] relative">
+            <div className="flex flex-1 min-h-0 overflow-hidden relative">
                 {mobileSidebarOpen && (
                     <div
                         onClick={() => setMobileSidebarOpen(false)}
                         className="fixed inset-0 top-14 bg-black/50 z-30 md:hidden"
                     />
                 )}
-                {/* Sidebar - Curriculum */}
-                <div className={`w-80 max-w-[85vw] md:w-80 lg:w-96 bg-white dark:bg-[#161B2A] border-r border-oxford-200 dark:border-oxford-700 flex-shrink-0 flex flex-col md:static fixed inset-y-0 top-14 md:top-0 left-0 z-40 md:z-0 transform transition-transform duration-300 md:translate-x-0 ${mobileSidebarOpen ? "translate-x-0" : "-translate-x-full"}`}>
+
+                {/* Sidebar - Daftar Lompat Materi, Evaluasi & Sertifikat */}
+                <div
+                    className={`w-80 max-w-[85vw] md:w-80 lg:w-96 bg-white dark:bg-[#161B2A] border-r border-oxford-200 dark:border-oxford-700 flex-shrink-0 flex flex-col md:static fixed inset-y-0 top-14 md:top-0 left-0 z-40 md:z-0 transform transition-transform duration-300 md:translate-x-0 ${
+                        mobileSidebarOpen ? "translate-x-0" : "-translate-x-full"
+                    }`}
+                >
                     <div className="p-4 border-b border-oxford-200 dark:border-oxford-700 bg-oxford-50 dark:bg-oxford-950 flex items-center justify-between">
-                        <h2 className="font-sans font-bold text-oxford-900 dark:text-white">Kurikulum Kursus</h2>
+                        <div>
+                            <h2 className="font-sans font-bold text-oxford-900 dark:text-white text-sm">
+                                Daftar Isi Pembelajaran
+                            </h2>
+                            <p className="text-[11px] text-oxford-500 dark:text-oxford-400 mt-0.5">
+                                {completedCount}/{totalLessons} materi selesai
+                            </p>
+                        </div>
                         <button
                             type="button"
                             onClick={() => setMobileSidebarOpen(false)}
@@ -967,525 +378,840 @@ export default function LearnClient({ course, courseContent, session, enrollment
                             <X size={18} />
                         </button>
                     </div>
+
                     <div className="flex-1 overflow-y-auto custom-scrollbar">
                         {courseContent.map((module) => {
                             const isExpanded = !!expandedModules[module.id];
-                            const hasActiveLesson = module.lessons.some(l => l.id === activeLesson?.id);
-                            
+                            const modCompletedCount = module.lessons.filter((l) => completedLessons[l.id]).length;
+                            const isModAllDone =
+                                module.lessons.length > 0 && modCompletedCount === module.lessons.length;
+
                             return (
-                                <div key={module.id} className={`border-b border-oxford-100 dark:border-oxford-800 last:border-0 ${hasActiveLesson ? 'bg-gold-50/10' : ''}`}>
+                                <div
+                                    key={module.id}
+                                    className="border-b border-oxford-100 dark:border-oxford-800 last:border-0"
+                                >
                                     <button
+                                        type="button"
                                         onClick={() => toggleModule(module.id)}
-                                        className={`w-full text-left px-5 py-4 flex items-center justify-between transition-all group
-                                            ${hasActiveLesson ? 'bg-gold-500/10 dark:bg-gold-500/15' : 'hover:bg-oxford-50 dark:hover:bg-oxford-900'}`}
+                                        className={`w-full text-left px-5 py-3.5 flex items-center justify-between transition-all ${
+                                            isModAllDone
+                                                ? "bg-emerald-50/60 dark:bg-emerald-950/20"
+                                                : "hover:bg-oxford-50 dark:hover:bg-oxford-900"
+                                        }`}
                                     >
                                         <div className="flex-1 min-w-0 pr-2">
-                                            <h3 className={`font-sans font-bold text-sm truncate ${hasActiveLesson ? 'text-gold-700 dark:text-gold-400' : 'text-oxford-900 dark:text-white'}`}>
+                                            <h3 className="font-sans font-bold text-sm truncate text-oxford-900 dark:text-white">
                                                 {module.title}
                                             </h3>
                                             <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                                                <span className="text-[10px] text-oxford-400 font-sans uppercase tracking-wider">
-                                                    {module.lessons.length} Materi
+                                                <span
+                                                    className={`text-[10px] font-sans font-bold px-1.5 py-0.5 rounded ${
+                                                        isModAllDone
+                                                            ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-300"
+                                                            : "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                                                    }`}
+                                                >
+                                                    {modCompletedCount}/{module.lessons.length} Selesai
                                                 </span>
                                                 {module.isLocked && (
                                                     <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-100 dark:bg-rose-950/70 text-rose-700 dark:text-rose-300 text-[10px] font-bold">
                                                         <Lock size={10} /> Terkunci
                                                     </span>
                                                 )}
-                                                {hasActiveLesson && !module.isLocked && (
-                                                    <span className="flex h-1.5 w-1.5 rounded-full bg-gold-500 animate-pulse" />
-                                                )}
                                             </div>
-                                            {module.isLocked && module.lockReason && (
-                                                <p className="text-[10px] text-rose-600 dark:text-rose-400 mt-1 truncate">
-                                                    {module.lockReason}
-                                                </p>
-                                            )}
                                         </div>
                                         {isExpanded ? (
-                                            <ChevronUp size={16} className={hasActiveLesson ? 'text-gold-500' : 'text-oxford-400'} />
+                                            <ChevronUp size={16} className="text-oxford-400" />
                                         ) : (
-                                            <ChevronDown size={16} className={hasActiveLesson ? 'text-gold-500' : 'text-oxford-400'} />
+                                            <ChevronDown size={16} className="text-oxford-400" />
                                         )}
                                     </button>
 
-                                <AnimatePresence initial={false}>
-                                    {expandedModules[module.id] && (
-                                        <motion.div
-                                            initial={{ height: 0, opacity: 0 }}
-                                            animate={{ height: "auto", opacity: 1 }}
-                                            exit={{ height: 0, opacity: 0 }}
-                                            transition={{ duration: 0.2 }}
-                                            className="overflow-hidden"
-                                        >
-                                            <ul className="pb-2">
-                                                {module.lessons.map((lesson) => {
-                                                    const isActive = activeLesson?.id === lesson.id;
-                                                    const isCompleted = completedLessons[lesson.id];
+                                    <AnimatePresence initial={false}>
+                                        {isExpanded && (
+                                            <motion.div
+                                                initial={{ height: 0, opacity: 0 }}
+                                                animate={{ height: "auto", opacity: 1 }}
+                                                exit={{ height: 0, opacity: 0 }}
+                                                transition={{ duration: 0.2 }}
+                                                className="overflow-hidden"
+                                            >
+                                                <ul className="pb-2 px-2 space-y-1">
+                                                    {module.lessons.map((lesson) => {
+                                                        const isActive = activeLessonId === lesson.id;
+                                                        const isCompleted = Boolean(completedLessons[lesson.id]);
+                                                    const isAttended = Boolean(attendedLessons[lesson.id]);
 
-                                                    return (
-                                                        <li key={lesson.id}>
-                                                            <button
-                                                                onClick={() => handleLessonClick(lesson, module.isLocked, module.lockReason)}
-                                                                className={`w-full text-left px-5 py-3 pl-8 flex items-start transition-all relative group
-                                                                    ${module.isLocked
-                                                                        ? 'opacity-60 cursor-not-allowed bg-oxford-50/40 dark:bg-oxford-950/40'
-                                                                        : isActive 
-                                                                            ? 'bg-gold-500/15 dark:bg-gold-500/20' 
-                                                                            : 'hover:bg-oxford-50 dark:hover:bg-oxford-900'
+                                                        return (
+                                                            <li key={lesson.id}>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() =>
+                                                                        handleLessonJump(
+                                                                            lesson,
+                                                                            module.isLocked,
+                                                                            module.lockReason
+                                                                        )
+                                                                    }
+                                                                    className={`w-full text-left px-3 py-2.5 rounded-xl flex items-start transition-all border ${
+                                                                        module.isLocked
+                                                                            ? "opacity-60 cursor-not-allowed bg-oxford-50/40 dark:bg-oxford-950/40 border-transparent"
+                                                                            : isCompleted
+                                                                            ? "bg-emerald-50/90 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800/70 hover:bg-emerald-100/70 dark:hover:bg-emerald-950/50"
+                                                                            : isActive
+                                                                            ? "bg-amber-50 dark:bg-amber-950/25 border-amber-300 dark:border-amber-700"
+                                                                            : "bg-white dark:bg-[#161B2A] border-oxford-100 dark:border-oxford-800 hover:border-amber-300 hover:bg-amber-50/40 dark:hover:bg-oxford-900"
                                                                     }`}
-                                                            >
-                                                                {isActive && !module.isLocked && (
-                                                                    <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-gold-500 rounded-r-full" />
-                                                                )}
-                                                                <div className={`mt-0.5 mr-3 flex-shrink-0 transition-colors ${module.isLocked ? 'text-rose-500' : isCompleted ? 'text-green-500' : (isActive ? 'text-gold-600' : 'text-oxford-400 group-hover:text-oxford-600 dark:group-hover:text-oxford-300')}`}>
-                                                                    {module.isLocked ? (
-                                                                        <Lock size={16} />
-                                                                    ) : isCompleted ? (
-                                                                        <CheckCircle2 size={16} />
-                                                                    ) : lesson.type === 'video' ? (
-                                                                        <PlayCircle size={16} />
-                                                                    ) : lesson.type === 'quiz' ? (
-                                                                        <ClipboardCheck size={16} />
-                                                                    ) : lesson.type === 'file' ? (
-                                                                        <FileUp size={16} />
-                                                                    ) : (
-                                                                        <FileText size={16} />
-                                                                    )}
-                                                                </div>
-                                                                <div className="flex-1 min-w-0">
-                                                                    <div className={`text-sm font-sans truncate ${isActive ? 'font-bold text-oxford-950 dark:text-white' : 'text-oxford-800 dark:text-oxford-200'}`}>
-                                                                        {cleanLessonTitle(lesson.title, lesson.type)}
-                                                                    </div>
-                                                                    <div className={`text-[11px] mt-0.5 flex flex-wrap items-center gap-1.5 ${isActive ? 'text-gold-700 dark:text-gold-300 font-medium' : 'text-oxford-500 dark:text-oxford-400'}`}>
-                                                                        <span>{getLessonTypeLabel(lesson.type)}</span>
-                                                                        {isCompleted && <CheckCircle size={10} className="text-green-500" />}
-                                                                        {isClassical && lesson.hasAttendance !== false && (
-                                                                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                                                                                isCompleted
-                                                                                    ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
-                                                                                    : "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
-                                                                            }`}>
-                                                                                {isCompleted ? `Hadir (${lesson.jp || 2} JP)` : `${lesson.jp || 2} JP • Presensi`}
-                                                                            </span>
+                                                                >
+                                                                    <div
+                                                                        className={`mt-0.5 mr-2.5 flex-shrink-0 ${
+                                                                            module.isLocked
+                                                                                ? "text-rose-500"
+                                                                                : isCompleted
+                                                                                ? "text-emerald-600 dark:text-emerald-400"
+                                                                                : "text-amber-600 dark:text-amber-400"
+                                                                        }`}
+                                                                    >
+                                                                        {module.isLocked ? (
+                                                                            <Lock size={15} />
+                                                                        ) : isCompleted ? (
+                                                                            <CheckCircle2 size={15} />
+                                                                        ) : lesson.type === "video" ? (
+                                                                            <PlayCircle size={15} />
+                                                                        ) : lesson.type === "quiz" ? (
+                                                                            <ClipboardCheck size={15} />
+                                                                        ) : lesson.type === "file" ? (
+                                                                            <FileUp size={15} />
+                                                                        ) : (
+                                                                            <FileText size={15} />
                                                                         )}
                                                                     </div>
-                                                                </div>
-                                                            </button>
-                                                        </li>
-                                                    );
-                                                })}
-                                            </ul>
-                                        </motion.div>
-                                    )}
-                                </AnimatePresence>
-                            </div>
-                        ); })}
+                                                                    <div className="flex-1 min-w-0">
+                                                                        <div
+                                                                            className={`text-xs font-sans truncate font-semibold ${
+                                                                                isCompleted
+                                                                                    ? "text-emerald-950 dark:text-emerald-100"
+                                                                                    : "text-oxford-900 dark:text-white"
+                                                                            }`}
+                                                                        >
+                                                                            {cleanLessonTitle(lesson.title, lesson.type)}
+                                                                        </div>
+                                                                        <div className="text-[10px] mt-1 flex flex-wrap items-center gap-1.5">
+                                                                            <span className="text-oxford-500 dark:text-oxford-400">
+                                                                                {getLessonTypeLabel(lesson.type)}
+                                                                            </span>
+                                                                            <span
+                                                                                className={`px-1.5 py-0.5 rounded font-bold ${
+                                                                                    isCompleted
+                                                                                        ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-300"
+                                                                                        : "bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300"
+                                                                                }`}
+                                                                            >
+                                                                                {isCompleted ? "Selesai" : "Belum"}
+                                                                            </span>
+                                                                        </div>
+                                                                    </div>
+                                                                </button>
+                                                            </li>
+                                                        );
+                                                    })}
+                                                </ul>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
+                                </div>
+                            );
+                        })}
 
-                        {/* Menu Evaluasi, Dokumentasi & Sertifikat di Sidebar */}
-                        {(isClassical || (course.documentationUrl && /^https?:\/\//i.test(course.documentationUrl.trim())) || enrollment?.id) && (
-                            <div className="border-t border-oxford-200 dark:border-oxford-800 bg-oxford-50/50 dark:bg-oxford-950/40">
-                                {isClassical && (
-                                    <>
-                                        <div className="px-5 py-2.5 bg-oxford-100/60 dark:bg-oxford-900/60 flex items-center justify-between border-b border-oxford-200 dark:border-oxford-800">
-                                            <span className="text-xs font-bold text-oxford-600 dark:text-oxford-400 uppercase tracking-wider">
-                                                Evaluasi Pelatihan
+                        {/* Sidebar Evaluasi, Dokumentasi & Sertifikat */}
+                        <div className="border-t border-oxford-200 dark:border-oxford-800 bg-oxford-50/50 dark:bg-oxford-950/40">
+                            {isClassical && (
+                                <>
+                                    <div className="px-5 py-2.5 bg-oxford-100/60 dark:bg-oxford-900/60 flex items-center justify-between border-b border-oxford-200 dark:border-oxford-800">
+                                        <span className="text-xs font-bold text-oxford-600 dark:text-oxford-400 uppercase tracking-wider">
+                                            Evaluasi Pelatihan
+                                        </span>
+                                        {!isEvaluationUnlocked && (
+                                            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30">
+                                                <Lock size={10} /> Terkunci
                                             </span>
-                                            {!isEvaluationUnlocked && (
-                                                <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30">
-                                                    <Lock size={11} /> Modul Terakhir
-                                                </span>
-                                            )}
-                                        </div>
-                                        <div className="divide-y divide-oxford-100 dark:divide-oxford-800/80">
-                                            {[
-                                                { key: "narasumber" as const, label: "Evaluasi Narasumber", done: Boolean(enrollment?.evalNarasumberCompleted) || attendanceStats.allEvaluationsCompleted },
-                                                { key: "organizer" as const, label: "Evaluasi Penyelenggara", done: Boolean(enrollment?.evalOrganizerCompleted) || attendanceStats.allEvaluationsCompleted },
-                                                ...(course.evaluationConfig?.enableUnderstanding
-                                                    ? [{ key: "understanding" as const, label: "Evaluasi Pembelajaran", done: Boolean(enrollment?.evalUnderstandingCompleted) || attendanceStats.allEvaluationsCompleted }]
-                                                    : []),
-                                                { key: "skm" as const, label: "SKM", done: Boolean(enrollment?.evalSkmCompleted) || attendanceStats.allEvaluationsCompleted },
-                                            ].map((item) => (
-                                                <button
-                                                    key={item.key}
-                                                    type="button"
-                                                    onClick={() => {
-                                                        if (!isEvaluationUnlocked) {
-                                                            toast.info(`Evaluasi ${item.label} terkunci. Silakan selesaikan seluruh materi pada modul terakhir (${lastModule?.title || "modul penutup"}) terlebih dahulu.`);
-                                                            return;
-                                                        }
-                                                        setRequestedEvalStage(item.key);
-                                                        setShowEvaluationWizard(true);
-                                                        setMobileSidebarOpen(false);
-                                                    }}
-                                                    className={`w-full text-left px-5 py-3 flex items-center justify-between gap-2 transition-colors ${
-                                                        !isEvaluationUnlocked
-                                                            ? "opacity-65 hover:bg-oxford-100/40 dark:hover:bg-oxford-900/30 cursor-pointer"
-                                                            : "hover:bg-white dark:hover:bg-[#161B2A]"
-                                                    }`}
-                                                >
-                                                    <div className="flex items-center gap-2.5 min-w-0">
-                                                        {!isEvaluationUnlocked ? (
-                                                            <Lock size={15} className="text-oxford-400 shrink-0" />
-                                                        ) : (
-                                                            <ClipboardCheck size={15} className={item.done ? "text-emerald-500 shrink-0" : "text-gold-500 shrink-0"} />
-                                                        )}
-                                                        <span className={`text-xs font-bold truncate ${!isEvaluationUnlocked ? "text-oxford-500 dark:text-oxford-400" : "text-oxford-900 dark:text-white"}`}>
-                                                            {item.label}
-                                                        </span>
-                                                    </div>
-                                                    {item.done ? (
-                                                        <CheckCircle2 size={14} className="text-emerald-600 shrink-0" />
-                                                    ) : !isEvaluationUnlocked ? (
-                                                        <span className="text-[10px] font-semibold text-oxford-400 px-1.5 py-0.5 rounded bg-oxford-200/50 dark:bg-oxford-800">
-                                                            Terkunci
-                                                        </span>
+                                        )}
+                                    </div>
+                                    <div className="divide-y divide-oxford-100 dark:divide-oxford-800/80">
+                                        {[
+                                            {
+                                                key: "narasumber" as const,
+                                                label: "Evaluasi Narasumber",
+                                                done:
+                                                    Boolean(enrollment?.evalNarasumberCompleted) ||
+                                                    attendanceStats.allEvaluationsCompleted,
+                                            },
+                                            {
+                                                key: "organizer" as const,
+                                                label: "Evaluasi Penyelenggara",
+                                                done:
+                                                    Boolean(enrollment?.evalOrganizerCompleted) ||
+                                                    attendanceStats.allEvaluationsCompleted,
+                                            },
+                                            ...(course.evaluationConfig?.enableUnderstanding
+                                                ? [
+                                                      {
+                                                          key: "understanding" as const,
+                                                          label: "Evaluasi Pembelajaran",
+                                                          done:
+                                                              Boolean(enrollment?.evalUnderstandingCompleted) ||
+                                                              attendanceStats.allEvaluationsCompleted,
+                                                      },
+                                                  ]
+                                                : []),
+                                            {
+                                                key: "skm" as const,
+                                                label: "SKM",
+                                                done:
+                                                    Boolean(enrollment?.evalSkmCompleted) ||
+                                                    attendanceStats.allEvaluationsCompleted,
+                                            },
+                                        ].map((item) => (
+                                            <button
+                                                key={item.key}
+                                                type="button"
+                                                onClick={() => {
+                                                    setRequestedEvalStage(item.key);
+                                                    scrollToElement("section-evaluasi");
+                                                    if (!isEvaluationUnlocked) {
+                                                        toast.info(
+                                                            `Selesaikan seluruh materi pada modul terakhir (${
+                                                                lastModule?.title || "modul penutup"
+                                                            }) untuk membuka Evaluasi.`
+                                                        );
+                                                    }
+                                                }}
+                                                className={`w-full text-left px-5 py-2.5 flex items-center justify-between gap-2 transition-colors ${
+                                                    item.done
+                                                        ? "bg-emerald-50/70 dark:bg-emerald-950/20"
+                                                        : "hover:bg-white dark:hover:bg-[#161B2A]"
+                                                }`}
+                                            >
+                                                <div className="flex items-center gap-2 min-w-0">
+                                                    {!isEvaluationUnlocked ? (
+                                                        <Lock size={14} className="text-oxford-400 shrink-0" />
                                                     ) : (
-                                                        <ChevronRight size={14} className="text-oxford-400 shrink-0" />
+                                                        <ClipboardCheck
+                                                            size={14}
+                                                            className={
+                                                                item.done
+                                                                    ? "text-emerald-600 shrink-0"
+                                                                    : "text-amber-600 shrink-0"
+                                                            }
+                                                        />
                                                     )}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </>
-                                )}
+                                                    <span className="text-xs font-bold truncate text-oxford-900 dark:text-white">
+                                                        {item.label}
+                                                    </span>
+                                                </div>
+                                                {item.done ? (
+                                                    <CheckCircle2 size={14} className="text-emerald-600 shrink-0" />
+                                                ) : (
+                                                    <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-400">
+                                                        {isEvaluationUnlocked ? "Belum" : "Terkunci"}
+                                                    </span>
+                                                )}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </>
+                            )}
 
-                                {course.documentationUrl && /^https?:\/\//i.test(course.documentationUrl.trim()) && (
-                                    <a
-                                        href={course.documentationUrl.trim()}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="w-full px-5 py-3 border-t border-oxford-100 dark:border-oxford-800/80 flex items-center justify-between gap-2 hover:bg-white dark:hover:bg-[#161B2A] transition-colors"
-                                    >
-                                        <div className="flex items-center gap-2.5 min-w-0">
-                                            <Camera size={15} className="text-gold-500 shrink-0" />
-                                            <span className="text-xs font-bold text-oxford-900 dark:text-white truncate">
-                                                Dokumentasi
-                                            </span>
-                                        </div>
-                                        <ExternalLink size={14} className="text-oxford-400 shrink-0" />
-                                    </a>
-                                )}
+                            {course.documentationUrl && /^https?:\/\//i.test(course.documentationUrl.trim()) && (
+                                <a
+                                    href={course.documentationUrl.trim()}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="w-full px-5 py-3 border-t border-oxford-100 dark:border-oxford-800/80 flex items-center justify-between gap-2 hover:bg-white dark:hover:bg-[#161B2A] transition-colors"
+                                >
+                                    <div className="flex items-center gap-2.5 min-w-0">
+                                        <Camera size={15} className="text-gold-500 shrink-0" />
+                                        <span className="text-xs font-bold text-oxford-900 dark:text-white truncate">
+                                            Dokumentasi
+                                        </span>
+                                    </div>
+                                    <ExternalLink size={14} className="text-oxford-400 shrink-0" />
+                                </a>
+                            )}
 
-                                {enrollment?.id && (
-                                    <Link
-                                        href={`/dashboard/courses/${enrollment.id}/progress`}
-                                        className="w-full px-5 py-3 border-t border-oxford-100 dark:border-oxford-800/80 flex items-center justify-between gap-2 hover:bg-white dark:hover:bg-[#161B2A] transition-colors"
+                            {enrollment?.id && (
+                                <button
+                                    type="button"
+                                    onClick={() => scrollToElement("section-sertifikat")}
+                                    className={`w-full px-5 py-3 border-t border-oxford-100 dark:border-oxford-800/80 flex items-center justify-between gap-2 transition-colors ${
+                                        canOpenCertificate
+                                            ? "bg-emerald-50/80 dark:bg-emerald-950/30 hover:bg-emerald-100/70"
+                                            : "hover:bg-white dark:hover:bg-[#161B2A]"
+                                    }`}
+                                >
+                                    <div className="flex items-center gap-2.5 min-w-0">
+                                        <Award
+                                            size={15}
+                                            className={canOpenCertificate ? "text-emerald-600 shrink-0" : "text-gold-500 shrink-0"}
+                                        />
+                                        <span className="text-xs font-bold text-oxford-900 dark:text-white truncate">
+                                            Sertifikat Pelatihan
+                                        </span>
+                                    </div>
+                                    <span
+                                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                            canOpenCertificate
+                                                ? "bg-emerald-100 text-emerald-700"
+                                                : "bg-amber-100 text-amber-800"
+                                        }`}
                                     >
-                                        <div className="flex items-center gap-2.5 min-w-0">
-                                            <Award size={15} className="text-gold-500 shrink-0" />
-                                            <span className="text-xs font-bold text-oxford-900 dark:text-white truncate">
-                                                Sertifikat
-                                            </span>
-                                        </div>
-                                        <ChevronRight size={14} className="text-oxford-400 shrink-0" />
-                                    </Link>
-                                )}
-                            </div>
-                        )}
+                                        {canOpenCertificate ? "Siap" : "Terkunci"}
+                                    </span>
+                                </button>
+                            )}
+                        </div>
                     </div>
                 </div>
 
-                {/* Main Content Area */}
-                <div className="flex-1 flex flex-col overflow-y-auto relative bg-white dark:bg-[#161B2A] md:bg-oxford-50 dark:md:bg-oxford-950">
-                    {activeLesson && activeModule?.isLocked ? (
-                        <div className="max-w-2xl mx-auto w-full p-6 md:p-12 my-auto">
-                            <div className="bg-white dark:bg-[#161B2A] rounded-2xl border border-oxford-200 dark:border-oxford-800 p-8 text-center shadow-sm">
-                                <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-rose-100 dark:bg-rose-950/70 text-rose-600 dark:text-rose-300 flex items-center justify-center">
-                                    <Lock size={30} />
-                                </div>
-                                <h2 className="text-xl font-serif font-bold text-oxford-950 dark:text-white mb-2">
-                                    Modul Belum Diaktifkan
-                                </h2>
-                                <p className="text-sm text-oxford-600 dark:text-oxford-300 mb-4">
-                                    {activeModule.lockReason || "Materi pada modul ini belum dibuka oleh Admin."}
-                                </p>
-                                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-oxford-100 dark:bg-oxford-900 text-xs font-semibold text-oxford-700 dark:text-oxford-300">
-                                    {activeModule.title}
-                                </span>
-                            </div>
-                        </div>
-                    ) : activeLesson ? (
-                        <div className="max-w-4xl mx-auto w-full p-4 pb-28 md:p-8 flex-1 flex flex-col">
-                            {activeLesson.type === 'quiz' ? (
-                                // Quiz content
-                                <div className="flex-1 flex flex-col justify-start pt-2">
-                                    {renderQuizContent()}
-
-                                    {/* Bottom padding */}
-                                    <div className="h-24"></div>
-                                </div>
-                            ) : (
-                                <>
-                                    {/* Lesson Header */}
-                                    <div className="mb-6 md:mb-8 bg-white dark:bg-[#161B2A] md:rounded-2xl md:p-6 md:shadow-sm">
-                                        <span className="inline-block px-3 py-1 bg-gold-100 text-gold-800 text-xs font-bold font-sans rounded-full mb-3 uppercase tracking-wider">
-                                            {getLessonTypeLabel(activeLesson.type)}
+                {/* Main Content Area — ONE PAGE (Materi per Modul -> Evaluasi -> Sertifikat) */}
+                <div className="flex-1 overflow-y-auto bg-oxford-50/70 dark:bg-oxford-950 scroll-smooth">
+                    <div className="max-w-4xl mx-auto w-full p-4 md:p-8 space-y-8 pb-24">
+                        {/* Header Ringkasan & Quick-Jump One Page */}
+                        <section className="rounded-2xl bg-gradient-to-br from-oxford-950 via-oxford-900 to-oxford-950 text-white p-6 md:p-7 shadow-lg border border-oxford-800">
+                            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                                <div>
+                                    <div className="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-gold-400 mb-2">
+                                        <Sparkles size={13} /> Halaman Belajar Terpadu (Single Page)
+                                    </div>
+                                    <h2 className="text-xl md:text-2xl font-serif font-bold leading-snug">
+                                        {course.title}
+                                    </h2>
+                                    <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+                                        <span className="px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-semibold">
+                                            Hijau: Sudah Dibaca / Selesai ({completedCount}/{totalLessons})
                                         </span>
-                                        <h1 className="text-2xl md:text-3xl font-serif font-bold text-oxford-900 dark:text-white mb-2">
-                                            {cleanLessonTitle(activeLesson.title, activeLesson.type)}
-                                        </h1>
+                                        <span className="px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold">
+                                            Kuning: Belum Dikerjakan ({Math.max(0, totalLessons - completedCount)})
+                                        </span>
                                     </div>
+                                </div>
 
-                                    {/* Presensi Kehadiran Sesi (Khusus Pelatihan Klasikal) */}
-                                    {isClassical && activeLesson.hasAttendance !== false && (
-                                        <div className={`mb-6 p-4 md:p-5 rounded-2xl border flex flex-col sm:flex-row items-center justify-between gap-4 transition-all shadow-xs ${
-                                            completedLessons[activeLesson.id]
-                                                ? "bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200"
-                                                : "bg-amber-50/80 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200"
-                                        }`}>
-                                            <div className="flex items-center gap-3.5 w-full sm:w-auto">
-                                                <div className={`p-3 rounded-xl shrink-0 ${
-                                                    completedLessons[activeLesson.id]
-                                                        ? "bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300"
-                                                        : "bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300"
-                                                }`}>
-                                                    <QrCode size={22} className="stroke-[2.25]" />
-                                                </div>
-                                                <div>
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="text-[11px] font-bold uppercase tracking-wider">
-                                                            Presensi Sesi Materi ({activeLesson.jp || 2} JP)
-                                                        </span>
-                                                        {completedLessons[activeLesson.id] ? (
-                                                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50 px-2 py-0.5 rounded-full">
-                                                                <CheckCircle2 size={12} /> Hadir
-                                                            </span>
-                                                        ) : (
-                                                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/50 px-2 py-0.5 rounded-full">
-                                                                Belum Presensi
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                    <p className="text-xs mt-0.5 text-oxford-600 dark:text-oxford-300 font-sans">
-                                                        {completedLessons[activeLesson.id]
-                                                            ? "Kehadiran Anda pada sesi ini telah tercatat dan tervalidasi."
-                                                            : "Bagi pengguna laptop, Anda bisa memasukkan kode presensi sesi atau menggunakan kamera / upload foto QR."}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                            {!completedLessons[activeLesson.id] && (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setIsAttendanceModalOpen(true)}
-                                                    className="w-full sm:w-auto px-5 py-2.5 bg-gradient-to-r from-gold-500 to-gold-400 hover:from-gold-400 hover:to-gold-300 text-oxford-950 font-bold text-xs rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 shrink-0 active:scale-95"
-                                                >
-                                                    <QrCode size={16} />
-                                                    <span>Isi Presensi Sesi Ini</span>
-                                                </button>
-                                            )}
-                                        </div>
-                                    )}
+                                <div className="flex flex-wrap gap-2 shrink-0">
+                                    <button
+                                        type="button"
+                                        onClick={() => scrollToElement("section-materi")}
+                                        className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold flex items-center gap-1.5 transition-colors"
+                                    >
+                                        <BookOpen size={14} className="text-gold-400" /> Materi
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => scrollToElement("section-evaluasi")}
+                                        className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold flex items-center gap-1.5 transition-colors"
+                                    >
+                                        <ClipboardCheck size={14} className="text-gold-400" /> Evaluasi
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => scrollToElement("section-sertifikat")}
+                                        className="px-3.5 py-2 rounded-xl bg-gold-500 hover:bg-gold-400 text-oxford-950 text-xs font-bold flex items-center gap-1.5 transition-colors"
+                                    >
+                                        <Award size={14} /> Sertifikat
+                                    </button>
+                                </div>
+                            </div>
+                        </section>
 
-                                    {/* Video Content */}
-                                    {activeLesson.type === 'video' && activeLesson.videoUrl && (
-                                        <div className="mb-8 md:mb-10 rounded-xl md:rounded-2xl overflow-hidden shadow-lg bg-black aspect-video relative">
-                                            {getYoutubeEmbedUrl(activeLesson.videoUrl) ? (
-                                                <iframe
-                                                    src={getYoutubeEmbedUrl(activeLesson.videoUrl)!}
-                                                    title={activeLesson.title}
-                                                    className="absolute top-0 left-0 w-full h-full"
-                                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                                                    allowFullScreen
-                                                ></iframe>
-                                            ) : (
-                                                <video
-                                                    src={activeLesson.videoUrl}
-                                                    controls
-                                                    className="absolute top-0 left-0 w-full h-full object-contain"
-                                                >
-                                                    Peramban Anda tidak mendukung pemutar video.
-                                                </video>
-                                            )}
-                                        </div>
-                                    )}
+                        {/* BAGIAN 1: SELURUH MATERI PER MODUL */}
+                        <section id="section-materi" className="space-y-6 scroll-mt-6">
+                            {courseContent.map((module, modIndex) => {
+                                const modDoneCount = module.lessons.filter((l) => completedLessons[l.id]).length;
+                                const isModAllDone =
+                                    module.lessons.length > 0 && modDoneCount === module.lessons.length;
+                                const modAttendanceLessons = isClassical
+                                    ? module.lessons.filter((l) => l.hasAttendance !== false)
+                                    : [];
+                                const modPendingAttCount = modAttendanceLessons.filter(
+                                    (l) => !attendedLessons[l.id]
+                                ).length;
 
-                                    {/* Text / Reading Content */}
-                                    {activeLesson.type === 'reading' && activeLesson.content && (
-                                        <div className="bg-white dark:bg-[#161B2A] rounded-2xl p-6 md:p-8 shadow-sm border border-oxford-100 dark:border-oxford-800 mb-8 font-sans">
-                                            <div
-                                                className="prose prose-oxford max-w-none text-oxford-800 dark:text-oxford-100 leading-relaxed"
-                                                dangerouslySetInnerHTML={{ __html: activeLesson.content.replace(/\n/g, '<br/>') }}
-                                            />
-                                        </div>
-                                    )}
-
-                                    {/* File / Document Viewer Content */}
-                                    {activeLesson.type === 'file' && (
-                                        <DocumentViewer
-                                            url={activeLesson.content || ""}
-                                            title={cleanLessonTitle(activeLesson.title, activeLesson.type)}
-                                        />
-                                    )}
-
-                                    {/* Action Area */}
-                                    <div className="mt-8 flex flex-col sm:flex-row items-center justify-between bg-white dark:bg-[#161B2A] p-5 md:p-6 rounded-xl md:rounded-2xl shadow-sm border border-oxford-100 dark:border-oxford-800">
-                                        <div className="mb-4 sm:mb-0 text-center sm:text-left">
-                                            <p className="font-sans font-bold text-oxford-900 dark:text-white">Selesai mempelajari materi ini?</p>
-                                            <p className="text-sm text-oxford-500 dark:text-oxford-400">Tandai sebagai selesai untuk meningkatkan progress kamu.</p>
-                                        </div>
-                                        <div className="flex flex-wrap justify-center sm:justify-end gap-3">
-                                            {prevLesson && (
-                                                <button
-                                                    onClick={() => handleLessonClick(prevLesson)}
-                                                    className="px-6 py-3 rounded-full border-2 border-oxford-200 dark:border-oxford-700 text-oxford-700 dark:text-oxford-200 hover:bg-oxford-50 dark:hover:bg-oxford-950 font-sans font-bold transition-all flex items-center gap-2 active:scale-95"
-                                                    title={`Kembali ke: ${prevLesson.title}`}
-                                                >
-                                                    <ChevronLeft size={20} />
-                                                    Back
-                                                </button>
-                                            )}
-
-                                            <button
-                                                onClick={markAsComplete}
-                                                disabled={completedLessons[activeLesson.id]}
-                                                className={`px-8 py-3 rounded-full font-sans font-bold transition-all flex items-center gap-2 ${completedLessons[activeLesson.id]
-                                                    ? 'bg-green-100 text-green-700 cursor-default'
-                                                    : 'bg-gold-500 text-oxford-950 hover:bg-gold-400 hover:shadow-lg hover:shadow-gold-500/20 active:scale-95'
+                                return (
+                                    <div
+                                        key={module.id}
+                                        className={`rounded-2xl border p-4 md:p-6 shadow-xs space-y-5 transition-colors ${
+                                            isModAllDone
+                                                ? "border-emerald-200/90 dark:border-emerald-800/70 bg-emerald-50/20 dark:bg-emerald-950/10"
+                                                : "border-oxford-200/90 dark:border-oxford-800 bg-white/80 dark:bg-[#141926]/80"
+                                        }`}
+                                    >
+                                        {/* Header Modul */}
+                                        <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-oxford-100 dark:border-oxford-800">
+                                            <div className="flex items-center gap-3 min-w-0">
+                                                <span
+                                                    className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold shrink-0 ${
+                                                        isModAllDone
+                                                            ? "bg-emerald-600 text-white"
+                                                            : "bg-oxford-900 text-gold-400"
                                                     }`}
-                                            >
-                                                <CheckCircle size={20} />
-                                                {completedLessons[activeLesson.id] ? 'Selesai' : 'Tandai Selesai'}
-                                            </button>
-
-                                            {nextLesson ? (
-                                                <button
-                                                    onClick={() => handleLessonClick(nextLesson)}
-                                                    className="px-8 py-3 bg-oxford-900 text-gold-400 hover:text-gold-300 rounded-full font-sans font-bold transition-all flex items-center gap-2 active:scale-95 shadow-lg"
-                                                    title={`Lanjut ke: ${nextLesson.title}`}
                                                 >
-                                                    Next
-                                                    <ChevronRight size={20} />
-                                                </button>
-                                            ) : isEvaluationUnlocked ? (
-                                                <button
-                                                    onClick={() => setShowEvaluationWizard(true)}
-                                                    className="px-8 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-full font-sans font-bold transition-all flex items-center gap-2 active:scale-95 shadow-lg"
-                                                    title="Lanjut ke Tahap Evaluasi"
-                                                >
-                                                    Next (Evaluasi)
-                                                    <ChevronRight size={20} />
-                                                </button>
-                                            ) : null}
-                                        </div>
-                                    </div>
-
-                                    {/* Discussion Forum Section */}
-                                    <div className="mt-12 bg-white dark:bg-[#161B2A] rounded-2xl shadow-sm border border-oxford-100 dark:border-oxford-800 overflow-hidden">
-                                        <div className="p-6 border-b border-oxford-100 dark:border-oxford-800 bg-oxford-50 dark:bg-oxford-950/50 flex items-center justify-between">
-                                            <div className="flex items-center gap-2">
-                                                <MessageSquare className="text-oxford-900 dark:text-white" size={20} />
-                                                <h3 className="font-sans font-bold text-oxford-900 dark:text-white">Diskusi Pelajaran</h3>
+                                                    {modIndex + 1}
+                                                </span>
+                                                <div className="min-w-0">
+                                                    <div className="text-[11px] font-bold uppercase tracking-wider text-oxford-400">
+                                                        Modul {modIndex + 1}
+                                                    </div>
+                                                    <h3 className="text-base md:text-lg font-serif font-bold text-oxford-950 dark:text-white truncate">
+                                                        {module.title}
+                                                    </h3>
+                                                </div>
                                             </div>
-                                            <span className="text-xs font-bold text-oxford-400 bg-white dark:bg-[#161B2A] px-2 py-1 rounded-full border border-oxford-100 dark:border-oxford-800">
-                                                {discussions.length} Komentar
+                                            <span
+                                                className={`px-3 py-1 rounded-full text-xs font-bold shrink-0 ${
+                                                    isModAllDone
+                                                        ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-200"
+                                                        : "bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300"
+                                                }`}
+                                            >
+                                                {modDoneCount}/{module.lessons.length} Selesai
                                             </span>
                                         </div>
 
-                                        <div className="p-6">
-                                            {/* Comment Input */}
-                                            <div className="flex gap-4 mb-10">
-                                                <div className="w-10 h-10 rounded-full bg-oxford-100 dark:bg-[#161B2A] flex-shrink-0 overflow-hidden border border-oxford-200 dark:border-oxford-700">
-                                                    {user?.image ? (
-                                                        <Image src={optimizeAvatar(user.image)} alt={user.name} width={40} height={40} unoptimized className="w-full h-full object-cover" />
-                                                    ) : (
-                                                        <div className="w-full h-full flex items-center justify-center text-oxford-400 font-bold uppercase">
-                                                            {user?.name?.charAt(0) || '?'}
+                                        {/* Kolom Wajib Presensi per Modul */}
+                                        {!module.isLocked && modAttendanceLessons.length > 0 && (
+                                            <div
+                                                className={`rounded-xl border px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                                                    modPendingAttCount === 0
+                                                        ? "bg-emerald-50/90 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200"
+                                                        : "bg-amber-50/90 dark:bg-amber-950/30 border-amber-300 dark:border-amber-700/70 text-amber-950 dark:text-amber-100"
+                                                }`}
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <div
+                                                        className={`p-2 rounded-lg shrink-0 ${
+                                                            modPendingAttCount === 0
+                                                                ? "bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300"
+                                                                : "bg-amber-200/70 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300"
+                                                        }`}
+                                                    >
+                                                        <QrCode size={18} />
+                                                    </div>
+                                                    <div>
+                                                        <div className="text-xs font-bold uppercase tracking-wider">
+                                                            {modPendingAttCount === 0
+                                                                ? `Presensi Modul Lengkap (${modAttendanceLessons.length}/${modAttendanceLessons.length} Sesi)`
+                                                                : `Modul Wajib Presensi (${modPendingAttCount} Sesi Belum Presensi)`}
                                                         </div>
-                                                    )}
-                                                </div>
-                                                <div className="flex-1">
-                                                    <textarea
-                                                        value={commentText}
-                                                        onChange={(e) => setCommentText(e.target.value)}
-                                                        placeholder="Tanyakan sesuatu atau berikan tanggapan..."
-                                                        className="w-full bg-oxford-50 dark:bg-oxford-950 border border-oxford-200 dark:border-oxford-700 rounded-xl px-4 py-3 text-sm focus:bg-white dark:focus:bg-[#161B2A] focus:border-gold-500 focus:ring-4 focus:ring-gold-500/10 outline-none transition-all min-h-[100px] resize-none"
-                                                    />
-                                                    <div className="mt-3 flex justify-end">
-                                                        <button 
-                                                            onClick={handleAddComment}
-                                                            disabled={isSubmittingComment || !commentText.trim()}
-                                                            className="flex items-center gap-2 px-6 py-2 bg-oxford-900 text-gold-400 font-bold rounded-full hover:bg-oxford-800 transition-all disabled:opacity-50 active:scale-95 text-sm"
-                                                        >
-                                                            {isSubmittingComment ? <Loader2 className="animate-spin" size={16} /> : <Send size={16} />}
-                                                            Kirim Diskusi
-                                                        </button>
+                                                        <p className="text-[11px] text-oxford-600 dark:text-oxford-300 mt-0.5">
+                                                            {modPendingAttCount === 0
+                                                                ? "Seluruh kehadiran pada modul ini telah tercatat."
+                                                                : "Klik tombol di samping untuk mengisi presensi via kode, kamera, atau upload QR."}
+                                                        </p>
                                                     </div>
                                                 </div>
-                                            </div>
 
-                                            {/* Discussion List */}
-                                            <div className="space-y-8">
-                                                {isFetchingDiscussions ? (
-                                                    <div className="py-10 text-center">
-                                                        <Loader2 className="animate-spin mx-auto text-oxford-300" size={32} />
-                                                        <p className="mt-2 text-sm text-oxford-400">Memuat diskusi...</p>
-                                                    </div>
-                                                ) : discussions.length > 0 ? (
-                                                    discussions.map((disc) => (
-                                                        <div key={disc.id} className="group">
-                                                            <div className="flex gap-4">
-                                                                <div className="w-10 h-10 rounded-full bg-oxford-50 dark:bg-oxford-950 border border-oxford-200 dark:border-oxford-700 overflow-hidden flex-shrink-0">
-                                                                    {disc.image ? (
-                                                                        <Image src={optimizeAvatar(disc.image)} alt={disc.name} width={40} height={40} unoptimized className="w-full h-full object-cover" />
-                                                                    ) : (
-                                                                        <div className="w-full h-full flex items-center justify-center text-oxford-300 font-bold bg-oxford-50 dark:bg-oxford-950">
-                                                                            {disc.name.charAt(0)}
-                                                                        </div>
-                                                                    )}
-                                                                </div>
-                                                                <div className="flex-1 min-w-0">
-                                                                    <div className="flex items-center justify-between mb-1">
-                                                                        <div className="flex items-center gap-2">
-                                                                            <span className="font-sans font-bold text-oxford-900 dark:text-white text-sm">{disc.name}</span>
-                                                                            <span className="text-[10px] text-oxford-400 font-medium">
-                                                                                {new Date(disc.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
-                                                                            </span>
-                                                                        </div>
-                                                                        {(user?.id === disc.user_id || user?.role === 'admin') && (
-                                                                            <button 
-                                                                                onClick={() => handleDeleteComment(disc.id)}
-                                                                                className="text-oxford-300 hover:text-crimson-500 opacity-0 group-hover:opacity-100 transition-all p-1"
-                                                                            >
-                                                                                <Trash2 size={14} />
-                                                                            </button>
-                                                                        )}
-                                                                    </div>
-                                                                    <div className="bg-oxford-50 dark:bg-oxford-950 p-4 rounded-2xl rounded-tl-none border border-oxford-100 dark:border-oxford-800">
-                                                                        <p className="text-sm text-oxford-800 dark:text-oxford-100 leading-relaxed whitespace-pre-line">
-                                                                            {disc.content}
-                                                                        </p>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    ))
-                                                ) : (
-                                                    <div className="py-12 text-center bg-oxford-50 dark:bg-oxford-950 rounded-2xl border border-dashed border-oxford-200 dark:border-oxford-700">
-                                                        <MessageSquare className="mx-auto text-oxford-200 mb-3" size={40} />
-                                                        <p className="font-sans font-medium text-oxford-500 dark:text-oxford-400">Belum ada diskusi di materi ini.</p>
-                                                        <p className="text-xs text-oxford-400 mt-1">Jadilah yang pertama untuk bertanya!</p>
-                                                    </div>
+                                                {modPendingAttCount > 0 && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setIsAttendanceModalOpen(true)}
+                                                        className="w-full sm:w-auto px-4 py-2 bg-gold-500 hover:bg-gold-400 text-oxford-950 font-bold text-xs rounded-xl flex items-center justify-center gap-2 shrink-0 shadow-md shadow-gold-500/30 animate-[pulse_2.2s_ease-in-out_infinite] active:scale-95 transition-transform"
+                                                    >
+                                                        <span className="relative flex h-2 w-2">
+                                                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-oxford-950/70 opacity-75" />
+                                                            <span className="relative inline-flex rounded-full h-2 w-2 bg-oxford-950" />
+                                                        </span>
+                                                        <QrCode size={14} />
+                                                        <span>Isi Presensi</span>
+                                                    </button>
                                                 )}
                                             </div>
-                                        </div>
-                                    </div>
+                                        )}
 
-                                    {/* Bottom padding for scrolling */}
-                                    <div className="h-24"></div>
-                                </>
-                            )}
-                        </div>
-                    ) : (
-                        <div className="flex-1 flex items-center justify-center p-8 bg-white dark:bg-[#161B2A] min-h-[500px]">
-                            <div className="text-center">
-                                <div className="w-20 h-20 bg-oxford-50 dark:bg-oxford-950 rounded-full flex items-center justify-center mx-auto mb-4">
-                                    <FileText className="text-oxford-300 w-10 h-10" />
+                                        {/* Isi Modul */}
+                                        {module.isLocked ? (
+                                            <div className="rounded-xl border border-rose-200 dark:border-rose-900/60 bg-rose-50/60 dark:bg-rose-950/20 p-6 text-center">
+                                                <Lock className="mx-auto mb-2 text-rose-500" size={26} />
+                                                <h4 className="font-serif font-bold text-base text-oxford-950 dark:text-white">
+                                                    Modul Belum Diaktifkan
+                                                </h4>
+                                                <p className="text-xs text-oxford-600 dark:text-oxford-300 mt-1">
+                                                    {module.lockReason || "Materi pada modul ini belum dibuka oleh Admin."}
+                                                </p>
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-5">
+                                                {module.lessons.map((lesson) => {
+                                                    const isCompleted = Boolean(completedLessons[lesson.id]);
+                                                    const isAttended = Boolean(attendedLessons[lesson.id]);
+
+                                                    return (
+                                                        <article
+                                                            key={lesson.id}
+                                                            id={`lesson-${lesson.id}`}
+                                                            onClick={() => setActiveLessonId(lesson.id)}
+                                                            className={`rounded-2xl border-2 overflow-hidden transition-all scroll-mt-20 ${
+                                                                isCompleted
+                                                                    ? "border-emerald-300 dark:border-emerald-700/80 bg-emerald-50/30 dark:bg-emerald-950/15 shadow-xs"
+                                                                    : "border-amber-300/90 dark:border-amber-700/60 bg-white dark:bg-[#161B2A] shadow-sm"
+                                                            }`}
+                                                        >
+                                                            {/* Header Kartu Materi */}
+                                                            <div
+                                                                className={`px-5 py-4 border-b flex flex-wrap items-center justify-between gap-3 ${
+                                                                    isCompleted
+                                                                        ? "bg-emerald-50/90 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800/70"
+                                                                        : "bg-amber-50/60 dark:bg-amber-950/20 border-amber-200/80 dark:border-amber-800/50"
+                                                                }`}
+                                                            >
+                                                                <div className="min-w-0 flex-1">
+                                                                    <h4 className="text-base md:text-lg font-serif font-bold text-oxford-950 dark:text-white">
+                                                                        {cleanLessonTitle(lesson.title, lesson.type)}
+                                                                    </h4>
+                                                                </div>
+
+                                                                <span
+                                                                    className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold shrink-0 ${
+                                                                        isCompleted
+                                                                            ? "bg-emerald-600 text-white"
+                                                                            : "bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-200 border border-amber-300 dark:border-amber-700"
+                                                                    }`}
+                                                                >
+                                                                    {isCompleted ? (
+                                                                        <>
+                                                                            <CheckCircle2 size={14} /> Sudah Selesai
+                                                                        </>
+                                                                    ) : (
+                                                                        <>
+                                                                            <AlertCircle size={14} /> Belum Selesai
+                                                                        </>
+                                                                    )}
+                                                                </span>
+                                                            </div>
+
+                                                            {/* Body Materi */}
+                                                            <div className="p-5 space-y-5">
+                                                                {/* Konten Video */}
+                                                                {lesson.type === "video" && lesson.videoUrl && (
+                                                                    <div className="rounded-xl overflow-hidden shadow-md bg-black aspect-video relative">
+                                                                        {getYoutubeEmbedUrl(lesson.videoUrl) ? (
+                                                                            <iframe
+                                                                                src={getYoutubeEmbedUrl(lesson.videoUrl)!}
+                                                                                title={lesson.title}
+                                                                                className="absolute inset-0 w-full h-full"
+                                                                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                                                                allowFullScreen
+                                                                            />
+                                                                        ) : (
+                                                                            <video
+                                                                                src={lesson.videoUrl}
+                                                                                controls
+                                                                                className="absolute inset-0 w-full h-full object-contain"
+                                                                            >
+                                                                                Peramban Anda tidak mendukung pemutar video.
+                                                                            </video>
+                                                                        )}
+                                                                    </div>
+                                                                )}
+
+                                                                {/* Konten Bacaan */}
+                                                                {lesson.type === "reading" && lesson.content && (
+                                                                    <div className="rounded-xl p-4 md:p-5 bg-white dark:bg-[#1B2236] border border-oxford-100 dark:border-oxford-800 font-sans">
+                                                                        <div
+                                                                            className="prose prose-oxford max-w-none text-oxford-800 dark:text-oxford-100 leading-relaxed"
+                                                                            dangerouslySetInnerHTML={{
+                                                                                __html: lesson.content.replace(/\n/g, "<br/>"),
+                                                                            }}
+                                                                        />
+                                                                    </div>
+                                                                )}
+
+                                                                {/* Konten File / Dokumen */}
+                                                                {lesson.type === "file" && (
+                                                                    <DocumentViewer
+                                                                        url={lesson.content || ""}
+                                                                        title={cleanLessonTitle(lesson.title, lesson.type)}
+                                                                    />
+                                                                )}
+
+                                                                {/* Konten Quiz */}
+                                                                {lesson.type === "quiz" && (
+                                                                    <InlineQuizCard
+                                                                        lessonId={lesson.id}
+                                                                        lessonTitle={cleanLessonTitle(lesson.title, lesson.type)}
+                                                                        lessonContent={lesson.content}
+                                                                        isCompleted={isCompleted}
+                                                                        onPassed={() => void markLessonAsComplete(lesson.id)}
+                                                                    />
+                                                                )}
+
+                                                                {/* Tombol Tandai Selesai (hanya tampil jika belum selesai) */}
+                                                                {lesson.type !== "quiz" && !isCompleted && (
+                                                                    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
+                                                                        <p className="text-xs text-oxford-500 dark:text-oxford-400">
+                                                                            Sudah selesai membaca/menyimak materi ini?
+                                                                        </p>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => void markLessonAsComplete(lesson.id)}
+                                                                            className="px-6 py-2.5 rounded-full font-sans text-xs font-bold transition-all flex items-center gap-2 shrink-0 bg-gold-500 text-oxford-950 hover:bg-gold-400 shadow-md shadow-gold-500/20 active:scale-95"
+                                                                        >
+                                                                            <CheckCircle size={16} />
+                                                                            Tandai Selesai
+                                                                        </button>
+                                                                    </div>
+                                                                )}
+
+                                                                {/* Diskusi Pelajaran (Collapsible) */}
+                                                                <InlineDiscussionPanel
+                                                                    lessonId={lesson.id}
+                                                                    currentUserId={user.id}
+                                                                    currentUserRole={user.role || "student"}
+                                                                />
+                                                            </div>
+                                                        </article>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </section>
+
+                        {/* BAGIAN 2: EVALUASI PELATIHAN (INLINE LANGSUNG DI HALAMAN) */}
+                        <section
+                            id="section-evaluasi"
+                            className={`rounded-2xl border p-4 md:p-6 shadow-xs scroll-mt-20 transition-colors ${
+                                attendanceStats.allEvaluationsCompleted
+                                    ? "border-emerald-300 dark:border-emerald-700/80 bg-emerald-50/30 dark:bg-emerald-950/15"
+                                    : "border-oxford-200 dark:border-oxford-800 bg-white dark:bg-[#141926]"
+                            }`}
+                        >
+                            <div className="flex flex-wrap items-center justify-between gap-3 pb-4 mb-5 border-b border-oxford-100 dark:border-oxford-800">
+                                <div className="flex items-center gap-3">
+                                    <div
+                                        className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                                            attendanceStats.allEvaluationsCompleted
+                                                ? "bg-emerald-600 text-white"
+                                                : "bg-oxford-900 text-gold-400"
+                                        }`}
+                                    >
+                                        <ClipboardCheck size={18} />
+                                    </div>
+                                    <div>
+                                        <div className="text-[11px] font-bold uppercase tracking-wider text-oxford-400">
+                                            Tahap Evaluasi Pelatihan
+                                        </div>
+                                        <h3 className="text-lg font-serif font-bold text-oxford-950 dark:text-white">
+                                            Evaluasi Narasumber, Penyelenggara &amp; Survei SKM
+                                        </h3>
+                                    </div>
                                 </div>
-                                <h3 className="font-serif font-bold text-xl text-oxford-900 dark:text-white mb-2">Pilih Materi Pembelajaran</h3>
-                                <p className="text-oxford-500 dark:text-oxford-400 font-sans max-w-md">Klik salah satu materi di sidebar untuk mulai belajar.</p>
+                                <span
+                                    className={`px-3 py-1 rounded-full text-xs font-bold ${
+                                        attendanceStats.allEvaluationsCompleted
+                                            ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-200"
+                                            : isEvaluationUnlocked
+                                            ? "bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300"
+                                            : "bg-oxford-100 text-oxford-600 dark:bg-oxford-800 dark:text-oxford-300"
+                                    }`}
+                                >
+                                    {attendanceStats.allEvaluationsCompleted
+                                        ? "Evaluasi Tuntas"
+                                        : isEvaluationUnlocked
+                                        ? "Siap Diisi"
+                                        : "Terkunci"}
+                                </span>
                             </div>
-                        </div>
-                    )}
+
+                            {!isEvaluationUnlocked ? (
+                                <div className="rounded-xl border border-amber-200 dark:border-amber-800/60 bg-amber-50/70 dark:bg-amber-950/20 p-6 text-center">
+                                    <Lock className="mx-auto mb-2 text-amber-600" size={26} />
+                                    <h4 className="font-serif font-bold text-base text-oxford-950 dark:text-white">
+                                        Evaluasi Belum Terbuka
+                                    </h4>
+                                    <p className="text-xs text-oxford-600 dark:text-oxford-300 mt-1 max-w-lg mx-auto">
+                                        Silakan selesaikan seluruh materi pada modul terakhir (
+                                        <strong>{lastModule?.title || "modul penutup"}</strong>) di atas terlebih dahulu
+                                        untuk membuka formulir evaluasi pelatihan.
+                                    </p>
+                                </div>
+                            ) : (
+                                <FourStageEvaluationWizard
+                                    courseId={course.id}
+                                    courseTitle={course.title}
+                                    evaluationConfig={course.evaluationConfig}
+                                    deliveryMode={course.deliveryMode || "daring"}
+                                    requestedStage={requestedEvalStage}
+                                    sessions={allLessons.map((l) => ({
+                                        id: l.id,
+                                        title: l.title,
+                                        narasumberName: l.narasumberName,
+                                        jp: l.jp,
+                                    }))}
+                                    onEvaluationsComplete={() => {
+                                        setAttendanceStats((prev) => ({
+                                            ...prev,
+                                            allEvaluationsCompleted: true,
+                                        }));
+                                        toast.success("Rangkaian evaluasi 4 tahap tuntas!");
+                                    }}
+                                />
+                            )}
+                        </section>
+
+                        {/* BAGIAN 3: SERTIFIKAT PELATIHAN (PALING BAWAH) */}
+                        <section
+                            id="section-sertifikat"
+                            className={`rounded-2xl border-2 p-5 md:p-7 shadow-sm scroll-mt-20 transition-colors ${
+                                canOpenCertificate
+                                    ? "border-emerald-300 dark:border-emerald-700 bg-gradient-to-br from-emerald-50 to-green-50/60 dark:from-emerald-950/40 dark:to-green-950/20"
+                                    : "border-amber-300/80 dark:border-amber-700/60 bg-white dark:bg-[#141926]"
+                            }`}
+                        >
+                            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-5">
+                                <div className="flex items-start gap-4">
+                                    <div
+                                        className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${
+                                            canOpenCertificate
+                                                ? "bg-emerald-600 text-white shadow-md shadow-emerald-600/20"
+                                                : "bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300"
+                                        }`}
+                                    >
+                                        <Award size={24} />
+                                    </div>
+                                    <div>
+                                        <div className="text-[11px] font-bold uppercase tracking-wider text-oxford-400">
+                                            Tahap Akhir · Sertifikat Resmi
+                                        </div>
+                                        <h3 className="text-lg md:text-xl font-serif font-bold text-oxford-950 dark:text-white">
+                                            {canOpenCertificate
+                                                ? "Selamat! Sertifikat Pelatihan Siap Diunduh"
+                                                : "Sertifikat Pelatihan Belum Terbuka"}
+                                        </h3>
+                                        <p className="text-xs md:text-sm text-oxford-600 dark:text-oxford-300 mt-1">
+                                            {canOpenCertificate
+                                                ? "Seluruh persyaratan materi, kuis, dan evaluasi telah terpenuhi."
+                                                : "Lengkapi seluruh checklist persyaratan di bawah ini untuk mengunduh sertifikat Anda."}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="flex flex-wrap items-center gap-3 shrink-0">
+                                    {canOpenCertificate && enrollment?.id ? (
+                                        <Link
+                                            href={`/dashboard/certificates/${enrollment.id}`}
+                                            className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold shadow-lg shadow-emerald-600/20 transition-all active:scale-95"
+                                        >
+                                            <Award size={18} />
+                                            Lihat / Unduh Sertifikat
+                                            <ExternalLink size={15} />
+                                        </Link>
+                                    ) : isClassical && !statementAccepted ? (
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsVerificationModalOpen(true)}
+                                            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-gold-500 hover:bg-gold-400 text-oxford-950 text-xs font-bold shadow-md"
+                                        >
+                                            Verifikasi Data Profil
+                                        </button>
+                                    ) : null}
+
+                                    {enrollment?.id && (
+                                        <Link
+                                            href={`/dashboard/courses/${enrollment.id}/progress`}
+                                            className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-full border border-oxford-200 dark:border-oxford-700 text-xs font-bold text-oxford-700 dark:text-oxford-200 hover:bg-oxford-50 dark:hover:bg-oxford-900"
+                                        >
+                                            <ClipboardCheck size={14} /> Detail Progres
+                                        </Link>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Checklist Syarat Sertifikat */}
+                            <div className="mt-5 pt-5 border-t border-oxford-200/70 dark:border-oxford-800 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                                <div
+                                    className={`p-3 rounded-xl border text-xs flex items-center gap-2.5 ${
+                                        progressPercent === 100
+                                            ? "bg-emerald-100/70 dark:bg-emerald-900/30 border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200"
+                                            : "bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800/60 text-amber-900 dark:text-amber-200"
+                                    }`}
+                                >
+                                    {progressPercent === 100 ? (
+                                        <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+                                    ) : (
+                                        <AlertCircle size={16} className="text-amber-600 shrink-0" />
+                                    )}
+                                    <span>
+                                        Materi: <strong>{progressPercent}%</strong>
+                                    </span>
+                                </div>
+
+                                <div
+                                    className={`p-3 rounded-xl border text-xs flex items-center gap-2.5 ${
+                                        allQuizzesPassed
+                                            ? "bg-emerald-100/70 dark:bg-emerald-900/30 border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200"
+                                            : "bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800/60 text-amber-900 dark:text-amber-200"
+                                    }`}
+                                >
+                                    {allQuizzesPassed ? (
+                                        <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+                                    ) : (
+                                        <AlertCircle size={16} className="text-amber-600 shrink-0" />
+                                    )}
+                                    <span>
+                                        Kuis: <strong>{allQuizzesPassed ? "Lulus" : "Belum Lulus"}</strong>
+                                    </span>
+                                </div>
+
+                                {isClassical && (
+                                    <>
+                                        <div
+                                            className={`p-3 rounded-xl border text-xs flex items-center gap-2.5 ${
+                                                isAttendanceSufficient
+                                                    ? "bg-emerald-100/70 dark:bg-emerald-900/30 border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200"
+                                                    : "bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800/60 text-amber-900 dark:text-amber-200"
+                                            }`}
+                                        >
+                                            {isAttendanceSufficient ? (
+                                                <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+                                            ) : (
+                                                <AlertCircle size={16} className="text-amber-600 shrink-0" />
+                                            )}
+                                            <span>
+                                                Presensi:{" "}
+                                                <strong>
+                                                    {attendanceStats.attendancePercentage}%/{attendanceThreshold}%
+                                                </strong>
+                                            </span>
+                                        </div>
+
+                                        <div
+                                            className={`p-3 rounded-xl border text-xs flex items-center gap-2.5 ${
+                                                attendanceStats.allEvaluationsCompleted && statementAccepted
+                                                    ? "bg-emerald-100/70 dark:bg-emerald-900/30 border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200"
+                                                    : "bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800/60 text-amber-900 dark:text-amber-200"
+                                            }`}
+                                        >
+                                            {attendanceStats.allEvaluationsCompleted && statementAccepted ? (
+                                                <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+                                            ) : (
+                                                <AlertCircle size={16} className="text-amber-600 shrink-0" />
+                                            )}
+                                            <span>
+                                                Evaluasi &amp; Data:{" "}
+                                                <strong>
+                                                    {attendanceStats.allEvaluationsCompleted && statementAccepted
+                                                        ? "Lengkap"
+                                                        : "Belum Lengkap"}
+                                                </strong>
+                                            </span>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+                        </section>
+                    </div>
                 </div>
             </div>
 
@@ -1495,6 +1221,7 @@ export default function LearnClient({ course, courseContent, session, enrollment
                 onClose={() => setIsVerificationModalOpen(false)}
                 onSuccess={() => {
                     setIsVerificationModalOpen(false);
+                    setStatementAccepted(true);
                     toast.success("Verifikasi data profil tuntas!");
                 }}
                 courseId={course.id}
@@ -1510,12 +1237,12 @@ export default function LearnClient({ course, courseContent, session, enrollment
             />
 
             {/* Persistent Action Widget untuk Presensi QR / Token (Mobile & Laptop) */}
-            {isClassical && !isVerificationModalOpen && !showEvaluationWizard && (
+            {isClassical && !isVerificationModalOpen && (
                 <MobileAttendanceFAB
                     courseId={course.id}
                     courseTitle={course.title}
                     lessons={allLessons}
-                    attendedLessonIds={Object.keys(completedLessons).filter((k) => completedLessons[k])}
+                    attendedLessonIds={Object.keys(attendedLessons).filter((k) => attendedLessons[k])}
                     isOpen={isAttendanceModalOpen}
                     onOpenChange={setIsAttendanceModalOpen}
                     onAttendanceSuccess={(att) => {
@@ -1524,216 +1251,11 @@ export default function LearnClient({ course, courseContent, session, enrollment
                             attendedJp: att.attendedJp,
                             attendancePercentage: att.attendancePercentage,
                         }));
+                        setAttendedLessons((prev) => ({ ...prev, [att.lessonId]: true }));
                         setCompletedLessons((prev) => ({ ...prev, [att.lessonId]: true }));
                     }}
                 />
             )}
-
-            {/* Modal Rangkaian 4 Tahap Evaluasi Pelatihan */}
-            {showEvaluationWizard && (
-                <div
-                    onClick={(e) => {
-                        if (e.target === e.currentTarget) setShowEvaluationWizard(false);
-                    }}
-                    className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-start justify-center p-3 sm:p-6 overflow-y-auto"
-                >
-                    <div className="max-w-3xl w-full my-auto relative animate-in fade-in zoom-in-95 duration-200">
-                        <div className="sticky top-0 z-20 flex justify-end pb-2 pointer-events-none">
-                            <button
-                                type="button"
-                                onClick={() => setShowEvaluationWizard(false)}
-                                aria-label="Tutup Evaluasi"
-                                className="pointer-events-auto inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-white dark:bg-oxford-800 text-oxford-800 dark:text-white border border-oxford-200 dark:border-oxford-600 rounded-full shadow-lg text-xs font-bold hover:scale-105 transition-transform"
-                            >
-                                <span>✕</span>
-                                <span>Tutup</span>
-                            </button>
-                        </div>
-                        <FourStageEvaluationWizard
-                            courseId={course.id}
-                            courseTitle={course.title}
-                            evaluationConfig={course.evaluationConfig}
-                            deliveryMode={course.deliveryMode || "daring"}
-                            requestedStage={requestedEvalStage}
-                            sessions={allLessons.map((l) => ({
-                                id: l.id,
-                                title: l.title,
-                                narasumberName: l.narasumberName,
-                                jp: l.jp,
-                            }))}
-                            onEvaluationsComplete={() => {
-                                setAttendanceStats((prev) => ({ ...prev, allEvaluationsCompleted: true }));
-                                toast.success("Rangkaian evaluasi 4 tahap tuntas!");
-                            }}
-                        />
-                    </div>
-                </div>
-            )}
-
-            {/* FLOATING BOTTOM DOCK: TOMBOL BACK & NEXT (FLOATING DI TENGAH BAWAH DENGAN UKURAN PROPORSIONAL) */}
-            {activeLesson && !showEvaluationWizard && (
-                <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 sm:gap-2 p-1 sm:p-1.5 px-2 sm:px-3 bg-oxford-950/95 dark:bg-[#161B2A]/95 backdrop-blur-md rounded-full border border-oxford-800/80 dark:border-oxford-700/80 shadow-2xl transition-all ring-1 ring-white/10 max-w-[92vw]">
-                    {/* Tombol Back */}
-                    {prevLesson ? (
-                        <button
-                            type="button"
-                            onClick={() => handleLessonClick(prevLesson)}
-                            className="px-3 py-1.5 sm:px-4 sm:py-2 rounded-full text-xs font-bold font-sans transition-all flex items-center gap-1 bg-oxford-900/80 hover:bg-oxford-800 text-oxford-200 hover:text-white border border-oxford-700/60 active:scale-95 shadow-sm shrink-0"
-                            title={`Kembali ke: ${prevLesson.title}`}
-                        >
-                            <ChevronLeft size={15} />
-                            <span>Back</span>
-                        </button>
-                    ) : (
-                        <button
-                            type="button"
-                            disabled
-                            className="px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-full text-xs font-bold font-sans flex items-center gap-1 bg-oxford-900/40 text-oxford-600 border border-white/5 cursor-not-allowed opacity-40 shrink-0"
-                        >
-                            <ChevronLeft size={15} />
-                            <span>Back</span>
-                        </button>
-                    )}
-
-                    {/* Tombol Status / Tandai Selesai Cepat */}
-                    <button
-                        type="button"
-                        onClick={markAsComplete}
-                        disabled={completedLessons[activeLesson.id]}
-                        className={`px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-full text-xs font-bold font-sans transition-all flex items-center gap-1.5 shrink-0 ${
-                            completedLessons[activeLesson.id]
-                                ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 cursor-default"
-                                : "bg-gold-500 hover:bg-gold-400 text-oxford-950 shadow-md shadow-gold-500/20 active:scale-95"
-                        }`}
-                        title={completedLessons[activeLesson.id] ? "Materi telah selesai dipelajari" : "Tandai materi ini telah selesai"}
-                    >
-                        <CheckCircle size={14} />
-                        <span className="hidden sm:inline">
-                            {completedLessons[activeLesson.id] ? "Selesai" : "Tandai Selesai"}
-                        </span>
-                    </button>
-
-                    {/* Tombol Next */}
-                    {nextLesson ? (
-                        <button
-                            type="button"
-                            onClick={() => {
-                                if (!completedLessons[activeLesson.id]) {
-                                    markAsComplete();
-                                }
-                                handleLessonClick(nextLesson);
-                            }}
-                            className="px-3.5 py-1.5 sm:px-5 sm:py-2 rounded-full text-xs font-bold font-sans transition-all flex items-center gap-1 bg-gold-500 hover:bg-gold-400 text-oxford-950 font-black shadow-md shadow-gold-500/20 active:scale-95 shrink-0"
-                            title={`Lanjut ke: ${nextLesson.title}`}
-                        >
-                            <span>Next</span>
-                            <ChevronRight size={15} />
-                        </button>
-                    ) : isEvaluationUnlocked ? (
-                        <button
-                            type="button"
-                            onClick={() => {
-                                if (!completedLessons[activeLesson.id]) {
-                                    markAsComplete();
-                                }
-                                setShowEvaluationWizard(true);
-                            }}
-                            className="px-3.5 py-1.5 sm:px-5 sm:py-2 rounded-full text-xs font-bold font-sans transition-all flex items-center gap-1 bg-emerald-500 hover:bg-emerald-400 text-white font-black shadow-md shadow-emerald-500/20 active:scale-95 shrink-0"
-                            title="Lanjut ke Evaluasi & Sertifikat"
-                        >
-                            <span>Next</span>
-                            <span className="hidden sm:inline">(Evaluasi)</span>
-                            <ChevronRight size={15} />
-                        </button>
-                    ) : (
-                        <button
-                            type="button"
-                            disabled
-                            className="px-3 py-1.5 sm:px-4 sm:py-2 rounded-full text-xs font-bold font-sans flex items-center gap-1 bg-oxford-900/40 text-oxford-600 border border-white/5 cursor-not-allowed opacity-40 shrink-0"
-                        >
-                            <span>Next</span>
-                            <ChevronRight size={15} />
-                        </button>
-                    )}
-                </div>
-            )}
-        </div>
-    );
-}
-
-// Separate ReviewItemCard component for cleaner code
-function ReviewItemCard({ item, index }: { item: ReviewItem; index: number }) {
-    const [expanded, setExpanded] = useState(false);
-
-    return (
-        <div className="p-5">
-            {/* Question header */}
-            <div className="flex items-start gap-3 mb-3">
-                <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 ${item.isCorrect ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
-                    {item.isCorrect ? <CheckCircle2 size={14} /> : <XCircle size={14} />}
-                </div>
-                <div className="flex-1">
-                    <div className="text-xs font-bold uppercase font-sans tracking-wider mb-1">
-                        <span className={item.isCorrect ? 'text-green-600' : 'text-red-600'}>
-                            Soal {index + 1} — {item.isCorrect ? 'Benar' : 'Salah'}
-                        </span>
-                    </div>
-                    <p className="text-sm font-sans text-oxford-900 dark:text-white font-medium leading-relaxed">{item.questionText}</p>
-                </div>
-            </div>
-
-            {/* Answer info */}
-            <div className="ml-10 space-y-2">
-                {!item.isCorrect && item.selectedOptionText && (
-                    <div className="flex items-start gap-2 text-sm">
-                        <XCircle size={14} className="text-red-400 flex-shrink-0 mt-0.5" />
-                        <div>
-                            <span className="text-oxford-500 dark:text-oxford-400 font-sans">Jawaban Anda: </span>
-                            <span className="text-red-700 font-sans font-medium">{item.selectedOptionText}</span>
-                        </div>
-                    </div>
-                )}
-                <div className="flex items-start gap-2 text-sm">
-                    <CheckCircle2 size={14} className="text-green-500 flex-shrink-0 mt-0.5" />
-                    <div>
-                        <span className="text-oxford-500 dark:text-oxford-400 font-sans">Jawaban Benar: </span>
-                        <span className="text-green-700 font-sans font-medium">{item.correctOptionText}</span>
-                    </div>
-                </div>
-            </div>
-
-            {/* Explanation toggle */}
-            <button
-                onClick={() => setExpanded(!expanded)}
-                className="ml-10 mt-3 text-xs font-bold text-oxford-500 dark:text-oxford-400 hover:text-oxford-700 dark:hover:text-oxford-200 font-sans uppercase tracking-wider flex items-center gap-1 transition-colors"
-            >
-                {expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                {expanded ? 'Sembunyikan Penjelasan' : 'Lihat Penjelasan'}
-            </button>
-
-            <AnimatePresence>
-                {expanded && (
-                    <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: "auto", opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.2 }}
-                        className="overflow-hidden"
-                    >
-                        <div className="ml-10 mt-3 p-4 bg-oxford-50 dark:bg-oxford-950 rounded-xl border border-oxford-100 dark:border-oxford-800">
-                            {item.explanation && (
-                                <p className="text-sm text-oxford-700 dark:text-oxford-200 font-sans leading-relaxed">{item.explanation}</p>
-                            )}
-                            {item.selectedOptionExplanation && !item.isCorrect && (
-                                <div className="mt-3 pt-3 border-t border-oxford-200 dark:border-oxford-700">
-                                    <p className="text-xs font-bold text-oxford-500 dark:text-oxford-400 mb-1 font-sans uppercase tracking-wider">Mengapa jawaban Anda salah:</p>
-                                    <p className="text-sm text-oxford-600 dark:text-oxford-300 font-sans leading-relaxed">{item.selectedOptionExplanation}</p>
-                                </div>
-                            )}
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
         </div>
     );
 }

@@ -197,8 +197,8 @@ export default function DocumentViewer({ url, title }: DocumentViewerProps) {
 
       {/* Frame Container */}
       <div
-        className={`relative w-full bg-oxford-100 dark:bg-black flex-1 min-h-[500px] ${
-          isFullscreen ? "h-full" : "h-[560px] md:h-[720px]"
+        className={`relative w-full bg-oxford-100 dark:bg-black ${
+          isFullscreen ? "flex-1 min-h-0 h-full" : "h-[170px] md:h-[360px]"
         }`}
       >
         <iframe
