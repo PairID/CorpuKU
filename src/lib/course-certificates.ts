@@ -211,8 +211,16 @@ export async function issueCourseCertificate(userId: string, courseId: string, o
     )
     ON CONFLICT (enrollment_id) DO UPDATE
       SET certificate_number = EXCLUDED.certificate_number,
+          participant_name = EXCLUDED.participant_name,
+          participant_nip = EXCLUDED.participant_nip,
+          participant_rank = EXCLUDED.participant_rank,
+          participant_position = EXCLUDED.participant_position,
+          participant_institution = EXCLUDED.participant_institution,
+          course_title = EXCLUDED.course_title,
+          certificate_jp = EXCLUDED.certificate_jp,
           completed_at = EXCLUDED.completed_at,
           issued_at = EXCLUDED.issued_at,
+          template_version = EXCLUDED.template_version,
           template_settings = EXCLUDED.template_settings
     RETURNING *, TRUE AS _newly_issued
   `;
@@ -448,5 +456,59 @@ export async function checkCourseCertificateEligibility(userId: string, courseId
     quizzesTotal: totalQuizzes,
     quizzesPassed: passedQuizCount,
     allQuizzesPassed: true,
+  };
+}
+
+/**
+ * Memperbarui (regenerate) seluruh sertifikat terbit pada suatu kursus agar
+ * mengikuti data kursus & profil peserta terbaru (termasuk JP & judul kursus),
+ * tanpa mengubah nomor sertifikat dan token verifikasi yang sudah diterbitkan.
+ */
+export async function regenerateIssuedCourseCertificates(courseId: string): Promise<{
+  updatedCount: number;
+  courseTitle: string;
+  jp: number;
+}> {
+  const courseRows = await sql`
+    SELECT id, title, jp, end_date, certificate_type, template_settings
+    FROM courses
+    WHERE id = ${courseId}
+    LIMIT 1
+  `;
+  const course = courseRows[0];
+  if (!course) {
+    throw new Error("Kursus tidak ditemukan.");
+  }
+
+  const courseJp = COALESCE_JP(course.jp);
+  const updated = await sql`
+    UPDATE issued_course_certificates ic
+    SET course_title = ${String(course.title)},
+        certificate_jp = ${courseJp},
+        participant_name = COALESCE(NULLIF(TRIM(u.name), ''), ic.participant_name),
+        participant_nip = COALESCE(u.nip, ic.participant_nip),
+        participant_rank = COALESCE(u.pangkat, ic.participant_rank),
+        participant_position = COALESCE(u.jabatan, ic.participant_position),
+        participant_institution = COALESCE(u.instansi_asal, ic.participant_institution),
+        completed_at = COALESCE(${course.end_date ?? null}, ic.completed_at),
+        issued_at = COALESCE(${course.end_date ?? null}, ic.issued_at),
+        template_version = ${String(course.certificate_type || 'sertifikat')},
+        template_settings = CASE
+          WHEN ic.template_settings IS NOT NULL AND ic.template_settings ? 'passportRegistrationId'
+            THEN COALESCE(${course.template_settings ? JSON.stringify(course.template_settings) : null}::jsonb, ic.template_settings, '{}'::jsonb)
+              || jsonb_build_object('passportRegistrationId', ic.template_settings->>'passportRegistrationId')
+          ELSE COALESCE(${course.template_settings ? JSON.stringify(course.template_settings) : null}::jsonb, ic.template_settings)
+        END
+    FROM users u
+    WHERE ic.course_id = ${courseId}
+      AND ic.revoked_at IS NULL
+      AND u.id = ic.user_id
+    RETURNING ic.id
+  `;
+
+  return {
+    updatedCount: updated.length,
+    courseTitle: String(course.title),
+    jp: courseJp,
   };
 }

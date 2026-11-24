@@ -5,7 +5,7 @@ import { requireAdminSession } from "@/app/actions/auth";
 import { writeAuditLog } from "@/lib/audit";
 import { sql } from "@/lib/db";
 import { requireCourseEditor } from "@/lib/course-authorization";
-import { issueCourseCertificate, checkCourseCertificateEligibility } from "@/lib/course-certificates";
+import { issueCourseCertificate, checkCourseCertificateEligibility, regenerateIssuedCourseCertificates } from "@/lib/course-certificates";
 import { requireUserSession } from "@/app/actions/auth";
 
 export async function getIssuedCourseCertificates() {
@@ -154,4 +154,41 @@ export async function issueCourseCertificateManualAction(courseId: string, userI
 export async function checkUserCertificateEligibility(courseId: string) {
   const session = await requireUserSession();
   return checkCourseCertificateEligibility(session.user.id, courseId);
+}
+
+export async function regenerateCourseCertificatesAction(courseId: string): Promise<{
+  success: boolean;
+  message: string;
+}> {
+  try {
+    if (typeof courseId !== "string" || !/^[A-Za-z0-9_-]{1,255}$/.test(courseId)) {
+      return { success: false, message: "ID kursus tidak valid." };
+    }
+    const session = await requireCourseEditor(courseId);
+    const result = await regenerateIssuedCourseCertificates(courseId);
+
+    await writeAuditLog({
+      actorUserId: session.user.id,
+      action: "certificate.bulk_regenerated",
+      entityType: "course",
+      entityId: courseId,
+      metadata: {
+        updatedCount: result.updatedCount,
+        jp: result.jp,
+        courseTitle: result.courseTitle,
+      },
+    });
+
+    revalidatePath(`/admin/courses/${courseId}/certificates`);
+    revalidatePath("/admin/certificates/issued");
+    revalidatePath("/dashboard/certificates");
+
+    return {
+      success: true,
+      message: `Berhasil memperbarui ${result.updatedCount} sertifikat dengan data kursus terbaru (${result.jp} JP).`,
+    };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "Gagal memperbarui sertifikat kursus.";
+    return { success: false, message: msg };
+  }
 }

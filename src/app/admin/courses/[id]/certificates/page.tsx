@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowLeft, ExternalLink, ShieldCheck } from "lucide-react";
 import { DownloadCertificateButton } from "@/components/DownloadCertificateButton";
 import { IssueCertificateButton } from "@/components/IssueCertificateButton";
+import { RegenerateCertificatesButton } from "@/components/RegenerateCertificatesButton";
 import { getCourseById } from "@/app/actions/courses";
 import { getCourseCertificateDashboard } from "@/app/actions/course-certificates";
 import { notFound } from "next/navigation";
@@ -53,28 +54,37 @@ export default async function CourseCertificatesPage({ params }: { params: Promi
         </div>
 
         {/* Page Header */}
-        <div className="mb-8">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-xs font-bold uppercase tracking-widest text-gold-600 dark:text-gold-400">
-              Penerbitan Sertifikat
-            </span>
-            {isClassical && (
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300">
-                Pelatihan Klasikal
+        <div className="mb-8 flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-xs font-bold uppercase tracking-widest text-gold-600 dark:text-gold-400">
+                Penerbitan Sertifikat
               </span>
-            )}
+              {isClassical && (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300">
+                  Pelatihan Klasikal
+                </span>
+              )}
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-bold text-oxford-950 dark:text-white">
+              {String(course.title)}
+            </h1>
+            <p className="mt-2 text-sm sm:text-base text-oxford-600 dark:text-oxford-300">
+              {course.certificateEnabled
+                ? course.certificateAutoIssue
+                  ? "Sertifikat otomatis aktif saat peserta lulus."
+                  : "Penerbitan sertifikat dilakukan secara manual oleh Admin."
+                : "Penerbitan sertifikat dinonaktifkan."}{" "}
+              Format Nomor: <span className="font-mono font-semibold">{String(course.certificateNumberPrefix)}/TAHUN/000001</span> · JP: <span className="font-semibold">{Number(course.jp || 0)} JP</span> · Nilai kelulusan: {Number(course.passingScore || 80)}.
+            </p>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-oxford-950 dark:text-white">
-            {String(course.title)}
-          </h1>
-          <p className="mt-2 text-sm sm:text-base text-oxford-600 dark:text-oxford-300">
-            {course.certificateEnabled
-              ? course.certificateAutoIssue
-                ? "Sertifikat otomatis aktif saat peserta lulus."
-                : "Penerbitan sertifikat dilakukan secara manual oleh Admin."
-              : "Penerbitan sertifikat dinonaktifkan."}{" "}
-            Format Nomor: <span className="font-mono font-semibold">{String(course.certificateNumberPrefix)}/TAHUN/000001</span> · Nilai kelulusan: {Number(course.passingScore || 80)}.
-          </p>
+          <div className="shrink-0">
+            <RegenerateCertificatesButton
+              courseId={id}
+              issuedCount={issued.length}
+              courseJp={Number(course.jp || 0)}
+            />
+          </div>
         </div>
 
         {/* Metrics Grid */}
