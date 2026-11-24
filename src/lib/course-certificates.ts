@@ -470,9 +470,13 @@ export async function regenerateIssuedCourseCertificates(courseId: string): Prom
   jp: number;
 }> {
   const courseRows = await sql`
-    SELECT id, title, jp, end_date, certificate_type, template_settings
-    FROM courses
-    WHERE id = ${courseId}
+    SELECT c.id, c.title, c.jp, c.end_date, c.certificate_type,
+           COALESCE(NULLIF(settings.settings -> c.certificate_type, 'null'::jsonb),
+                    NULLIF(settings.settings -> 'sertifikat', 'null'::jsonb),
+                    NULLIF(settings.settings, 'null'::jsonb), '{}'::jsonb) AS template_settings
+    FROM courses c
+    LEFT JOIN certificate_settings settings ON settings.type = 'sertifikat'
+    WHERE c.id = ${courseId}
     LIMIT 1
   `;
   const course = courseRows[0];
