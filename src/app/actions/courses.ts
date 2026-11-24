@@ -1122,7 +1122,7 @@ export async function createCourse(input: unknown) {
                 certificate_number_prefix, certificate_start_number, passing_score, training_type, target_opd,
                 attendance_threshold, documentation_url, organizer_name, delivery_mode, location_name, access_mode, passcode, evaluation_config, created_at, updated_at
             ) VALUES (
-                ${id}, ${sanitizePlainText(data.title)}, ${sanitizePlainText(data.description)}, ${sanitizePlainText(data.category)},
+                ${id}, ${sanitizePlainText(data.title)}, ${sanitizePlainText(data.description)}, ${data.category.replace(/&amp;/g, "&").trim()},
                 ${data.level}, ${data.thumbnailUrl || null}, 'draft', ${instructorId}, ${data.pacingType}, ${data.startDate || null},
                 ${data.endDate || null}, ${data.jp}, ${data.certificateType}, ${data.certificateEnabled},
                 ${data.certificateEnabled && data.certificateAutoIssue}, ${data.certificateNumberPrefix},
@@ -1165,7 +1165,7 @@ export async function updateCourseDetails(id: string, input: unknown) {
             UPDATE courses 
             SET title = ${sanitizePlainText(data.title)},
                 description = ${sanitizePlainText(data.description)},
-                category = ${sanitizePlainText(data.category)},
+                category = ${data.category.replace(/&amp;/g, "&").trim()},
                 level = ${data.level}, 
                 thumbnail_url = ${data.thumbnailUrl || null},
                 instructor_id = ${targetInstructorId},
@@ -1190,6 +1190,11 @@ export async function updateCourseDetails(id: string, input: unknown) {
                 updated_at = ${now}
             WHERE id = ${id}
         `;
+        revalidatePath("/admin/courses");
+        revalidatePath(`/admin/courses/${id}/edit`);
+        revalidatePath(`/courses/${id}`);
+        revalidatePath("/search");
+        revalidatePath("/");
         return { success: true };
     } catch (err) {
         console.error("Failed to update course:", err);

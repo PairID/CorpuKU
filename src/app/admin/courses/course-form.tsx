@@ -69,7 +69,9 @@ export default function CourseForm({ initialData, instructors, mode, basePath = 
     // Form state
     const [title, setTitle] = useState(initialData?.title || "");
     const [description, setDescription] = useState(initialData?.description || "");
-    const [category, setCategory] = useState(initialData?.category || "Kepemimpinan");
+    const [category, setCategory] = useState(
+        (initialData?.category || "Kepemimpinan").replace(/&amp;/g, "&")
+    );
     const [status, setStatus] = useState(initialData?.status || "draft");
     const [level, setLevel] = useState<"Beginner" | "Intermediate" | "Advanced">(initialData?.level || "Beginner");
     const [pacingType, setPacingType] = useState<"self_paced" | "instructor_paced">(initialData?.pacingType || "self_paced");
@@ -697,6 +699,9 @@ export default function CourseForm({ initialData, instructors, mode, basePath = 
                             onChange={(e) => setCategory(e.target.value)}
                             className="w-full px-4 py-3 bg-white dark:bg-[#161B2A] border border-oxford-200 dark:border-oxford-700 rounded-lg text-sm focus:outline-none focus:border-gold-500 text-oxford-900 dark:text-white mb-4"
                         >
+                            {category && !COURSE_CATEGORIES.includes(category) && (
+                                <option value={category}>{category}</option>
+                            )}
                             {COURSE_CATEGORIES.map(cat => (
                                 <option key={cat} value={cat}>{cat}</option>
                             ))}
