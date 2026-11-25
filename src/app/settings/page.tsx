@@ -20,11 +20,16 @@ export default function Settings() {
     const router = useRouter();
     const [activeTab, setActiveTab] = useState<SettingsTab>("profile");
     const [notification, setNotification] = useState<{ type: "success" | "error"; message: string } | null>(null);
+
     useEffect(() => {
         if (!isPending && !session?.user) {
             router.push('/login');
         }
     }, [session, isPending, router]);
+
+    useEffect(() => {
+        void authClient.getSession(true);
+    }, []);
 
     const showNotification = (type: "success" | "error", message: string) => {
         setNotification({ type, message });
@@ -147,6 +152,23 @@ function ProfileTab({ user, storedUser, onNotify }: {
     const [instansiOptions, setInstansiOptions] = useState<string[]>(DAFTAR_INSTANSI_KALTARA);
     const [instansiQuery, setInstansiQuery] = useState(storedUser?.instansiAsal || "BPSDM Provinsi");
     const [instansiDropdownOpen, setInstansiDropdownOpen] = useState(false);
+
+    const hasEditedRef = useRef(false);
+    useEffect(() => {
+        if (!user?.id || hasEditedRef.current) return;
+        setFormData({
+            name: user.name || "",
+            email: user.email || "",
+            nip: user.nip || "",
+            instansiAsal: user.instansiAsal || "BPSDM Provinsi",
+            pangkat: user.pangkat || "",
+            jabatan: user.jabatan || "",
+            tempatLahir: user.tempatLahir || "",
+            tanggalLahir: user.tanggalLahir || "",
+            phone: user.phone || "",
+        });
+        setInstansiQuery(user.instansiAsal || "BPSDM Provinsi");
+    }, [user]);
 
     useEffect(() => {
         getDistinctInstansiList().then((dbList) => {
@@ -271,6 +293,11 @@ function ProfileTab({ user, storedUser, onNotify }: {
 
         setSaving(false);
         if (result.success) {
+            if (result.user) {
+                authClient.invalidateSession(result.user as AuthUser);
+            } else {
+                void authClient.getSession(true);
+            }
             onNotify("success", "Profil berhasil disimpan. Data sertifikat akan otomatis terupdate.");
         } else {
             onNotify("error", result.error || "Gagal menyimpan profil.");
