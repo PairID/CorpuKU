@@ -21,6 +21,7 @@ interface ConfirmParticipantDataPayload {
   profile: {
     name: string;
     nip: string;
+    email?: string;
     instansiAsal: string;
     jabatan: string;
     pangkat: string;
@@ -649,11 +650,32 @@ export async function confirmParticipantData(payload: ConfirmParticipantDataPayl
 
     const cleanPhone = (profile.phone || "").replace(/[^\d+]/g, "");
 
+    let cleanEmail: string | undefined;
+    if (profile.email !== undefined && profile.email.trim() !== "") {
+      cleanEmail = profile.email.trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+        return {
+          success: false,
+          error: "Format email tidak valid.",
+        };
+      }
+      const dupEmail = await sql`
+        SELECT id FROM users WHERE LOWER(email) = ${cleanEmail} AND id != ${userId} LIMIT 1
+      `;
+      if (dupEmail[0]) {
+        return {
+          success: false,
+          error: "Email tersebut sudah digunakan oleh akun lain.",
+        };
+      }
+    }
+
     // 1. Update data pada tabel users
     await sql`
       UPDATE users
       SET name = ${profile.name.trim()},
           nip = ${cleanNip},
+          email = COALESCE(${cleanEmail ?? null}, email),
           instansi_asal = ${profile.instansiAsal.trim()},
           jabatan = ${profile.jabatan?.trim() || null},
           pangkat = ${profile.pangkat?.trim() || null},

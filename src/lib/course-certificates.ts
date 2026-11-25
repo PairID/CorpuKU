@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { sql } from "./db";
 import { reserveOfficialCertificateNumber } from "./passport-certificate-service";
+import { sendEmail } from "./email";
 
 type CertificateRow = Record<string, unknown>;
 
@@ -247,6 +248,40 @@ export async function issueCourseCertificate(userId: string, courseId: string, o
     `;
   } catch (notifyErr) {
     console.warn('Gagal membuat notifikasi kursus:', notifyErr);
+  }
+
+  const recipientEmail = el.email ? String(el.email).trim() : "";
+  if (
+    recipientEmail &&
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipientEmail) &&
+    process.env.SMTP_HOST &&
+    process.env.SMTP_FROM
+  ) {
+    const appBaseUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.AUTH_URL || "https://corpuku.learningpassport.space").replace(/\/+$/, "");
+    const certUrl = `${appBaseUrl}/dashboard/certificates/${el.enrollment_id}`;
+    void sendEmail({
+      to: recipientEmail,
+      subject: `Sertifikat Pelatihan Terbit: ${certificate.courseTitle}`,
+      text: `Yth. ${certificate.participantName},\n\nSelamat! Anda telah menyelesaikan pelatihan "${certificate.courseTitle}" (${certificate.certificateJp} JP).\nNomor Sertifikat: ${certificate.certificateNumber}\n\nAnda dapat melihat dan mengunduh sertifikat resmi Anda melalui tautan berikut:\n${certUrl}\n\nSalam hangat,\nCorpuKU Academy · BPSDM Provinsi Kalimantan Utara`,
+      html: `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #1e293b; line-height: 1.6;">
+          <h2 style="color: #0f172a; margin-bottom: 8px;">Selamat, Pelatihan Anda Telah Selesai!</h2>
+          <p>Yth. <strong>${certificate.participantName}</strong>,</p>
+          <p>Sertifikat resmi Anda untuk kegiatan pembelajaran berikut telah selesai diterbitkan:</p>
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px 16px; margin: 16px 0;">
+            <div><strong>Pelatihan:</strong> ${certificate.courseTitle}</div>
+            <div><strong>Total JP:</strong> ${certificate.certificateJp} JP</div>
+            <div><strong>Nomor Sertifikat:</strong> ${certificate.certificateNumber}</div>
+          </div>
+          <p style="margin: 20px 0;">
+            <a href="${certUrl}" style="display: inline-block; background: #eab308; color: #0f172a; font-weight: bold; padding: 12px 20px; border-radius: 8px; text-decoration: none;">
+              Lihat &amp; Unduh Sertifikat
+            </a>
+          </p>
+          <p style="font-size: 12px; color: #64748b;">CorpuKU Academy · BPSDM Provinsi Kalimantan Utara</p>
+        </div>
+      `,
+    }).catch((err) => console.warn("Gagal mengirim email sertifikat:", err));
   }
 
   return certificate;

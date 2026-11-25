@@ -1229,6 +1229,7 @@ export default function LearnClient({ course, courseContent, session, enrollment
                 initialProfile={{
                     name: user.name,
                     nip: ((user as Record<string, unknown>).nip as string) || "",
+                    email: user.email || "",
                     instansiAsal: user.instansiAsal || "",
                     jabatan: ((user as Record<string, unknown>).jabatan as string) || "",
                     pangkat: ((user as Record<string, unknown>).pangkat as string) || "",

@@ -1,14 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ShieldCheck, UserCheck, AlertCircle, CheckCircle2, Loader2, FileText } from "lucide-react";
-import { PANGKAT_GOLONGAN } from "@/lib/constants";
+import { ShieldCheck, UserCheck, AlertCircle, CheckCircle2, Loader2, FileText, Search, Plus, X, Check } from "lucide-react";
+import { PANGKAT_GOLONGAN, DAFTAR_INSTANSI_KALTARA } from "@/lib/constants";
 import { confirmParticipantData, getDistinctInstansiList } from "@/app/actions/attendance";
 import { showToast } from "@/lib/toast";
 
 export interface UserVerificationProfile {
   name: string;
   nip: string;
+  email: string;
   instansiAsal: string;
   jabatan: string;
   pangkat: string;
@@ -34,9 +35,11 @@ export default function DataVerificationModal({
 }: DataVerificationModalProps) {
   const [name, setName] = useState(initialProfile.name || "");
   const [nip, setNip] = useState(initialProfile.nip || "");
+  const [email, setEmail] = useState(initialProfile.email || "");
   const [instansiAsal, setInstansiAsal] = useState(initialProfile.instansiAsal || "");
-  const [instansiList, setInstansiList] = useState<string[]>([]);
-  const [isOtherInstansi, setIsOtherInstansi] = useState(false);
+  const [instansiQuery, setInstansiQuery] = useState(initialProfile.instansiAsal || "");
+  const [instansiList, setInstansiList] = useState<string[]>(DAFTAR_INSTANSI_KALTARA);
+  const [instansiDropdownOpen, setInstansiDropdownOpen] = useState(false);
   const [jabatan, setJabatan] = useState(initialProfile.jabatan || "");
   const [pangkat, setPangkat] = useState(initialProfile.pangkat || "");
   const [phone, setPhone] = useState(initialProfile.phone || "");
@@ -58,17 +61,24 @@ export default function DataVerificationModal({
 
     if (initialProfile.name !== undefined) setName(initialProfile.name || "");
     if (initialProfile.nip !== undefined) setNip(initialProfile.nip || "");
-    if (initialProfile.instansiAsal !== undefined) setInstansiAsal(initialProfile.instansiAsal || "");
+    if (initialProfile.email !== undefined) setEmail(initialProfile.email || "");
+    if (initialProfile.instansiAsal !== undefined) {
+      setInstansiAsal(initialProfile.instansiAsal || "");
+      setInstansiQuery(initialProfile.instansiAsal || "");
+    }
     if (initialProfile.jabatan !== undefined) setJabatan(initialProfile.jabatan || "");
     if (initialProfile.pangkat !== undefined) setPangkat(initialProfile.pangkat || "");
     if (initialProfile.phone !== undefined) setPhone(initialProfile.phone || "");
+    setInstansiDropdownOpen(false);
 
     let active = true;
     getDistinctInstansiList().then((list) => {
       if (!active) return;
-      setInstansiList(list);
-      const current = (initialProfile.instansiAsal || "").trim();
-      setIsOtherInstansi(Boolean(current && !list.includes(current)));
+      setInstansiList(
+        Array.from(new Set([...DAFTAR_INSTANSI_KALTARA, ...list])).sort((a, b) =>
+          a.localeCompare(b, "id")
+        )
+      );
     });
     return () => {
       active = false;
@@ -80,8 +90,34 @@ export default function DataVerificationModal({
   const cleanNip = nip.replace(/\D/g, "");
   const isNipValid = cleanNip.length >= 16;
   const isNameValid = name.trim().length >= 3;
+  const isEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
   const isInstansiValid = instansiAsal.trim().length >= 3;
-  const isFormValid = isNameValid && isNipValid && isInstansiValid && statementAccepted;
+  const isFormValid = isNameValid && isNipValid && isEmailValid && isInstansiValid && statementAccepted;
+
+  const trimmedQuery = instansiQuery.trim();
+  const filteredInstansi = trimmedQuery
+    ? instansiList.filter((item) => item.toLowerCase().includes(trimmedQuery.toLowerCase()))
+    : instansiList;
+  const hasExactInstansiMatch = instansiList.some(
+    (item) => item.toLowerCase() === trimmedQuery.toLowerCase()
+  );
+  const showManualAddBtn = trimmedQuery.length >= 3 && !hasExactInstansiMatch;
+
+  const handleSelectInstansi = (val: string) => {
+    setInstansiQuery(val);
+    setInstansiAsal(val);
+    setInstansiDropdownOpen(false);
+  };
+
+  const handleAddManualInstansi = () => {
+    if (!trimmedQuery) return;
+    setInstansiList((prev) =>
+      Array.from(new Set([...prev, trimmedQuery])).sort((a, b) => a.localeCompare(b, "id"))
+    );
+    setInstansiAsal(trimmedQuery);
+    setInstansiQuery(trimmedQuery);
+    setInstansiDropdownOpen(false);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -94,6 +130,7 @@ export default function DataVerificationModal({
         profile: {
           name: name.trim(),
           nip: cleanNip,
+          email: email.trim().toLowerCase(),
           instansiAsal: instansiAsal.trim(),
           jabatan: jabatan.trim(),
           pangkat: pangkat.trim(),
@@ -189,45 +226,111 @@ export default function DataVerificationModal({
             />
           </div>
 
+          {/* Field: Email Aktif */}
+          <div>
+            <label className="block text-xs font-bold text-oxford-800 dark:text-oxford-200 mb-1">
+              Email Aktif <span className="text-crimson-500">*</span>
+            </label>
+            <input
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Contoh: nama@instansi.go.id"
+              className="w-full px-3.5 py-2.5 bg-oxford-50 dark:bg-oxford-900/60 border border-oxford-200 dark:border-oxford-700 rounded-xl text-sm focus:outline-none focus:border-gold-500 text-oxford-900 dark:text-white"
+            />
+            <p className="text-[11px] text-oxford-500 dark:text-oxford-400 mt-1">
+              Notifikasi otomatis akan dikirim ke email ini saat sertifikat Anda selesai diterbitkan.
+            </p>
+          </div>
+
           {/* Grid: Instansi & Jabatan */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
+            <div className="relative">
               <label className="block text-xs font-bold text-oxford-800 dark:text-oxford-200 mb-1">
                 Instansi / OPD <span className="text-crimson-500">*</span>
               </label>
-              <select
-                value={isOtherInstansi ? "__OTHER__" : instansiAsal}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  if (val === "__OTHER__") {
-                    setIsOtherInstansi(true);
-                    if (instansiList.includes(instansiAsal)) {
-                      setInstansiAsal("");
-                    }
-                  } else {
-                    setIsOtherInstansi(false);
-                    setInstansiAsal(val);
-                  }
-                }}
-                className="w-full px-3.5 py-2.5 bg-oxford-50 dark:bg-oxford-900/60 border border-oxford-200 dark:border-oxford-700 rounded-xl text-sm focus:outline-none focus:border-gold-500 text-oxford-900 dark:text-white"
-              >
-                <option value="">-- Pilih Instansi / OPD --</option>
-                {instansiList.map((inst) => (
-                  <option key={inst} value={inst}>
-                    {inst}
-                  </option>
-                ))}
-                <option value="__OTHER__">+ Tambah / Ketik Instansi Lainnya</option>
-              </select>
-              {(isOtherInstansi || instansiList.length === 0) && (
-                <input
-                  type="text"
-                  required
-                  value={instansiAsal}
-                  onChange={(e) => setInstansiAsal(e.target.value)}
-                  placeholder="Ketik nama instansi lengkap (Contoh: Dinas Kesehatan Prov. Kaltara)"
-                  className="mt-2 w-full px-3.5 py-2.5 bg-oxford-50 dark:bg-oxford-900/60 border border-oxford-200 dark:border-oxford-700 rounded-xl text-sm focus:outline-none focus:border-gold-500 text-oxford-900 dark:text-white"
-                />
+              <div className="flex gap-1.5">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-oxford-400 pointer-events-none" size={14} />
+                  <input
+                    type="text"
+                    required
+                    value={instansiQuery}
+                    onFocus={() => setInstansiDropdownOpen(true)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setInstansiQuery(val);
+                      setInstansiAsal(val);
+                      setInstansiDropdownOpen(true);
+                    }}
+                    placeholder="Cari instansi atau ketik manual..."
+                    autoComplete="off"
+                    className="w-full pl-8 pr-8 py-2.5 bg-oxford-50 dark:bg-oxford-900/60 border border-oxford-200 dark:border-oxford-700 rounded-xl text-sm focus:outline-none focus:border-gold-500 text-oxford-900 dark:text-white"
+                  />
+                  {instansiQuery && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setInstansiQuery("");
+                        setInstansiAsal("");
+                        setInstansiDropdownOpen(true);
+                      }}
+                      aria-label="Hapus pencarian instansi"
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-oxford-400 hover:text-oxford-600"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+                {showManualAddBtn && (
+                  <button
+                    type="button"
+                    onClick={handleAddManualInstansi}
+                    className="px-3 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl flex items-center gap-1 shrink-0 shadow-xs transition-colors"
+                  >
+                    <Plus size={14} />
+                    <span>Tambahkan</span>
+                  </button>
+                )}
+              </div>
+
+              {instansiDropdownOpen && (
+                <div className="mt-1 border border-oxford-200 dark:border-oxford-700 bg-white dark:bg-[#161B2A] rounded-xl shadow-lg overflow-hidden z-30 relative">
+                  {filteredInstansi.length > 0 ? (
+                    <ul className="max-h-44 overflow-y-auto divide-y divide-oxford-100 dark:divide-oxford-800">
+                      {filteredInstansi.slice(0, 60).map((inst) => (
+                        <li key={inst}>
+                          <button
+                            type="button"
+                            onClick={() => handleSelectInstansi(inst)}
+                            className={`w-full text-left px-3 py-2 text-xs transition-colors flex items-center justify-between ${
+                              instansiAsal === inst
+                                ? "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-200 font-semibold"
+                                : "text-oxford-800 dark:text-oxford-200 hover:bg-gold-50 dark:hover:bg-oxford-800"
+                            }`}
+                          >
+                            <span className="truncate">{inst}</span>
+                            {instansiAsal === inst && <Check size={13} className="text-emerald-600 shrink-0" />}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <div className="p-2.5 text-xs text-oxford-500 flex items-center justify-between gap-2">
+                      <span>Tidak ditemukan di daftar.</span>
+                      {trimmedQuery.length >= 3 && (
+                        <button
+                          type="button"
+                          onClick={handleAddManualInstansi}
+                          className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg inline-flex items-center gap-1 shrink-0"
+                        >
+                          <Plus size={12} /> Tambahkan
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
               )}
             </div>
             <div>

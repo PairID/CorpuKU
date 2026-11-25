@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { ChevronLeft, User, Shield, Bell, Settings as SettingsIcon, Save, Loader2, Camera, X, Eye, EyeOff, Check, Moon, Sun } from "lucide-react";
+import { ChevronLeft, User, Shield, Bell, Settings as SettingsIcon, Save, Loader2, Camera, X, Eye, EyeOff, Check, Moon, Sun, Search, Plus } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useRef } from "react";
 import { changePassword, updateNotificationPreferences, getNotificationPreferences, updateUserProfile } from "@/app/actions/users";
+import { getDistinctInstansiList } from "@/app/actions/attendance";
 import { useTheme } from "@/components/theme-provider";
 import { PANGKAT_GOLONGAN, DAFTAR_INSTANSI_KALTARA } from "@/lib/constants";
 import { toIsoDate, toIndonesianDate } from "@/lib/utils";
@@ -143,6 +144,53 @@ function ProfileTab({ user, storedUser, onNotify }: {
         phone: (storedUser as any)?.phone || (user as any)?.phone || "",
     });
     const [saving, setSaving] = useState(false);
+    const [instansiOptions, setInstansiOptions] = useState<string[]>(DAFTAR_INSTANSI_KALTARA);
+    const [instansiQuery, setInstansiQuery] = useState(storedUser?.instansiAsal || "BPSDM Provinsi");
+    const [instansiDropdownOpen, setInstansiDropdownOpen] = useState(false);
+
+    useEffect(() => {
+        getDistinctInstansiList().then((dbList) => {
+            if (dbList.length > 0) {
+                setInstansiOptions(
+                    Array.from(new Set([...DAFTAR_INSTANSI_KALTARA, ...dbList])).sort((a, b) =>
+                        a.localeCompare(b, "id")
+                    )
+                );
+            }
+        });
+    }, []);
+
+    const trimmedInstansiQuery = instansiQuery.trim();
+    const filteredInstansi = trimmedInstansiQuery
+        ? instansiOptions.filter((item) =>
+              item.toLowerCase().includes(trimmedInstansiQuery.toLowerCase())
+          )
+        : instansiOptions;
+    const hasExactInstansiMatch = instansiOptions.some(
+        (item) => item.toLowerCase() === trimmedInstansiQuery.toLowerCase()
+    );
+    const showManualAddBtn =
+        trimmedInstansiQuery.length >= 3 &&
+        !hasExactInstansiMatch;
+
+    const handleSelectInstansi = (val: string) => {
+        setInstansiQuery(val);
+        setFormData((f) => ({ ...f, instansiAsal: val }));
+        setInstansiDropdownOpen(false);
+    };
+
+    const handleAddManualInstansi = () => {
+        if (!trimmedInstansiQuery) return;
+        setInstansiOptions((prev) =>
+            Array.from(new Set([...prev, trimmedInstansiQuery])).sort((a, b) =>
+                a.localeCompare(b, "id")
+            )
+        );
+        setFormData((f) => ({ ...f, instansiAsal: trimmedInstansiQuery }));
+        setInstansiQuery(trimmedInstansiQuery);
+        setInstansiDropdownOpen(false);
+        onNotify("success", `Instansi "${trimmedInstansiQuery}" dipilih. Klik Simpan Perubahan untuk menyimpan.`);
+    };
 
     const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -335,27 +383,97 @@ function ProfileTab({ user, storedUser, onNotify }: {
                         />
                         <p className="text-xs text-oxford-400 mt-1">NIP bersifat tetap dan digunakan sebagai username.</p>
                     </div>
-                    <div>
+                    <div className="relative">
                         <label className="block text-sm font-bold text-oxford-900 dark:text-white mb-2" htmlFor="instansiAsal">
                             Instansi Asal
                         </label>
-                        <input
-                            type="text"
-                            id="instansiAsal"
-                            name="instansiAsal"
-                            list="daftar-instansi-kaltara"
-                            autoComplete="organization"
-                            value={formData.instansiAsal}
-                            onChange={e => setFormData(f => ({ ...f, instansiAsal: e.target.value }))}
-                            placeholder="Ketik untuk mencari instansi / OPD..."
-                            className="w-full px-4 py-3 bg-white dark:bg-[#161B2A] border border-oxford-200 dark:border-oxford-700 rounded-xl focus:outline-none focus:border-gold-500 focus:ring-4 focus:ring-gold-500/10 transition-all font-sans text-oxford-900 dark:text-white"
-                        />
-                        <datalist id="daftar-instansi-kaltara">
-                            {DAFTAR_INSTANSI_KALTARA.map((instansi) => (
-                                <option key={instansi} value={instansi} />
-                            ))}
-                        </datalist>
-                        <p className="text-xs text-oxford-400 mt-1">Ketik untuk menyaring cepat atau klik untuk memilih dari 158 instansi resmi Pemprov Kaltara.</p>
+                        <div className="flex gap-2">
+                            <div className="relative flex-1">
+                                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-oxford-400 pointer-events-none" size={16} />
+                                <input
+                                    type="text"
+                                    id="instansiAsal"
+                                    name="instansiAsal"
+                                    autoComplete="off"
+                                    value={instansiQuery}
+                                    onFocus={() => setInstansiDropdownOpen(true)}
+                                    onChange={(e) => {
+                                        const val = e.target.value;
+                                        setInstansiQuery(val);
+                                        setFormData((f) => ({ ...f, instansiAsal: val }));
+                                        setInstansiDropdownOpen(true);
+                                    }}
+                                    placeholder="Cari instansi / OPD atau ketik manual..."
+                                    className="w-full pl-10 pr-9 py-3 bg-white dark:bg-[#161B2A] border border-oxford-200 dark:border-oxford-700 rounded-xl focus:outline-none focus:border-gold-500 focus:ring-4 focus:ring-gold-500/10 transition-all font-sans text-oxford-900 dark:text-white text-sm"
+                                />
+                                {instansiQuery && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setInstansiQuery("");
+                                            setFormData((f) => ({ ...f, instansiAsal: "" }));
+                                            setInstansiDropdownOpen(true);
+                                        }}
+                                        aria-label="Hapus pencarian instansi"
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-oxford-400 hover:text-oxford-600 dark:hover:text-oxford-200"
+                                    >
+                                        <X size={15} />
+                                    </button>
+                                )}
+                            </div>
+                            {showManualAddBtn && (
+                                <button
+                                    type="button"
+                                    onClick={handleAddManualInstansi}
+                                    className="px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl flex items-center gap-1.5 shrink-0 shadow-sm transition-colors active:scale-95"
+                                >
+                                    <Plus size={16} />
+                                    <span>Tambahkan</span>
+                                </button>
+                            )}
+                        </div>
+
+                        {instansiDropdownOpen && (
+                            <div className="mt-1.5 border border-oxford-200 dark:border-oxford-700 bg-white dark:bg-[#161B2A] rounded-xl shadow-lg overflow-hidden z-30 relative">
+                                {filteredInstansi.length > 0 ? (
+                                    <ul className="max-h-52 overflow-y-auto divide-y divide-oxford-100 dark:divide-oxford-800">
+                                        {filteredInstansi.slice(0, 60).map((instansi) => (
+                                            <li key={instansi}>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleSelectInstansi(instansi)}
+                                                    className={`w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center justify-between ${
+                                                        formData.instansiAsal === instansi
+                                                            ? "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-200 font-semibold"
+                                                            : "text-oxford-800 dark:text-oxford-200 hover:bg-gold-50 dark:hover:bg-oxford-800"
+                                                    }`}
+                                                >
+                                                    <span className="truncate">{instansi}</span>
+                                                    {formData.instansiAsal === instansi && <Check size={15} className="text-emerald-600 shrink-0" />}
+                                                </button>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                ) : (
+                                    <div className="p-3 text-xs text-oxford-500 dark:text-oxford-400 flex items-center justify-between gap-2">
+                                        <span>Tidak ditemukan di daftar.</span>
+                                        {trimmedInstansiQuery.length >= 3 && (
+                                            <button
+                                                type="button"
+                                                onClick={handleAddManualInstansi}
+                                                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg inline-flex items-center gap-1 shrink-0"
+                                            >
+                                                <Plus size={14} /> Tambahkan
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        <p className="text-xs text-oxford-400 mt-1">
+                            Pilih dari hasil pencarian, atau ketik nama instansi baru lalu klik tombol hijau <strong className="text-emerald-600">Tambahkan</strong>.
+                        </p>
                     </div>
                     <div>
                         <label className="block text-sm font-bold text-oxford-900 dark:text-white mb-2" htmlFor="pangkat">Pangkat / Golongan</label>
