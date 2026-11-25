@@ -80,7 +80,7 @@ export default function Settings() {
                 <div className="flex flex-col lg:flex-row gap-8 items-start">
 
                     {/* Sidebar Navigation */}
-                    <aside className="w-full lg:w-80 shrink-0 bg-white dark:bg-[#161B2A] rounded-2xl border border-oxford-200 dark:border-oxford-700 shadow-sm p-4 sticky top-28">
+                    <aside className="w-full lg:w-80 shrink-0 bg-white dark:bg-[#161B2A] rounded-2xl border border-oxford-200 dark:border-oxford-700 shadow-sm p-4 lg:sticky lg:top-28">
                         <nav className="space-y-1">
                             {tabs.map(tab => (
                                 <button
