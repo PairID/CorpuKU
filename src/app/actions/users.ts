@@ -356,6 +356,7 @@ export async function getNotificationPreferences(userId: string) {
 
 export interface UserProfileUpdates {
     name?: string | null;
+    email?: string | null;
     instansiAsal?: string | null;
     pangkat?: string | null;
     jabatan?: string | null;
@@ -383,6 +384,20 @@ export async function updateUserProfile(userId: string, updates: UserProfileUpda
             }
         }
 
+        let cleanEmail: string | undefined;
+        if (updates.email !== undefined) {
+            cleanEmail = (updates.email || "").trim().toLowerCase();
+            if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+                return { success: false, error: "Format email tidak valid." };
+            }
+            const existingEmail = await sql`
+                SELECT id FROM users WHERE LOWER(email) = ${cleanEmail} AND id != ${userId} LIMIT 1
+            `;
+            if (existingEmail[0]) {
+                return { success: false, error: "Email tersebut sudah digunakan oleh akun lain." };
+            }
+        }
+
         // Handle mapping of snake_case for DB
         const cleanPhone = updates.phone !== undefined 
             ? (updates.phone ? updates.phone.replace(/[^\d+]/g, "") : null) 
@@ -391,6 +406,7 @@ export async function updateUserProfile(userId: string, updates: UserProfileUpda
         await sql`
             UPDATE users SET 
                 name = COALESCE(${updates.name}, name),
+                email = COALESCE(${cleanEmail ?? null}, email),
                 instansi_asal = COALESCE(${updates.instansiAsal}, instansi_asal),
                 pangkat = COALESCE(${updates.pangkat}, pangkat),
                 jabatan = COALESCE(${updates.jabatan}, jabatan),

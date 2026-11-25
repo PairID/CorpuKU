@@ -211,6 +211,7 @@ function ProfileTab({ user, storedUser, onNotify }: {
         // Save to Postgres via server action
         const result = await updateUserProfile(user.id, {
             name: formData.name,
+            email: formData.email,
             instansiAsal: formData.instansiAsal,
             pangkat: formData.pangkat,
             jabatan: formData.jabatan,
@@ -314,10 +315,11 @@ function ProfileTab({ user, storedUser, onNotify }: {
                             name="email"
                             autoComplete="email"
                             value={formData.email}
-                            disabled
-                            className="w-full px-4 py-3 bg-oxford-50 dark:bg-oxford-950 border border-oxford-200 dark:border-oxford-700 rounded-xl focus:outline-none text-oxford-500 dark:text-oxford-400 cursor-not-allowed font-sans"
+                            onChange={e => setFormData(f => ({ ...f, email: e.target.value }))}
+                            placeholder="nama@instansi.go.id"
+                            className="w-full px-4 py-3 bg-white dark:bg-[#161B2A] border border-oxford-200 dark:border-oxford-700 rounded-xl focus:outline-none focus:border-gold-500 focus:ring-4 focus:ring-gold-500/10 transition-all font-sans text-oxford-900 dark:text-white"
                         />
-                        <p className="text-xs text-oxford-400 mt-1">Hubungi admin untuk mengubah email.</p>
+                        <p className="text-xs text-oxford-400 mt-1">Digunakan untuk notifikasi dan korespondensi sertifikat.</p>
                     </div>
                     <div>
                         <label className="block text-sm font-bold text-oxford-900 dark:text-white mb-2" htmlFor="nip">NIP / ID Pegawai</label>
