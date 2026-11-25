@@ -2,12 +2,12 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { LayoutDashboard, BookOpen, Users, Activity, Settings, LogOut, Heart, Image as ImageIcon, Video, GitBranch, Sparkles, Database, X } from "lucide-react";
+import { LayoutDashboard, BookOpen, Users, Activity, Settings, LogOut, Heart, Image as ImageIcon, Video, GitBranch, Sparkles, Database, X, Building2 } from "lucide-react";
 import { useState } from "react";
 import { authClient } from "@/lib/auth-client";
 
 interface AdminSidebarProps {
-    activePage: "dashboard" | "courses" | "webinars" | "paths" | "users" | "analytics" | "about" | "news" | "certificates" | "media" | "bangkom" | "creator" | "regulations";
+    activePage: "dashboard" | "courses" | "webinars" | "paths" | "users" | "instansi" | "analytics" | "about" | "news" | "certificates" | "media" | "bangkom" | "creator" | "regulations";
     isOpen?: boolean;
     onClose?: () => void;
 }
@@ -66,6 +66,12 @@ export function AdminSidebar({ activePage, isOpen, onClose }: AdminSidebarProps)
             label: "Pengguna", 
             icon: <Users size={20} />, 
             active: activePage === "users" 
+        },
+        { 
+            href: "/admin/instansi", 
+            label: "Master Instansi", 
+            icon: <Building2 size={20} />, 
+            active: activePage === "instansi" 
         },
         { 
             href: "/admin/bangkom", 

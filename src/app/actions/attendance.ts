@@ -6,6 +6,7 @@ import { requireUserSession, requireInstructorSession, getAuthSession } from "./
 import { revalidatePath } from "next/cache";
 import { calculateAttendancePercentage, sanitizeParticipantNip } from "@/lib/classical-training";
 import { issueCourseCertificate } from "@/lib/course-certificates";
+import { ensureInstitutionsTable } from "./instansi";
 import { hashPassword } from "@/lib/password";
 import { verifyCourseStaffAccess } from "@/lib/admin-guard";
 
@@ -710,14 +711,17 @@ export async function confirmParticipantData(payload: ConfirmParticipantDataPayl
  */
 export async function getDistinctInstansiList(): Promise<string[]> {
   try {
+    await ensureInstitutionsTable();
     const rows = await sql`
+      SELECT name FROM institutions
+      UNION
       SELECT DISTINCT TRIM(instansi_asal) AS name
       FROM users
       WHERE instansi_asal IS NOT NULL
         AND TRIM(instansi_asal) != ''
         AND LENGTH(TRIM(instansi_asal)) >= 3
       ORDER BY name ASC
-      LIMIT 300
+      LIMIT 500
     `;
     return rows.map((r) => String(r.name));
   } catch (err) {
