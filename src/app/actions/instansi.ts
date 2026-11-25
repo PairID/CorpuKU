@@ -154,12 +154,21 @@ export async function renameMasterInstansi(
     }
 
     const targetExists = await sql`
-      SELECT id, name FROM institutions WHERE LOWER(name) = LOWER(${newName}) LIMIT 1
+      SELECT id, name FROM institutions
+      WHERE LOWER(name) = LOWER(${newName}) AND name != ${oldName}
+      LIMIT 1
     `;
 
-    if (targetExists[0] && String(targetExists[0].name).toLowerCase() !== oldName.toLowerCase()) {
-      // Merge ke instansi yang sudah ada jika target sudah terdaftar
+    if (targetExists[0]) {
+      // Merge ke instansi lain yang sudah ada (mis. "Biro hukum" -> "Biro Hukum")
       await sql`DELETE FROM institutions WHERE name = ${oldName}`;
+      if (String(targetExists[0].name) !== newName) {
+        await sql`
+          UPDATE institutions
+          SET name = ${newName}, updated_at = CURRENT_TIMESTAMP
+          WHERE id = ${String(targetExists[0].id)}
+        `;
+      }
     } else {
       await sql`
         UPDATE institutions
