@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   Download,
   ExternalLink,
@@ -116,47 +117,39 @@ export default function DocumentViewer({ url, title }: DocumentViewerProps) {
       ? "Dokumen PDF"
       : "Dokumen Materi";
 
-  return (
+  useEffect(() => {
+    if (!isFullscreen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setIsFullscreen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isFullscreen]);
+
+  const viewerContent = (
     <div
       className={
         isFullscreen
-          ? "fixed inset-0 z-50 bg-black flex flex-col p-2 md:p-4 animate-in fade-in duration-200"
-          : "w-full mb-8 rounded-2xl bg-white dark:bg-[#161B2A] border border-oxford-200 dark:border-oxford-700 shadow-sm overflow-hidden flex flex-col transition-all"
+          ? "fixed inset-0 z-[9999] w-screen h-screen bg-black flex flex-col p-2 md:p-4 animate-in fade-in duration-200"
+          : "w-full rounded-xl bg-white dark:bg-[#161B2A] border border-oxford-200 dark:border-oxford-700 shadow-sm overflow-hidden flex flex-col transition-all"
       }
     >
-      {/* Header Toolbar */}
-      <div className="px-4 py-3 bg-oxford-50 dark:bg-oxford-900/80 border-b border-oxford-200 dark:border-oxford-700 flex flex-wrap items-center justify-between gap-2.5">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div className="p-2 rounded-xl bg-gold-500/15 text-gold-600 dark:text-gold-400 shrink-0">
-            <FileText size={18} />
-          </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-sm text-oxford-900 dark:text-white truncate">
-                {title || "Materi Pembelajaran"}
-              </span>
-              <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-oxford-200/70 dark:bg-oxford-800 text-oxford-700 dark:text-oxford-300 shrink-0">
-                {badgeLabel}
-              </span>
-            </div>
-            <p className="text-xs text-oxford-500 truncate">
-              Pratinjau dokumen langsung di dalam kelas
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-1.5 flex-wrap">
+      {/* Frame Container + Floating Icon Controls di Kanan Atas */}
+      <div
+        className={`relative w-full bg-oxford-100 dark:bg-black ${
+          isFullscreen ? "flex-1 min-h-0 h-full" : "h-[170px] md:h-[360px]"
+        }`}
+      >
+        <div className="absolute top-2.5 right-2.5 z-20 flex items-center gap-1.5">
           {parsed.sourceType === "pdf" && (
             <button
               type="button"
               onClick={() => setUseGoogleViewerFallback((prev) => !prev)}
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border border-oxford-200 dark:border-oxford-700 bg-white dark:bg-oxford-800 text-oxford-700 dark:text-white hover:bg-oxford-50 dark:hover:bg-oxford-700 transition-colors"
-              title="Beralih antara mode viewer native & Google Docs viewer"
+              className="p-2 rounded-lg bg-oxford-950/80 hover:bg-oxford-950 text-white backdrop-blur-sm shadow-md shadow-black/25 transition-colors"
+              title={useGoogleViewerFallback ? "Beralih ke Viewer Native" : "Beralih ke Viewer Cadangan"}
+              aria-label={useGoogleViewerFallback ? "Viewer Native" : "Viewer Cadangan"}
             >
-              <RefreshCw size={12} />
-              <span className="hidden sm:inline">
-                {useGoogleViewerFallback ? "Viewer Native" : "Viewer Cadangan"}
-              </span>
+              <RefreshCw size={14} />
             </button>
           )}
 
@@ -164,43 +157,34 @@ export default function DocumentViewer({ url, title }: DocumentViewerProps) {
             href={parsed.originalUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border border-oxford-200 dark:border-oxford-700 bg-white dark:bg-oxford-800 text-oxford-900 dark:text-white hover:bg-oxford-100 dark:hover:bg-oxford-700 transition-colors shadow-xs"
-            title="Buka file di tab baru"
+            className="p-2 rounded-lg bg-oxford-950/80 hover:bg-oxford-950 text-white backdrop-blur-sm shadow-md shadow-black/25 transition-colors"
+            title="Buka di Tab Baru"
+            aria-label="Buka di Tab Baru"
           >
-            <ExternalLink size={13} />
-            <span>Tab Baru</span>
+            <ExternalLink size={14} />
           </a>
 
           <a
             href={parsed.originalUrl}
             download
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-gold-500 hover:bg-gold-400 text-oxford-950 transition-colors shadow-xs"
-            title="Unduh file ke perangkat"
+            className="p-2 rounded-lg bg-gold-500/95 hover:bg-gold-400 text-oxford-950 shadow-md shadow-black/25 transition-colors"
+            title="Unduh Dokumen"
+            aria-label="Unduh Dokumen"
           >
-            <Download size={13} />
-            <span>Unduh</span>
+            <Download size={14} />
           </a>
 
           <button
             type="button"
             onClick={() => setIsFullscreen((prev) => !prev)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-oxford-900 hover:bg-oxford-800 dark:bg-oxford-800 dark:hover:bg-oxford-700 dark:border dark:border-oxford-600 text-white transition-colors"
-            title={isFullscreen ? "Keluar layar penuh" : "Tampilkan layar penuh"}
+            className="p-2 rounded-lg bg-oxford-950/80 hover:bg-oxford-950 text-white backdrop-blur-sm shadow-md shadow-black/25 transition-colors"
+            title={isFullscreen ? "Keluar Layar Penuh" : "Layar Penuh"}
+            aria-label={isFullscreen ? "Keluar Layar Penuh" : "Layar Penuh"}
           >
-            {isFullscreen ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
-            <span className="hidden sm:inline">
-              {isFullscreen ? "Keluar" : "Layar Penuh"}
-            </span>
+            {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
           </button>
         </div>
-      </div>
 
-      {/* Frame Container */}
-      <div
-        className={`relative w-full bg-oxford-100 dark:bg-black ${
-          isFullscreen ? "flex-1 min-h-0 h-full" : "h-[170px] md:h-[360px]"
-        }`}
-      >
         <iframe
           key={`${activeSrc}-${reloadKey}`}
           src={activeSrc}
@@ -212,4 +196,10 @@ export default function DocumentViewer({ url, title }: DocumentViewerProps) {
       </div>
     </div>
   );
+
+  if (isFullscreen && typeof document !== "undefined") {
+    return createPortal(viewerContent, document.body);
+  }
+
+  return viewerContent;
 }

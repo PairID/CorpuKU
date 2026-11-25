@@ -739,10 +739,10 @@ export default function LearnClient({ course, courseContent, session, enrollment
                                 return (
                                     <div
                                         key={module.id}
-                                        className={`rounded-2xl border p-4 md:p-6 shadow-xs space-y-5 transition-colors ${
+                                        className={`rounded-3xl p-5 md:p-7 space-y-5 transition-all shadow-[0_14px_38px_-12px_rgba(15,23,42,0.12),0_4px_12px_-4px_rgba(15,23,42,0.06)] dark:shadow-[0_16px_40px_-12px_rgba(0,0,0,0.55)] ${
                                             isModAllDone
-                                                ? "border-emerald-200/90 dark:border-emerald-800/70 bg-emerald-50/20 dark:bg-emerald-950/10"
-                                                : "border-oxford-200/90 dark:border-oxford-800 bg-white/80 dark:bg-[#141926]/80"
+                                                ? "bg-emerald-50/40 dark:bg-[#11221C]"
+                                                : "bg-white dark:bg-[#141926]"
                                         }`}
                                     >
                                         {/* Header Modul */}
@@ -849,10 +849,10 @@ export default function LearnClient({ course, courseContent, session, enrollment
                                                             key={lesson.id}
                                                             id={`lesson-${lesson.id}`}
                                                             onClick={() => setActiveLessonId(lesson.id)}
-                                                            className={`rounded-2xl border-2 overflow-hidden transition-all scroll-mt-20 ${
+                                                            className={`rounded-2xl overflow-hidden transition-all scroll-mt-20 shadow-[0_8px_24px_-6px_rgba(15,23,42,0.09),0_2px_6px_-2px_rgba(15,23,42,0.04)] dark:shadow-[0_10px_28px_-6px_rgba(0,0,0,0.45)] ${
                                                                 isCompleted
-                                                                    ? "border-emerald-300 dark:border-emerald-700/80 bg-emerald-50/30 dark:bg-emerald-950/15 shadow-xs"
-                                                                    : "border-amber-300/90 dark:border-amber-700/60 bg-white dark:bg-[#161B2A] shadow-sm"
+                                                                    ? "bg-emerald-50/40 dark:bg-emerald-950/20"
+                                                                    : "bg-white dark:bg-[#161B2A]"
                                                             }`}
                                                         >
                                                             {/* Header Kartu Materi */}
@@ -981,10 +981,10 @@ export default function LearnClient({ course, courseContent, session, enrollment
                         {/* BAGIAN 2: EVALUASI PELATIHAN (INLINE LANGSUNG DI HALAMAN) */}
                         <section
                             id="section-evaluasi"
-                            className={`rounded-2xl border p-4 md:p-6 shadow-xs scroll-mt-20 transition-colors ${
+                            className={`rounded-3xl p-5 md:p-7 scroll-mt-20 transition-all shadow-[0_14px_38px_-12px_rgba(15,23,42,0.12),0_4px_12px_-4px_rgba(15,23,42,0.06)] dark:shadow-[0_16px_40px_-12px_rgba(0,0,0,0.55)] ${
                                 attendanceStats.allEvaluationsCompleted
-                                    ? "border-emerald-300 dark:border-emerald-700/80 bg-emerald-50/30 dark:bg-emerald-950/15"
-                                    : "border-oxford-200 dark:border-oxford-800 bg-white dark:bg-[#141926]"
+                                    ? "bg-emerald-50/40 dark:bg-[#11221C]"
+                                    : "bg-white dark:bg-[#141926]"
                             }`}
                         >
                             <div className="flex flex-wrap items-center justify-between gap-3 pb-4 mb-5 border-b border-oxford-100 dark:border-oxford-800">
@@ -1063,10 +1063,10 @@ export default function LearnClient({ course, courseContent, session, enrollment
                         {/* BAGIAN 3: SERTIFIKAT PELATIHAN (PALING BAWAH) */}
                         <section
                             id="section-sertifikat"
-                            className={`rounded-2xl border-2 p-5 md:p-7 shadow-sm scroll-mt-20 transition-colors ${
+                            className={`rounded-3xl p-5 md:p-7 scroll-mt-20 transition-all shadow-[0_14px_38px_-12px_rgba(15,23,42,0.12),0_4px_12px_-4px_rgba(15,23,42,0.06)] dark:shadow-[0_16px_40px_-12px_rgba(0,0,0,0.55)] ${
                                 canOpenCertificate
-                                    ? "border-emerald-300 dark:border-emerald-700 bg-gradient-to-br from-emerald-50 to-green-50/60 dark:from-emerald-950/40 dark:to-green-950/20"
-                                    : "border-amber-300/80 dark:border-amber-700/60 bg-white dark:bg-[#141926]"
+                                    ? "bg-gradient-to-br from-emerald-50 to-green-50/70 dark:from-[#11221C] dark:to-[#0F1F1A]"
+                                    : "bg-white dark:bg-[#141926]"
                             }`}
                         >
                             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-5">
